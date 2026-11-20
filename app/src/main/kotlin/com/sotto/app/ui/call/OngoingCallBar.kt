@@ -45,6 +45,7 @@ fun OngoingCallBar(call: CallState, onClick: () -> Unit, modifier: Modifier = Mo
         }
     }
     val status = when {
+        call.status == CallStatus.CONNECTED && call.peerUnreachable -> "Can't reach ${call.peerDisplayName}"
         call.status == CallStatus.CONNECTED && call.reconnecting -> "Reconnecting…"
         call.status == CallStatus.CONNECTED && connectedAt != null -> formatElapsed(elapsed)
         call.direction == CallDirection.INCOMING && call.status == CallStatus.RINGING -> "Incoming call"
@@ -53,7 +54,7 @@ fun OngoingCallBar(call: CallState, onClick: () -> Unit, modifier: Modifier = Mo
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(if (call.reconnecting) ReconnectingColor else OngoingCallColor)
+            .background(if (call.reconnecting || call.peerUnreachable) ReconnectingColor else OngoingCallColor)
             .clickable(onClickLabel = "Return to call", onClick = onClick)
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),

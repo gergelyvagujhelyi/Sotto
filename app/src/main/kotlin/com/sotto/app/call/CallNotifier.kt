@@ -118,7 +118,11 @@ class CallNotifier @Inject constructor(
         val open = activityIntent(ACTION_SHOW_CALL, callId, REQUEST_SHOW)
         val hangUp = receiverIntent(CallActionReceiver.ACTION_HANG_UP, callId, REQUEST_HANG_UP)
         val text = when (state?.status) {
-            CallStatus.CONNECTED -> if (state.reconnecting) "Reconnecting…" else "Encrypted call"
+            CallStatus.CONNECTED -> when {
+                state.peerUnreachable -> "Can't reach ${state.peerDisplayName}"
+                state.reconnecting -> "Reconnecting…"
+                else -> "Encrypted call"
+            }
             CallStatus.RINGING -> "Ringing…"
             else -> "Connecting…"
         }

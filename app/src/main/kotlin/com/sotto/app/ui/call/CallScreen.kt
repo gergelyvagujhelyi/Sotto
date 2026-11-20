@@ -134,7 +134,7 @@ fun CallScreen(
     val callLive = callState?.status?.let {
         it !in setOf(
             CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY,
-            CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE,
+            CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE, CallStatus.PEER_GONE,
         )
     } == true
     val minimize: () -> Unit = {
@@ -208,6 +208,11 @@ fun CallScreen(
             CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY,
             CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE -> {
                 delay(1500)
+                onCallEnded()
+            }
+            // Why the call ended takes reading.
+            CallStatus.PEER_GONE -> {
+                delay(4000)
                 onCallEnded()
             }
             else -> {}
@@ -343,8 +348,17 @@ fun CallContent(
                         }
 
                         val reconnecting = status == CallStatus.CONNECTED && callState?.reconnecting == true
-                        val justReconnected = rememberJustReconnected(reconnecting)
-                        if (reconnecting) {
+                        // Nothing arriving from the other phone: said even while ICE claims to be
+                        // connected, and until their audio is back.
+                        val peerUnreachable = status == CallStatus.CONNECTED && callState?.peerUnreachable == true
+                        val justReconnected = rememberJustReconnected(reconnecting || peerUnreachable)
+                        if (peerUnreachable) {
+                            Spacer(Modifier.height(14.dp))
+                            ReconnectingIndicator(
+                                title = "Can't reach ${callState?.peerDisplayName ?: "the other phone"}",
+                                detail = "Nothing is coming from their phone. The call ends after a minute if it doesn't come back.",
+                            )
+                        } else if (reconnecting) {
                             Spacer(Modifier.height(14.dp))
                             ReconnectingIndicator()
                         } else if (status == CallStatus.CONNECTED && justReconnected) {
@@ -708,7 +722,10 @@ private fun rememberJustReconnected(reconnecting: Boolean): Boolean {
  * announces. The call keeps beeping softly meanwhile (CallManager).
  */
 @Composable
-private fun ReconnectingIndicator() {
+private fun ReconnectingIndicator(
+    title: String = "Reconnecting…",
+    detail: String = "No connection right now",
+) {
     val warning = Aurora.colors.warning
     val transition = rememberInfiniteTransition(label = "reconnecting")
     val turn by transition.animateFloat(
@@ -739,9 +756,15 @@ private fun ReconnectingIndicator() {
         )
         Spacer(Modifier.width(10.dp))
         Column {
-            Text("Reconnecting…", style = MaterialTheme.typography.titleSmall, color = warning)
             Text(
-                "No connection right now",
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                color = warning,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                detail,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -764,5 +787,6 @@ private fun statusText(
     CallStatus.REJECTED -> "Call declined"
     CallStatus.BUSY -> "Busy"
     CallStatus.UNAVAILABLE -> "Contact unavailable"
+    CallStatus.PEER_GONE -> if (peerName != null) "$peerName's phone stopped responding" else "The other phone stopped responding"
     else -> ""
 }

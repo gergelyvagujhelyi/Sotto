@@ -22,6 +22,11 @@ enum class CallStatus {
     BUSY,
     /** Recipient could not be reached (offline / signal not delivered). */
     UNAVAILABLE,
+    /**
+     * Connected, then nothing arrived from the other phone for a minute: it's off, out of reach,
+     * or Sotto stopped on it. Ended so the call doesn't go on with nobody there.
+     */
+    PEER_GONE,
 }
 
 data class CallState(
@@ -44,6 +49,13 @@ data class CallState(
     val pqcEstablished: Boolean = false,
     /** Connected before, but the connection dropped: trying to get it back (network change). */
     val reconnecting: Boolean = false,
+    /**
+     * Connected, but nothing has arrived from the other phone for a while: its audio stopped, so
+     * it may be off or out of reach. Shown until its audio comes back; the call ends after a
+     * minute ([CallStatus.PEER_GONE]). Unlike [reconnecting], a connection that only looks back
+     * doesn't clear it.
+     */
+    val peerUnreachable: Boolean = false,
     /** How the audio travels once connected; null until known. */
     val path: CallPath? = null,
     /** Both phones have high-quality calls on: the voice goes at the higher bitrate ("HD"). */
