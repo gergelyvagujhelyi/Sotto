@@ -4,7 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Calling each other at the same moment** — If you and the other person call each other at once, one call now goes through: both phones keep the same one, and the other phone rings for it. Before, each phone answered the other's call with "busy", and neither went through.
+- **Calling back straight away** — A call that comes in, or that you start, right after another call ended now goes through. Before, for 2–4 seconds after a call (while "Call ended" showed), a new call got "busy", and calling back from the chat did nothing.
 
 ## 0.6.8 — 2026-11-20
 
