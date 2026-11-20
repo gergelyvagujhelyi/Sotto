@@ -56,6 +56,17 @@ class FcmService : FirebaseMessagingService() {
         PushSyncWorker.enqueue(applicationContext)
     }
 
+    /**
+     * Firebase dropped pushes it held for this phone: more than 100 waited while it was offline
+     * (message pushes don't collapse, see the relay's push.py). Fetch everything now rather than
+     * at the next 15-minute check, as one push would have.
+     */
+    override fun onDeletedMessages() {
+        super.onDeletedMessages()
+        webSocketClient.connectUnlessWorking()
+        PushSyncWorker.enqueue(applicationContext)
+    }
+
     private companion object {
         const val WORK_BUDGET_MS = 9_000L
     }
