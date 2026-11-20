@@ -6,6 +6,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.6.9 — 2026-11-20
+
+- **Messages arrive as soon as the phone is woken** — When a push wakes Sotto, it now downloads the new messages straight away, instead of first asking Android to run a background job. Android decides when such a job runs, and some phones hold it back, especially after a busy day: on one phone messages waited 20 to 70 seconds while another took 3. If the download can't finish within a few seconds, the background job still takes over, as before.
+
 ## 0.6.8 — 2026-11-20
 
 - **Relay: messages are delivered promptly again** — Since 0.6.5 the relay made every message's push "collapsible", and Firebase lets a phone receive only 20 of those, then one every 3 minutes. After a busy while, messages stayed at "sent" until the other person opened the app. Message pushes are ordinary again. They still wait for a phone that's out of signal.
