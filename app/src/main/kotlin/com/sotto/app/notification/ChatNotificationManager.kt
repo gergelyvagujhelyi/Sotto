@@ -127,8 +127,7 @@ class ChatNotificationManager @Inject constructor(
             .setGroup(GROUP_CHATS)
             .build()
 
-        NotificationManagerCompat.from(context)
-            .notify(notificationId, notification)
+        post(notificationId, notification)
         postGroupSummary(visibility)
     }
 
@@ -184,8 +183,7 @@ class ChatNotificationManager @Inject constructor(
             .setGroup(GROUP_CHATS)
             .build()
 
-        NotificationManagerCompat.from(context)
-            .notify(notificationId, notification)
+        post(notificationId, notification)
         postGroupSummary(visibility)
     }
 
@@ -219,7 +217,20 @@ class ChatNotificationManager @Inject constructor(
             // The notifications in the group already alerted; the summary stays quiet.
             .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .build()
-        NotificationManagerCompat.from(context).notify(GROUP_SUMMARY_ID, summary)
+        post(GROUP_SUMMARY_ID, summary)
+    }
+
+    /**
+     * Post [notification] if notifications are allowed. The callers check first too, but the
+     * user can take the permission back at any moment, and then Android throws instead.
+     */
+    private fun post(id: Int, notification: android.app.Notification) {
+        if (!hasNotificationPermission()) return
+        try {
+            NotificationManagerCompat.from(context).notify(id, notification)
+        } catch (_: SecurityException) {
+            // The permission went away just now: nothing to show.
+        }
     }
 
     /** Drop the summary once no chat notification is left under it. */
