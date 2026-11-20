@@ -21,9 +21,12 @@ CALL_PUSH_TTL = timedelta(seconds=60)
 # a phone that came back from more than a minute without signal got no wake-up, and its
 # messages waited for the app's 15-minute check (or for it to be opened).
 MESSAGE_PUSH_TTL = timedelta(days=28)
-# Message pushes replace each other while they wait: a phone that comes back gets one wake-up,
-# and that one fetch brings everything waiting. Call pushes don't collapse.
-MESSAGE_COLLAPSE_KEY = "new_message"
+# No push collapses. 0.6.5 made message pushes collapsible ("new_message"), and Firebase lets a
+# phone have only 20 of those, then 1 every 3 minutes ("collapsible message throttling",
+# firebase.google.com/docs/cloud-messaging/throttling-and-quotas): after a busy while, messages
+# stayed at "sent" until the app was opened. Ordinary pushes aren't throttled that way. While
+# a phone is offline Firebase keeps up to 100 of them; past that it drops them and tells the
+# app (FcmService.onDeletedMessages), which then fetches everything.
 
 _firebase_initialized = False
 
@@ -97,7 +100,7 @@ async def send_push_notification(
     the database so future sends fall back to polling.
 
     ``for_call``: a call offer's push, which lasts a minute (``CALL_PUSH_TTL``); a message's
-    lasts as long as Firebase allows and collapses with the next (``MESSAGE_PUSH_TTL``).
+    lasts as long as Firebase allows (``MESSAGE_PUSH_TTL``). Neither collapses.
     """
     if fid:
         target, column, value = {"fid": fid}, "fcm_fid", fid
@@ -124,7 +127,6 @@ async def send_push_notification(
                 android=messaging.AndroidConfig(
                     priority="high",
                     ttl=CALL_PUSH_TTL if for_call else MESSAGE_PUSH_TTL,
-                    collapse_key=None if for_call else MESSAGE_COLLAPSE_KEY,
                 ),
                 **target,
             )
