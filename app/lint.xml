@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Lint checks this app answers on purpose, with the reason. -->
+<lint>
+    <!-- Release builds are ARM only (app/build.gradle.kts): x86_64's native code more than
+         doubled the APK, for emulators and rare Intel devices. Debug builds keep every ABI. -->
+    <issue id="ChromeOsAbiSupport" severity="ignore" />
+    <!-- Settings asks to stop battery optimisation for the background connection, which phones
+         without Google push rely on: what the exemption is for. Said here because lint ignored a
+         @SuppressLint on that request's function, a local function inside SettingsScreen. -->
+    <issue id="BatteryLife">
+        <ignore path="src/main/kotlin/com/sotto/app/ui/settings/SettingsScreen.kt" />
+    </issue>
+</lint>

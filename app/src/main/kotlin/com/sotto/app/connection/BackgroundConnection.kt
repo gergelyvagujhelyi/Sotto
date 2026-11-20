@@ -1,5 +1,6 @@
 package com.sotto.app.connection
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
@@ -64,6 +65,9 @@ class BackgroundConnection @Inject constructor(
         }
     }
 
+    // stopService finds the service by its component, not by the Intent instance: a new
+    // Intent stops it fine (lint's ImplicitSamInstance takes stopService for a listener removal).
+    @SuppressLint("ImplicitSamInstance")
     private fun stopService() {
         context.stopService(Intent(context, BackgroundConnectionService::class.java))
     }

@@ -1,6 +1,7 @@
 package com.sotto.app.connection
 
 import android.content.Context
+import androidx.core.content.edit
 import com.sotto.app.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -32,11 +33,12 @@ class RelayConfig @Inject constructor(@ApplicationContext context: Context) {
         get() = pushAllowed(baseUrl, BuildConfig.OWNER_RELAY_URL)
 
     fun set(url: String) {
-        prefs.edit().putString(KEY_URL, url).commit()
+        // Committed at once: setup uses the relay right after choosing it.
+        prefs.edit(commit = true) { putString(KEY_URL, url) }
     }
 
     fun clear() {
-        prefs.edit().clear().commit()
+        prefs.edit(commit = true) { clear() }
     }
 
     /** Apps set up before the relay was a setting keep the relay they were built for. */
