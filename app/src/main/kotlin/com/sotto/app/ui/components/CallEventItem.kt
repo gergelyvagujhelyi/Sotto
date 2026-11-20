@@ -19,11 +19,12 @@ fun CallEventItem(
 ) {
     val isMissed = state == MessageState.CALL_MISSED
     val isOutgoingMissed = state == MessageState.CALL_OUTGOING_MISSED
+    val isFailed = state == MessageState.CALL_FAILED
     val wasConnected = durationSeconds > 0
 
     val icon = when {
         isMissed -> Icons.AutoMirrored.Rounded.CallMissed
-        isOutgoingMissed -> Icons.AutoMirrored.Rounded.CallMade
+        isOutgoingMissed || isFailed -> Icons.AutoMirrored.Rounded.CallMade
         isOutgoing -> Icons.AutoMirrored.Rounded.CallMade
         else -> Icons.AutoMirrored.Rounded.CallReceived
     }
@@ -31,6 +32,7 @@ fun CallEventItem(
     val label = when {
         isMissed -> "Missed voice call"
         isOutgoingMissed -> "Unanswered call"
+        isFailed -> "Call failed"
         wasConnected -> "Voice call"
         isOutgoing -> "Outgoing call"
         else -> "Incoming call"
@@ -44,7 +46,7 @@ fun CallEventItem(
         null
     }
 
-    val missed = isMissed || isOutgoingMissed
+    val missed = isMissed || isOutgoingMissed || isFailed
     val colors = MaterialTheme.colorScheme
     SystemEventPill(
         icon = icon,

@@ -104,6 +104,12 @@ class ConversationRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun removeContact(userId: String) {
+        conversationDao.getByContactId(userId)?.let { deleteConversation(it.id) }
+        // As in rejectMessageRequest: the contact goes, the ratchet session stays.
+        contactDao.delete(userId)
+    }
+
     override suspend fun blockUser(userId: String, displayName: String) {
         blockedUserDao.block(
             com.sotto.app.data.local.entity.BlockedUserEntity(

@@ -139,6 +139,7 @@ fun CallScreen(
         it !in setOf(
             CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY,
             CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE, CallStatus.PEER_GONE,
+            CallStatus.NO_NETWORK,
         )
     } == true
     val minimize: () -> Unit = {
@@ -214,8 +215,8 @@ fun CallScreen(
                 delay(1500)
                 onCallEnded()
             }
-            // Why the call ended takes reading.
-            CallStatus.PEER_GONE -> {
+            // Why the call ended takes reading (CallManager keeps these states as long).
+            CallStatus.PEER_GONE, CallStatus.NO_NETWORK -> {
                 delay(4000)
                 onCallEnded()
             }
@@ -818,6 +819,7 @@ private fun statusText(
     CallStatus.ENDED -> "Call ended"
     CallStatus.FAILED -> if (wasConnected) "Connection lost" else "Call failed"
     CallStatus.NO_RELAY -> "Call failed — relay unavailable"
+    CallStatus.NO_NETWORK -> "No internet connection"
     CallStatus.REJECTED -> "Call declined"
     CallStatus.BUSY -> "Busy"
     CallStatus.UNAVAILABLE -> "Contact unavailable"

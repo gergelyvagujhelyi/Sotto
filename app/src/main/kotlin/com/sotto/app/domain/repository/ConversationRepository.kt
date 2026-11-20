@@ -18,6 +18,13 @@ interface ConversationRepository {
     suspend fun rejectMessageRequest(conversationId: String)
 
     /**
+     * Remove [userId] from the contacts, with the chat with them (see [deleteConversation]).
+     * Their ratchet session stays, as for a rejected request: if they write again, it
+     * arrives as a message request instead of being dropped as a replay.
+     */
+    suspend fun removeContact(userId: String)
+
+    /**
      * Block [userId]: their messages and calls are dropped from now on. A pending
      * message request from them is rejected; an existing chat keeps its history.
      */

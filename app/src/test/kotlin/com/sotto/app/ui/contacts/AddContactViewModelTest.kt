@@ -6,9 +6,11 @@ import com.sotto.app.domain.repository.ConversationRepository
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.usecase.AddContactUseCase
 import com.sotto.app.domain.usecase.SendMyNameUseCase
+import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
+import io.mockk.just
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,6 +48,13 @@ class AddContactViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     private fun viewModel() = AddContactViewModel(addContact, conversations, identities, sendMyName)
+
+    @Test
+    fun `a contact removed from the list is removed with the chat`() {
+        coEvery { conversations.removeContact("peer-1") } just Runs
+        viewModel().removeContact("peer-1")
+        coVerify(exactly = 1) { conversations.removeContact("peer-1") }
+    }
 
     @Test
     fun `the user's own share code is refused at once, without asking the relay`() {

@@ -73,6 +73,15 @@ class ChatDeleteTest {
     }
 
     @Test
+    fun `removing the contact from the chat removes them, then leaves the chat`() {
+        var left = false
+        chat(approved = true).removeContact { left = true }
+
+        coVerify(exactly = 1) { conversations.removeContact("peer-1") }
+        assertTrue(left)
+    }
+
+    @Test
     fun `deleting a message request rejects it, so the stranger is forgotten too`() {
         var left = false
         chat(approved = false).deleteChat { left = true }

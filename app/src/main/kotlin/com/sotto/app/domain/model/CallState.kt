@@ -27,6 +27,8 @@ enum class CallStatus {
      * or Sotto stopped on it. Ended so the call doesn't go on with nobody there.
      */
     PEER_GONE,
+    /** The phone has no internet connection, so the call couldn't start. */
+    NO_NETWORK,
 }
 
 data class CallState(

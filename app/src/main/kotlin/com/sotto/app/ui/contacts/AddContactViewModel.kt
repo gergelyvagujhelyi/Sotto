@@ -48,6 +48,11 @@ class AddContactViewModel @Inject constructor(
         }
     }
 
+    /** Remove [userId] from the contacts, and the chat with them, from this phone. */
+    fun removeContact(userId: String) {
+        viewModelScope.launch { conversationRepository.removeContact(userId) }
+    }
+
     fun updateShareCode(code: String) {
         _shareCodeInput.value = code
     }
