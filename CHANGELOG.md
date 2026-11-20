@@ -4,6 +4,13 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.6.3 — 2026-11-20
+
+- **Messages after a restart or an update** — After the phone restarts or Sotto updates, Sotto starts in the background, and the messages that came meanwhile are fetched in the same kind of expedited job as a push's. A message has no push left to wake the app (a push lasts a minute), and before, a slow start could be frozen halfway, so those messages could wait until you opened the app.
+- **Less work when a push wakes Sotto** — Each start registered for push twice: once by itself, and again when Firebase confirmed it. And a push restarted the relay connection that the app's start had only just begun. Each of those signs a request with a post-quantum signature, in the seconds Android allows. Now each start registers once, and a push leaves a connection alone while it's being made or is working. A connection that has gone quiet is still replaced.
+- **Direct calls on the same Wi-Fi stay direct** — Some phones set up a direct Wi-Fi link to the other phone (TDLS) a few seconds into a direct call on the same network, and when the other phone's Wi-Fi mishandles it, the call falls back to the relay. This happened between the owner's phone and the Note 9. During a direct call on the same Wi-Fi, Sotto now keeps that link off for the other phone, so the audio goes through the router, and turns it back on when the call ends. Sotto asks for the Wi-Fi permission this needs, which Android grants at install.
 - **Building** — Every pull request and every push to `develop` runs the app's unit tests and lint and the relay's tests (the Checks workflow, free on a public repository). Lint's three errors are fixed: notifications go through one helper that also copes with the permission being taken back at that moment. Pushing a version tag should start the release build by itself again; since the move to this repository, every release had to be started by hand.
 
 ## 0.6.2 — 2026-11-20

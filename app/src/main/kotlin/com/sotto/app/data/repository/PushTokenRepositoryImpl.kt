@@ -14,6 +14,8 @@ import com.google.firebase.installations.FirebaseInstallations
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -53,17 +55,33 @@ class PushTokenRepositoryImpl @Inject constructor(
         registerInstallationId(installationId)
     }
 
+    /**
+     * What this process has registered with the relay: the account and installation ID.
+     * Every app start asks FCM to register (syncPushRegistration), and FCM then calls
+     * FcmService.onRegistered with the same ID, so each start sent the relay the same
+     * registration twice. Each request costs a post-quantum signature, and a start woken by a
+     * push has only seconds.
+     */
+    private val registered = PushRegistrationMemo()
+    private val registerLock = Mutex()
+
     override suspend fun registerInstallationId(installationId: String) {
         if (!hasIdentity() || !relayConfig.canPush) return
-        try {
-            apiService.registerPushToken(PushTokenRequest(fid = installationId))
-            context.pushDataStore.edit { it[installationIdKey] = installationId }
-        } catch (e: Exception) {
-            Log.w(TAG, "Push registration failed, will retry on next app start: ${e.message}")
+        val userId = keyManager.getUserId() ?: return
+        registerLock.withLock {
+            if (registered.isRegistered(userId, installationId)) return
+            try {
+                apiService.registerPushToken(PushTokenRequest(fid = installationId))
+                context.pushDataStore.edit { it[installationIdKey] = installationId }
+                registered.remember(userId, installationId)
+            } catch (e: Exception) {
+                Log.w(TAG, "Push registration failed, will retry on next app start: ${e.message}")
+            }
         }
     }
 
     override suspend fun clearLocal() {
+        registered.forget()
         context.pushDataStore.edit { it.clear() }
     }
 
@@ -87,5 +105,25 @@ class PushTokenRepositoryImpl @Inject constructor(
     private companion object {
         const val TAG = "PushToken"
         const val FIREBASE_TIMEOUT_MS = 30_000L
+    }
+}
+
+/**
+ * Which account and installation ID this process has registered with the relay, so the same
+ * registration isn't sent twice. A new account (after a wipe) or a new installation ID
+ * registers again.
+ */
+internal class PushRegistrationMemo {
+    @Volatile
+    private var registered: Pair<String, String>? = null
+
+    fun isRegistered(userId: String, installationId: String) = registered == (userId to installationId)
+
+    fun remember(userId: String, installationId: String) {
+        registered = userId to installationId
+    }
+
+    fun forget() {
+        registered = null
     }
 }

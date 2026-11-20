@@ -5,6 +5,7 @@ import com.sotto.app.crypto.KeyManager
 import com.sotto.app.crypto.PqcProvider
 import com.sotto.app.data.remote.dto.CallSignalDto
 import com.sotto.app.domain.repository.MessageRepository
+import android.os.SystemClock
 import android.util.Base64
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
@@ -85,16 +86,39 @@ class WebSocketClient @Inject constructor(
     @Volatile
     private var reconnectDelay = INITIAL_RECONNECT_DELAY
 
+    /** Where the connection is, for [connectUnlessWorking]. */
+    @Volatile
+    private var socketState = SocketState.IDLE
+    /** When [socketState] last changed (elapsedRealtime). */
+    @Volatile
+    private var socketStateSince = 0L
+    /** When the relay last sent anything on the open socket (elapsedRealtime). */
+    @Volatile
+    private var lastFrameAt = 0L
+    /** Bumped for each connection loop, so a cancelled loop can't overwrite the current one's state. */
+    @Volatile
+    private var loopGeneration = 0
+
+    private fun markState(generation: Int, state: SocketState) {
+        if (generation != loopGeneration) return
+        socketState = state
+        socketStateSince = SystemClock.elapsedRealtime()
+    }
+
     @Synchronized
     fun connect() {
         if (connectionJob?.isActive == true) return
 
+        val generation = ++loopGeneration
         connectionJob = scope.launch {
             while (isActive) {
                 try {
-                    connectWebSocket()
+                    markState(generation, SocketState.CONNECTING)
+                    connectWebSocket(generation)
                 } catch (e: Exception) {
                     if (BuildConfig.DEBUG) Log.w(TAG, "WebSocket connection failed: ${e.message}")
+                } finally {
+                    markState(generation, SocketState.IDLE)
                 }
 
                 // Exponential backoff reconnect
@@ -102,6 +126,22 @@ class WebSocketClient @Inject constructor(
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
         }
+    }
+
+    /**
+     * Connect, unless a connection is being made right now or is open and the relay has spoken on
+     * it recently; then leave it be. For a push: a push that wakes a closed app comes just as the
+     * app's start has begun connecting, and restarting that threw away a TLS handshake and a
+     * post-quantum signature in the few seconds a push allows. A socket that went quiet (a frozen
+     * app's, or one on a route that died) is replaced, as [ensureConnected] does.
+     */
+    @Synchronized
+    fun connectUnlessWorking() {
+        val now = SystemClock.elapsedRealtime()
+        if (connectionJob?.isActive == true &&
+            !shouldReconnect(socketState, now - socketStateSince, now - lastFrameAt)
+        ) return
+        ensureConnected()
     }
 
     /**
@@ -126,6 +166,9 @@ class WebSocketClient @Inject constructor(
         connectionJob?.cancel()
         connectionJob = null
         reconnectDelay = INITIAL_RECONNECT_DELAY
+        loopGeneration++
+        socketState = SocketState.IDLE
+        socketStateSince = SystemClock.elapsedRealtime()
     }
 
     private fun generateAuthToken(): String? {
@@ -133,7 +176,7 @@ class WebSocketClient @Inject constructor(
         return keyManager.generateAuthToken(pqcProvider)
     }
 
-    private suspend fun connectWebSocket() {
+    private suspend fun connectWebSocket(generation: Int) {
         val token = generateAuthToken() ?: return
         // No relay yet (setup hasn't chosen one): nothing to connect to.
         val relay = relayConfig.baseUrl ?: return
@@ -159,6 +202,8 @@ class WebSocketClient @Inject constructor(
 
             if (BuildConfig.DEBUG) Log.d(TAG, "WebSocket connected and authenticated")
             reconnectDelay = INITIAL_RECONNECT_DELAY
+            lastFrameAt = SystemClock.elapsedRealtime()
+            markState(generation, SocketState.OPEN)
             _sessionEpoch.value += 1
 
             // new_message signals sent while we were disconnected (or to a half-open
@@ -191,6 +236,7 @@ class WebSocketClient @Inject constructor(
             // Listen for messages
             try {
                 for (frame in incoming) {
+                    lastFrameAt = SystemClock.elapsedRealtime()
                     if (frame is Frame.Text) {
                         handleMessage(frame.readText())
                     }
@@ -246,4 +292,28 @@ class WebSocketClient @Inject constructor(
         }
     }
 
+}
+
+/** Where the relay socket is: waiting to retry (or never started), connecting, or open. */
+internal enum class SocketState { IDLE, CONNECTING, OPEN }
+
+/** A connect that takes longer than this is presumed stuck (TCP gives up after 5 s; TLS and the sign-in normally take a second or two more). */
+internal const val CONNECT_GRACE_MS = 10_000L
+
+/**
+ * An open socket the relay has sent nothing on for this long is presumed dead. The app pings every
+ * 25 s and the relay answers, so a live socket is never quiet this long; a frozen app's is, and so
+ * is one on a network route that went away.
+ */
+internal const val QUIET_MS = 35_000L
+
+/**
+ * Whether [WebSocketClient.connectUnlessWorking] should replace the current connection: always
+ * while waiting out a retry delay, a connect that has taken over [CONNECT_GRACE_MS], and an open
+ * socket that has been quiet for over [QUIET_MS].
+ */
+internal fun shouldReconnect(state: SocketState, sinceStateMs: Long, sinceFrameMs: Long): Boolean = when (state) {
+    SocketState.IDLE -> true
+    SocketState.CONNECTING -> sinceStateMs > CONNECT_GRACE_MS
+    SocketState.OPEN -> sinceFrameMs > QUIET_MS
 }
