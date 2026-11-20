@@ -35,9 +35,9 @@ class CallNotifier @Inject constructor(
 
     private fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
-        // High importance (heads-up, full screen on a locked phone) but silent: the app rings
-        // and vibrates itself (IncomingRinger), which doesn't depend on how Android treats
-        // the notification. A channel's sound can't be changed once it exists, hence a new id.
+        // High importance (heads-up) but silent: the app rings and vibrates itself
+        // (IncomingRinger), which doesn't depend on how Android treats the notification. A
+        // channel's sound can't be changed once it exists, hence a new id.
         val incoming = NotificationChannel(
             CHANNEL_INCOMING,
             "Incoming calls",
@@ -74,12 +74,13 @@ class CallNotifier @Inject constructor(
     }
 
     /**
-     * The incoming-call notification. Its full-screen alert, Answer and tap open
-     * [CallActivity], which may show over the lock screen; Decline needs no screen.
+     * The incoming-call notification: a heads-up notification with Decline and Answer, never a
+     * full-screen alert. Answer and a tap open [CallActivity], which may show over the lock
+     * screen; Decline needs no screen. Not a CallStyle notification: Android accepts those only
+     * with a full-screen alert or from a foreground service.
      */
     fun buildIncoming(state: CallState): Notification {
-        val caller = person(state)
-        val fullScreen = activityIntent(ACTION_SHOW_CALL, state.callId, REQUEST_SHOW)
+        val open = activityIntent(ACTION_SHOW_CALL, state.callId, REQUEST_SHOW)
         val answer = activityIntent(ACTION_ACCEPT_CALL, state.callId, REQUEST_ACCEPT)
         val decline = receiverIntent(CallActionReceiver.ACTION_DECLINE, state.callId, REQUEST_DECLINE)
 
@@ -99,9 +100,10 @@ class CallNotifier @Inject constructor(
             .setPublicVersion(publicVersion)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setContentIntent(fullScreen)
-            .setFullScreenIntent(fullScreen, true)
-            .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer))
+            .setContentIntent(open)
+            .addPerson(person(state))
+            .addAction(0, "Decline", decline)
+            .addAction(0, "Answer", answer)
             .build()
         return notification
     }

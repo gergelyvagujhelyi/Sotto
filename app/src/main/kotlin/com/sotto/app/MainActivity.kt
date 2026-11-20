@@ -19,7 +19,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,7 +30,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.sotto.app.di.DatabaseModule
 import com.sotto.app.call.CallManager
-import com.sotto.app.call.CallNotifier
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.InviteLink
@@ -62,9 +60,6 @@ class MainActivity : ComponentActivity() {
 
     private val _deepLinkIntent = mutableStateOf<Intent?>(null)
 
-    /** Bumped when a call notification asks for the call screen. */
-    private val _showCallRequest = mutableIntStateOf(0)
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -74,7 +69,6 @@ class MainActivity : ComponentActivity() {
         // launch intent and the navigation state already contains that chat.
         if (savedInstanceState == null) {
             _deepLinkIntent.value = intent
-            handleCallIntent(intent)
             offerInvite(intent)
         }
 
@@ -186,14 +180,9 @@ class MainActivity : ComponentActivity() {
 
                 // Navigate to CallScreen when an incoming call arrives
                 val incomingCall by callManager.callState.collectAsState()
-                // Only a live call may show over the lock screen; once it ends the
-                // rest of the app must be behind the keyguard again.
                 val callLive = incomingCall?.status?.let {
                     it == CallStatus.RINGING || it == CallStatus.CONNECTING || it == CallStatus.CONNECTED
                 } == true
-                LaunchedEffect(callLive) {
-                    if (!callLive) setShowOverLockScreen(false)
-                }
                 LaunchedEffect(incomingCall, startDestination) {
                     if (startDestination == null) return@LaunchedEffect
                     val call = incomingCall
@@ -202,21 +191,6 @@ class MainActivity : ComponentActivity() {
                         call.status == CallStatus.RINGING
                     ) {
                         navController.awaitGraph()
-                        navController.navigate(Routes.call(call.peerId, call.peerDisplayName)) {
-                            launchSingleTop = true
-                        }
-                    }
-                }
-
-                // The ongoing-call notification (and Accept) open the call screen, also for a
-                // call that's already connected after Back left that screen.
-                val showCallRequest by _showCallRequest
-                LaunchedEffect(showCallRequest, startDestination) {
-                    if (showCallRequest == 0 || startDestination == null) return@LaunchedEffect
-                    val call = callManager.callState.value ?: return@LaunchedEffect
-                    if (call.status !in LIVE_CALL) return@LaunchedEffect
-                    navController.awaitGraph()
-                    if (navController.currentBackStackEntry?.destination?.route != Routes.CALL) {
                         navController.navigate(Routes.call(call.peerId, call.peerDisplayName)) {
                             launchSingleTop = true
                         }
@@ -267,7 +241,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         _deepLinkIntent.value = intent
-        handleCallIntent(intent)
         offerInvite(intent)
     }
 
@@ -299,37 +272,6 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
 
-    /**
-     * Opened from the incoming-call notification (full-screen intent or Accept).
-     * Shows over the lock screen for the call; navigation to the call screen
-     * follows from the ringing call state.
-     */
-    private fun handleCallIntent(intent: Intent?) {
-        val action = intent?.action ?: return
-        if (action != CallNotifier.ACTION_SHOW_CALL && action != CallNotifier.ACTION_ACCEPT_CALL) return
-        val callId = intent.getStringExtra(CallNotifier.EXTRA_CALL_ID) ?: return
-        val call = callManager.callState.value
-        // A just-ended call keeps its id for a moment: showing over the lock screen
-        // then would stick, as nothing turns it off again until the next call ends.
-        if (call?.callId != callId ||
-            call.status !in setOf(CallStatus.RINGING, CallStatus.CONNECTING, CallStatus.CONNECTED)
-        ) return
-        setShowOverLockScreen(true)
-        if (action == CallNotifier.ACTION_ACCEPT_CALL) callManager.requestAutoAccept(callId)
-        _showCallRequest.intValue += 1
-    }
-
-    private fun setShowOverLockScreen(show: Boolean) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(show)
-            setTurnScreenOn(show)
-        } else {
-            @Suppress("DEPRECATION")
-            val flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-            if (show) window.addFlags(flags) else window.clearFlags(flags)
-        }
-    }
 }
 
 /**
@@ -340,5 +282,3 @@ class MainActivity : ComponentActivity() {
 private suspend fun NavHostController.awaitGraph() {
     currentBackStackEntryFlow.first()
 }
-
-private val LIVE_CALL = setOf(CallStatus.RINGING, CallStatus.CONNECTING, CallStatus.CONNECTED)

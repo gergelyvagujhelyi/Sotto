@@ -20,14 +20,15 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * The call screen on its own, for the incoming-call notification (its full-screen alert,
- * Answer and tap) and the ongoing-call notification.
+ * The call screen on its own, for the incoming-call notification (Answer and tap) and the
+ * ongoing-call notification.
  *
- * The manifest marks it to show over the lock screen and turn the screen on. Android only
- * lets a notification open an activity over the lock screen without unlocking first when
- * the manifest says so, and MainActivity can't: that would put the chats over the lock
- * screen too. Leaving this screen while the phone is unlocked hands over to the app (with
- * its ongoing-call bar); while it's locked, the screen just goes away.
+ * The manifest marks it to show over the lock screen, so Answer on a locked phone opens the
+ * call without unlocking. Android only lets a notification open an activity over the lock
+ * screen when the manifest says so, and MainActivity can't: that would put the chats over the
+ * lock screen too. It opens only when tapped: an incoming call never takes over the screen by
+ * itself. Leaving this screen while the phone is unlocked hands over to the app (with its
+ * ongoing-call bar); while it's locked, the screen just goes away.
  */
 @AndroidEntryPoint
 class CallActivity : ComponentActivity() {
@@ -39,11 +40,9 @@ class CallActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) {
-            // The manifest attributes exist from Android 8.1.
+            // The manifest attribute exists from Android 8.1.
             @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
-            )
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
         }
         window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
         lifecycleScope.launch {
