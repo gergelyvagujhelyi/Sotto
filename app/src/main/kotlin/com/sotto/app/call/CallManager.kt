@@ -5,6 +5,8 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.ToneGenerator
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
@@ -329,6 +331,12 @@ class CallManager @Inject constructor(
         )
 
         scope.launch {
+            // Without internet the call can't start: say so, instead of a bare "Call failed".
+            if (!hasInternet()) {
+                logWarn("No internet connection: not calling")
+                endCall(CallStatus.NO_NETWORK, callId)
+                return@launch
+            }
             try {
                 callLink.directOffered = offerDirect(directCallsOn(), isTrustedContact(peerId))
                 callLink.qualityOffered = qualityLevel(highQualityCallsOn())
@@ -347,7 +355,7 @@ class CallManager @Inject constructor(
                 val result = sendSignal(peerId, "call_offer", callId, json.encodeToString(offer))
                 if (result == null) {
                     logWarn("call_offer failed to send — network error")
-                    endCall(CallStatus.FAILED, callId)
+                    endCall(if (hasInternet()) CallStatus.FAILED else CallStatus.NO_NETWORK, callId)
                     return@launch
                 }
                 if (result) {
@@ -358,9 +366,23 @@ class CallManager @Inject constructor(
                 startRingingTimeout(callId)
             } catch (e: Exception) {
                 logError("Failed to initiate call", e)
-                endCall(if (e is NoRelayException) CallStatus.NO_RELAY else CallStatus.FAILED, callId)
+                endCall(
+                    when {
+                        e is NoRelayException -> CallStatus.NO_RELAY
+                        !hasInternet() -> CallStatus.NO_NETWORK
+                        else -> CallStatus.FAILED
+                    },
+                    callId,
+                )
             }
         }
+    }
+
+    /** Whether the phone has a network that reaches the internet; a call needs one to start. */
+    private fun hasInternet(): Boolean {
+        val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return true
+        val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 
     fun handleIncomingSignal(signal: CallSignalDto) {
@@ -1060,11 +1082,12 @@ class CallManager @Inject constructor(
             }
         }
 
-        // Clear state after a short delay so UI can show the end status.
+        // Clear state after a short delay so UI can show the end status; longer when the
+        // reason takes reading (the call screen waits as long before it closes).
         // Compare callId (not status) so a rapid back-to-back call isn't cleared.
         val endedCallId = endingState?.callId
         scope.launch {
-            kotlinx.coroutines.delay(2000)
+            kotlinx.coroutines.delay(if (status in READ_STATUSES) 4000 else 2000)
             if (_callState.value?.callId == endedCallId) {
                 _callState.value = null
             }
@@ -1102,12 +1125,7 @@ class CallManager @Inject constructor(
             // Map direction + end status to a message state.
             // Use wasConnected (not durationSeconds) to avoid sub-second
             // connected calls being classified as missed.
-            val messageState = when {
-                isOutgoing && wasConnected -> MessageState.CALL_OUTGOING
-                isOutgoing -> MessageState.CALL_OUTGOING_MISSED
-                wasConnected -> MessageState.CALL_INCOMING
-                else -> MessageState.CALL_MISSED
-            }
+            val messageState = callEventState(isOutgoing, wasConnected, endStatus)
 
             // Find or create conversation for this peer
             val conversationId = getOrCreateConversationId(peerId)
@@ -1132,22 +1150,7 @@ class CallManager @Inject constructor(
             )
 
             // Update the conversation preview
-            val preview = when (messageState) {
-                MessageState.CALL_OUTGOING -> "Voice call"
-                MessageState.CALL_OUTGOING_MISSED -> when (endStatus) {
-                    CallStatus.REJECTED -> "Call declined"
-                    CallStatus.BUSY -> "Busy"
-                    CallStatus.UNAVAILABLE -> "No answer"
-                    else -> "Outgoing call"
-                }
-                MessageState.CALL_INCOMING -> "Voice call"
-                MessageState.CALL_MISSED -> when (endStatus) {
-                    CallStatus.REJECTED -> "Declined call"
-                    else -> "Missed call"
-                }
-                else -> "Call"
-            }
-            updateConversationPreview(conversationId, peerId, preview, now)
+            updateConversationPreview(conversationId, peerId, callEventPreview(messageState, endStatus), now)
 
             // Show missed call notification for incoming calls the user didn't answer or reject
             if (messageState == MessageState.CALL_MISSED && endStatus != CallStatus.REJECTED) {
@@ -2364,7 +2367,10 @@ class CallManager @Inject constructor(
         private val TERMINAL_STATUSES = setOf(
             CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY,
             CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE, CallStatus.PEER_GONE,
+            CallStatus.NO_NETWORK,
         )
+        /** End states whose reason takes reading: kept on screen for 4 s rather than 2. */
+        private val READ_STATUSES = setOf(CallStatus.PEER_GONE, CallStatus.NO_NETWORK)
     }
 }
 
