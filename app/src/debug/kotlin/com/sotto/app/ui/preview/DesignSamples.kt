@@ -18,6 +18,7 @@ import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.ui.call.CallContent
 import com.sotto.app.ui.chat.BlockContactDialog
 import com.sotto.app.ui.chat.ChatContent
+import com.sotto.app.ui.chat.DeleteChatDialog
 import com.sotto.app.ui.chat.RenameContactDialog
 import com.sotto.app.ui.contacts.AddContactContent
 import com.sotto.app.ui.contacts.AddContactState
@@ -71,8 +72,10 @@ internal fun DesignSample(name: String) {
             onBlock = {},
             onUnblock = {},
             onRename = {},
+            onDelete = {},
         ).also {
             if (name == "chat-block-dialog") BlockContactDialog(name = "Maja Sjöberg", onConfirm = {}, onDismiss = {})
+            if (name == "chat-delete-dialog") DeleteChatDialog(name = "Maja Sjöberg", onConfirm = {}, onDismiss = {})
             if (name == "chat-rename-dialog") {
                 RenameContactDialog(currentName = "Maja Sjöberg", theirOwnName = "Maja", onSave = {}, onDismiss = {})
             }

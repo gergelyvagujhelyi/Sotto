@@ -95,6 +95,23 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { conversationRepository.unblockUser(contactId) }
     }
 
+    /**
+     * Delete this chat, its messages and call history, from this phone; [onDeleted] runs after.
+     * The contact stays, and a new message from them starts a new chat. A message request
+     * is rejected instead, which also forgets the stranger.
+     */
+    fun deleteChat(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            val isRequest = conversationRepository.getConversation(conversationId).first()?.isApproved == false
+            if (isRequest) {
+                conversationRepository.rejectMessageRequest(conversationId)
+            } else {
+                conversationRepository.deleteConversation(conversationId)
+            }
+            onDeleted()
+        }
+    }
+
     private val _sendError = MutableStateFlow<String?>(null)
     val sendError: StateFlow<String?> = _sendError.asStateFlow()
 
