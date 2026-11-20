@@ -18,6 +18,8 @@ import com.sotto.app.data.remote.dto.SendMessageRequest
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ProfilePayload
+import com.sotto.app.domain.model.ReplyPayload
+import com.sotto.app.domain.model.ReplyRef
 import com.sotto.app.domain.repository.CryptoEngine
 import com.sotto.app.domain.repository.DuplicateMessageException
 import com.sotto.app.domain.repository.EncryptedEnvelope
@@ -165,14 +167,16 @@ class MessageRepositoryImpl @Inject constructor(
         conversationId: String,
         recipientId: String,
         plaintext: String,
+        replyTo: Message?,
     ): Message = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-        sendMessageInternal(conversationId, recipientId, plaintext)
+        sendMessageInternal(conversationId, recipientId, plaintext, replyTo)
     }
 
     private suspend fun sendMessageInternal(
         conversationId: String,
         recipientId: String,
         plaintext: String,
+        replyTo: Message? = null,
     ): Message {
         val messageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
@@ -192,11 +196,15 @@ class MessageRepositoryImpl @Inject constructor(
             timestamp = now,
             expiresAt = disappearingExpiry(),
             isOutgoing = true,
+            // Only a message of this chat; never a reply to a reply's quote of something else.
+            replyToId = replyTo?.takeIf { it.conversationId == conversationId }?.id,
+            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(it.plaintext) },
+            replyToOwn = replyTo?.takeIf { it.conversationId == conversationId }?.isOutgoing == true,
         )
         messageDao.insert(entity)
 
         val envelope = try {
-            encryptFor(recipientId, plaintext.toByteArray(Charsets.UTF_8))
+            encryptFor(recipientId, wirePayload(entity, senderId).toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             throw e
@@ -285,9 +293,9 @@ class MessageRepositoryImpl @Inject constructor(
         messageDao.updateState(messageId, MessageState.SENDING.name)
 
         try {
-            val envelope = encryptFor(entity.recipientId, plaintext.toByteArray(Charsets.UTF_8))
-
             val retrySenderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+            val envelope = encryptFor(entity.recipientId, wirePayload(entity, retrySenderId).toByteArray(Charsets.UTF_8))
+
             val retrySigPayload = buildMessageSigPayload(retrySenderId, entity.recipientId, envelope.nonce, envelope.ciphertext)
             val retrySignature = keyManager.sign(retrySigPayload)
             val retryPqcSig = signWithMlDsa(retrySigPayload)
@@ -312,6 +320,26 @@ class MessageRepositoryImpl @Inject constructor(
             throw e
         }
     }
+
+    /**
+     * What goes inside the encryption for our own message [entity]: its text, or for a
+     * reply the [ReplyPayload] naming the original by the relay's id for it. That id is
+     * the original's own id when [me] received it, or derived from our local id when we
+     * sent it.
+     */
+    private fun wirePayload(entity: MessageEntity, me: String): String {
+        val replyTo = entity.replyToId ?: return entity.plaintext
+        val to = if (entity.replyToOwn) ReceiptManager.relayMessageId(me, replyTo) else replyTo
+        return ReplyPayload.encode(entity.plaintext, to, entity.replyQuote.orEmpty(), mine = entity.replyToOwn)
+    }
+
+    /**
+     * Our own message in [conversationId] whose relay id is [relayId], for a reply that
+     * quotes it; null when it's gone. Only the newest few thousand are searched.
+     */
+    private suspend fun findOwnByRelayId(conversationId: String, me: String, relayId: String): String? =
+        messageDao.getOutgoingIds(conversationId, OWN_REPLY_SEARCH_LIMIT)
+            .firstOrNull { ReceiptManager.relayMessageId(me, it) == relayId }
 
     /**
      * Encrypt for a peer under the per-peer lock. Uses the existing session if
@@ -603,6 +631,14 @@ class MessageRepositoryImpl @Inject constructor(
 
         val conversationId = getOrCreateConversationId(dto.senderId)
 
+        // A reply: keep its text, and point at the original when this phone has it.
+        // "mine" is the sender's: the original is theirs, so it has the relay's id here.
+        val reply = ReplyPayload.decode(plaintextStr)
+        val messageText = reply?.text ?: plaintextStr
+        val replyToId = reply?.let {
+            if (it.mine) it.to else findOwnByRelayId(conversationId, localUserId, it.to) ?: it.to
+        }
+
         val entity = MessageEntity(
             id = dto.messageId,
             conversationId = conversationId,
@@ -610,11 +646,14 @@ class MessageRepositoryImpl @Inject constructor(
             recipientId = localUserId,
             encryptedBody = envelope.ciphertext,
             nonce = envelope.nonce,
-            plaintext = plaintextStr,
+            plaintext = messageText,
             state = MessageState.DELIVERED.name,
             timestamp = dto.timestamp,
             expiresAt = disappearingExpiry(),
             isOutgoing = false,
+            replyToId = replyToId,
+            replyQuote = reply?.quote,
+            replyToOwn = reply != null && !reply.mine,
         )
         messageDao.insert(entity)
         receivedIds.add(dto.messageId)
@@ -623,7 +662,7 @@ class MessageRepositoryImpl @Inject constructor(
         updateConversationPreview(
             conversationId,
             dto.senderId,
-            plaintextStr,
+            messageText,
             dto.timestamp,
             incrementUnread = !isActive,
         )
@@ -635,7 +674,7 @@ class MessageRepositoryImpl @Inject constructor(
             notificationManager.showMessageNotification(
                 senderId = dto.senderId,
                 senderName = senderName,
-                messageBody = plaintextStr,
+                messageBody = messageText,
                 conversationId = conversationId,
             )
         }
@@ -968,6 +1007,8 @@ class MessageRepositoryImpl @Inject constructor(
     companion object {
         /** Server default page size for GET /v1/messages/pending. */
         private const val PENDING_PAGE_SIZE = 100
+        /** How many of our own newest messages a received reply's original is looked for in. */
+        private const val OWN_REPLY_SEARCH_LIMIT = 5_000
         /** Preview and notification text when someone adds the user and sends only their name. */
         private const val WANTS_TO_CONNECT = "Wants to connect"
         private const val DAY_MS = 24L * 60 * 60 * 1000
@@ -1010,5 +1051,6 @@ private fun MessageEntity.toDomain(localUserId: String): Message {
         timestamp = Instant.fromEpochMilliseconds(timestamp),
         expiresAt = expiresAt?.let { Instant.fromEpochMilliseconds(it) },
         isOutgoing = isOutgoing,
+        replyTo = replyToId?.let { ReplyRef(it, replyQuote.orEmpty(), replyToOwn) },
     )
 }

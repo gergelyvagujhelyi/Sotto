@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -64,6 +65,24 @@ class ChatViewModel @Inject constructor(
     private var draft: String
         get() = composerText.value
         set(value) { savedStateHandle[KEY_DRAFT] = value }
+
+    /**
+     * The message the composer replies to, by id (saved like the draft); null when none.
+     * It goes away by itself if that message does (deleted, or disappeared).
+     */
+    private val replyingToId: StateFlow<String?> = savedStateHandle.getStateFlow(KEY_REPLY_TO, null)
+    val replyingTo: StateFlow<Message?> =
+        combine(messages, replyingToId) { list, id -> id?.let { wanted -> list?.firstOrNull { it.id == wanted } } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Reply to [message] with the next one sent. */
+    fun startReply(message: Message) {
+        savedStateHandle[KEY_REPLY_TO] = message.id
+    }
+
+    fun cancelReply() {
+        savedStateHandle[KEY_REPLY_TO] = null
+    }
 
     val isBlocked: StateFlow<Boolean> =
         conversationRepository.observeBlocked(contactId)
@@ -204,6 +223,8 @@ class ChatViewModel @Inject constructor(
             return
         }
 
+        // The reply shown when Send was tapped, not one picked while the checks below run.
+        val replyTo = replyingTo.value
         viewModelScope.launch {
             // Read the conversation now rather than the screen's cached copy: it may
             // still be loading (null passed every check), or be gone (a rejected
@@ -223,9 +244,12 @@ class ChatViewModel @Inject constructor(
                 _sendError.value = blocked
                 return@launch
             }
-            if (draft.trim() == text) draft = ""
+            if (draft.trim() == text) {
+                draft = ""
+                if (replyingTo.value?.id == replyTo?.id) cancelReply()
+            }
             _sendError.value = null
-            sendMessage(conversationId, contactId, text)
+            sendMessage(conversationId, contactId, text, replyTo)
                 .onFailure { e ->
                     _sendError.value = "Failed to send message"
                 }
@@ -277,6 +301,7 @@ class ChatViewModel @Inject constructor(
 
     private companion object {
         const val KEY_DRAFT = "composer_draft"
+        const val KEY_REPLY_TO = "composer_reply_to"
     }
 }
 

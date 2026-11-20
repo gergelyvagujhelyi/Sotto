@@ -1,5 +1,6 @@
 package com.sotto.app.ui.components
 
+import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -7,11 +8,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,13 +51,20 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -77,6 +90,10 @@ fun MessageBubble(
     modifier: Modifier = Modifier,
     groupedWithPrevious: Boolean = false,
     onClick: (() -> Unit)? = null,
+    /** The message this one replies to, shown above its text. */
+    quote: BubbleQuote? = null,
+    /** Tapping the quote: go to the original. */
+    onQuoteClick: (() -> Unit)? = null,
     /** New while the chat is open: rise into place while the text settles like a departure board. */
     animateIn: Boolean = false,
     onAnimateInDone: () -> Unit = {},
@@ -117,6 +134,8 @@ fun MessageBubble(
             groupedWithPrevious = groupedWithPrevious,
             onClick = onClick,
             scrambleMs = scrambleMs,
+            quote = quote,
+            onQuoteClick = onQuoteClick,
             modifier = Modifier
                 .then(if (onBubblePlaced != null) Modifier.onGloballyPositioned { onBubblePlaced(it.boundsInRoot()) } else Modifier)
                 .graphicsLayer {
@@ -181,6 +200,8 @@ internal fun BubbleSurface(
     scrambleMs: Long?,
     modifier: Modifier = Modifier,
     look: Float = 1f,
+    quote: BubbleQuote? = null,
+    onQuoteClick: (() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val aurora = Aurora.colors
@@ -224,28 +245,139 @@ internal fun BubbleSurface(
             .then(surface)
             .clip(shape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(start = BubbleTextInsetStart, end = 12.dp, top = BubbleTextInsetTop, bottom = 8.dp),
+            .then(
+                // A quote sits close to the bubble's edge; the text keeps its usual inset.
+                if (quote == null) {
+                    Modifier.padding(start = BubbleTextInsetStart, end = 12.dp, top = BubbleTextInsetTop, bottom = 8.dp)
+                } else {
+                    Modifier.padding(start = QuoteInset, end = QuoteInset, top = QuoteInset, bottom = 8.dp)
+                },
+            ),
     ) {
-        TextWithTrailingMeta(
-            text = text,
-            style = if (unreadable) {
-                MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic)
-            } else {
-                MaterialTheme.typography.bodyLarge
+        QuoteAbove(
+            quote = quote?.let { q ->
+                {
+                    QuoteBlock(
+                        quote = q,
+                        isOutgoing = isOutgoing,
+                        textColor = bubbleTextColor,
+                        onClick = onQuoteClick,
+                    )
+                }
             },
-            color = textColor,
-            scrambleMs = scrambleMs,
         ) {
-            Row(
-                // The time and ticks come in at the end of a flight.
-                modifier = if (fill >= 1f) Modifier else Modifier.graphicsLayer { alpha = ((fill - 0.6f) / 0.4f).coerceIn(0f, 1f) },
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+            TextWithTrailingMeta(
+                text = text,
+                style = if (unreadable) {
+                    MaterialTheme.typography.bodyLarge.copy(fontStyle = FontStyle.Italic)
+                } else {
+                    MaterialTheme.typography.bodyLarge
+                },
+                color = textColor,
+                scrambleMs = scrambleMs,
+                // Not in the copy flying out of the composer: it's a picture of the text.
+                links = !unreadable && look >= 1f,
             ) {
-                Text(text = timestamp, style = MaterialTheme.typography.labelSmall, color = metaColor)
-                // Ticks sit dimmer than the time so the bright read tick stands out.
-                if (isOutgoing) MessageStateIcon(state, if (failed) metaColor else aurora.bubbleOutgoingTick)
+                Row(
+                    // The time and ticks come in at the end of a flight.
+                    modifier = if (fill >= 1f) Modifier else Modifier.graphicsLayer { alpha = ((fill - 0.6f) / 0.4f).coerceIn(0f, 1f) },
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
+                    Text(text = timestamp, style = MaterialTheme.typography.labelSmall, color = metaColor)
+                    // Ticks sit dimmer than the time so the bright read tick stands out.
+                    if (isOutgoing) MessageStateIcon(state, if (failed) metaColor else aurora.bubbleOutgoingTick)
+                }
             }
+        }
+    }
+}
+
+/** What a reply bubble shows of the message it answers. [author] is "You" or the contact's name. */
+data class BubbleQuote(val author: String, val text: String, val toOwn: Boolean)
+
+/** How far a quote sits from the bubble's edge. */
+private val QuoteInset = 5.dp
+
+/**
+ * [body] (the text and time) with [quote] above it, when there is one. The bubble is as
+ * wide as the wider of the two (up to its limit), and the quote spans all of it.
+ */
+@Composable
+private fun QuoteAbove(quote: (@Composable () -> Unit)?, body: @Composable () -> Unit) {
+    if (quote == null) {
+        body()
+        return
+    }
+    Layout(
+        content = {
+            quote()
+            // The text keeps its usual inset from the bubble's edge.
+            Box(
+                Modifier.padding(
+                    start = BubbleTextInsetStart - QuoteInset,
+                    end = 12.dp - QuoteInset,
+                    top = 6.dp,
+                ),
+                propagateMinConstraints = true,
+            ) { body() }
+        },
+    ) { measurables, constraints ->
+        val wanted = measurables[0].maxIntrinsicWidth(Constraints.Infinity).coerceAtMost(constraints.maxWidth)
+        val bodyPlaceable = measurables[1].measure(
+            constraints.copy(minWidth = maxOf(constraints.minWidth, wanted).coerceAtMost(constraints.maxWidth)),
+        )
+        val quotePlaceable = measurables[0].measure(Constraints.fixedWidth(bodyPlaceable.width))
+        layout(bodyPlaceable.width, quotePlaceable.height + bodyPlaceable.height) {
+            quotePlaceable.placeRelative(0, 0)
+            bodyPlaceable.placeRelative(0, quotePlaceable.height)
+        }
+    }
+}
+
+/**
+ * The quoted message inside a reply: a bar in its author's colour, their name and two
+ * lines of the text, over a faint tint of the bubble's text colour (so it reads on the
+ * brand gradient and on glass, light or dark).
+ */
+@Composable
+private fun QuoteBlock(quote: BubbleQuote, isOutgoing: Boolean, textColor: Color, onClick: (() -> Unit)?) {
+    val colors = MaterialTheme.colorScheme
+    // On the brand gradient, colours fight the fill: the bubble's own text colour reads best.
+    val accent = when {
+        isOutgoing -> textColor
+        quote.toOwn -> colors.primary
+        else -> colors.tertiary
+    }
+    val shape = RoundedCornerShape(14.dp)
+    Row(
+        modifier = Modifier
+            .height(IntrinsicSize.Min)
+            .clip(shape)
+            .background(textColor.copy(alpha = 0.1f))
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Go to message", onClick = onClick) else Modifier),
+    ) {
+        Box(
+            Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(accent.copy(alpha = if (isOutgoing) 0.75f else 1f)),
+        )
+        Column(Modifier.weight(1f, fill = false).padding(start = 8.dp, end = 10.dp, top = 6.dp, bottom = 7.dp)) {
+            Text(
+                text = quote.author,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = quote.text.ifBlank { "Message" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = textColor.copy(alpha = 0.8f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
@@ -261,6 +393,8 @@ private fun TextWithTrailingMeta(
     color: Color,
     /** Departure board running, ms since it started; null for plain text. */
     scrambleMs: Long? = null,
+    /** Web links in the text are underlined and open on tap (once the board has settled). */
+    links: Boolean = false,
     meta: @Composable () -> Unit,
 ) {
     // Written during the text's own measure pass and read right after it in the
@@ -268,7 +402,8 @@ private fun TextWithTrailingMeta(
     val textLayout = remember { arrayOfNulls<TextLayoutResult>(1) }
     // While flipping, the real text keeps the layout (the bubble never changes size) with
     // the unsettled characters transparent; their glyphs are drawn on top, in each one's box.
-    val shown = if (scrambleMs == null) AnnotatedString(text) else unsettledHidden(text, scrambleMs)
+    val linked = rememberLinked(text, color, links)
+    val shown = if (scrambleMs == null) linked else unsettledHidden(text, scrambleMs)
     val measurer = rememberTextMeasurer()
     val glyphLayouts = remember(style) { HashMap<Char, TextLayoutResult>() }
     val glyphColor = color.copy(alpha = 0.9f)
@@ -358,6 +493,42 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
     )
 }
 
+
+/**
+ * [text] with its web links ([findLinks]) underlined and opening on tap. A link's
+ * tap goes to the link, not to the bubble. With nothing to open it, a toast says so
+ * instead of the app crashing.
+ */
+@Composable
+private fun rememberLinked(text: String, color: Color, enabled: Boolean): AnnotatedString {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    return remember(text, color, enabled, uriHandler) {
+        val found = if (enabled) findLinks(text) else emptyList()
+        if (found.isEmpty()) return@remember AnnotatedString(text)
+        val styles = TextLinkStyles(
+            style = SpanStyle(textDecoration = TextDecoration.Underline),
+            pressedStyle = SpanStyle(textDecoration = TextDecoration.Underline, background = color.copy(alpha = 0.2f)),
+        )
+        buildAnnotatedString {
+            append(text)
+            for (link in found) {
+                addLink(
+                    LinkAnnotation.Url(link.url, styles) {
+                        try {
+                            uriHandler.openUri(link.url)
+                        } catch (_: IllegalArgumentException) {
+                            // No browser (or other app) for it.
+                            Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    link.range.first,
+                    link.range.last + 1,
+                )
+            }
+        }
+    }
+}
 
 /** [text] with the characters that haven't settled yet (at [elapsedMs]) transparent. */
 private fun unsettledHidden(text: String, elapsedMs: Long): AnnotatedString {

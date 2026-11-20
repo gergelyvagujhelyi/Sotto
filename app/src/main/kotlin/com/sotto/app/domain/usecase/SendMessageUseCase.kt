@@ -11,10 +11,11 @@ class SendMessageUseCase @Inject constructor(
         conversationId: String,
         recipientId: String,
         plaintext: String,
+        replyTo: Message? = null,
     ): Result<Message> = runCatching {
         require(plaintext.isNotBlank()) { "Message cannot be blank" }
         require(plaintext.length <= MAX_MESSAGE_LENGTH) { "Message exceeds maximum length" }
-        messageRepository.sendMessage(conversationId, recipientId, plaintext)
+        messageRepository.sendMessage(conversationId, recipientId, plaintext, replyTo)
     }
 
     companion object {

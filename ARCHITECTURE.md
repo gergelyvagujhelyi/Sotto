@@ -293,3 +293,11 @@
 **Why**: The owner asked whether a random port would keep scanners away. It would cut the noise, but every install stores the relay's address, so moving it needs an app update and leaves older installs unable to connect. Android verifies App Links only on 443, so invite links would open the browser instead of the app. Hotel and office networks often allow only 443. Nor would it hide the relay: Certificate Transparency logs publish its name, and scanners such as Censys sweep every port. Most scanners sweep IP addresses without a name, so refusing unnamed connections turns them away on 443, and they don't even learn the name from the certificate. The owner also wants no IP addresses logged. Before this, nginx's default log format recorded every client's address, and coturn's log recorded every call's.
 
 **Tradeoff**: Without `RELAY_HOSTNAME`, nginx answers any name, as before, so existing relays keep working until it's set. The error log no longer shows upstream failures; the access log still shows them by their status.
+
+## ADR-27: A reply carries its quote inside the encryption
+
+**Decision**: A reply's plaintext is `"\u0001sotto/reply/v1:" + {"text", "to", "quote", "mine"}` (`ReplyPayload`), sent like any other message. `to` names the original by the relay's id for it (`ReceiptManager.relayMessageId`), the one id both phones know. `mine` says whether the sender wrote the original. `quote` is the first 200 characters of the original. The receiver stores the text as the message and the reference in `messages.replyToId`, `replyQuote` and `replyToOwn` (Room 12), pointing at its own id for the original when it still has it.
+
+**Why**: The owner asked for WhatsApp-style replies. A separate kind of envelope would show the relay which messages are replies; inside the encryption the relay sees an ordinary message, as with `ProfilePayload`. Sending the quote rather than only the id means the reply still shows what it answers when the original was deleted or disappeared on either phone, or arrived before the receiver joined from a new install.
+
+**Tradeoff**: Sotto 0.6.9 and older don't know the prefix, and show a reply from a newer phone as its raw payload. Everyone has to update together. The quote is a copy, so editing or deleting the original never changes it.
