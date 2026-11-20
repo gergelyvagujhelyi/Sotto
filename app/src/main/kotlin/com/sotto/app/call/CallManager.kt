@@ -2478,6 +2478,12 @@ internal enum class OfferVerdict {
  * the same moment, both phones keep the call with the smaller id, so they agree on one
  * without talking it over (before, each answered the other's offer with busy, and
  * neither call went through). [ourCallAnswered]: the peer already answered our call.
+ *
+ * The id starts with a random UUID, so which call wins is random, not "who called first".
+ * On purpose: the time in the id comes from each phone's own clock, and two phones' clocks
+ * often differ by more than the second or so in which both calls cross. What matters is
+ * that both phones pick the same call, and ids are never equal. (Older apps' ids are a
+ * bare UUID, without a time.)
  */
 internal fun offerVerdict(current: CallState?, ourCallAnswered: Boolean, senderId: String, callId: String): OfferVerdict {
     if (current == null || current.status.isOver) return OfferVerdict.RING
