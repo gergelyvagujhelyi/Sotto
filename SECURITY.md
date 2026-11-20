@@ -70,6 +70,7 @@ messages from the losing session are still decrypted.
 - Encrypted message envelopes in transit (deleted after delivery ACK, or purged after 30 days if undelivered)
 - Timing of message submission and retrieval
 - Who invited whom (since 0.5.17): each invite records the member who created it and the account that used it, until 30 days after its use
+- The IP address a phone connects from, while it's connected, as any server sees it. The IP rate limits count requests per address in memory. No log keeps addresses (see Relay Logs and Scanners).
 
 ### What the Server Does NOT Know
 - Message content
@@ -274,6 +275,21 @@ A relay creates an account only with a one-time invite from an existing member (
 
 ### Certificate Pinning
 Network security config (generated at build time for the owner's relay, `sotto.ownerRelayHost`, so its address stays out of the repository) pins the relay server's certificate chain to Let's Encrypt's root keys (ISRG Root X1, ISRG Root X2 and ISRG Root YE), so certificate renewals and Let's Encrypt's intermediate rotations don't lock the app out (since v0.5.1; before, it pinned the server's own certificate and intermediate). Pins expire 2028-10-01 and must be renewed before then. Since v0.5.0, cleartext traffic exemptions for local development domains are restricted to debug builds only.
+
+### Relay Logs and Scanners (2026-11-20)
+**No addresses in the logs.**
+- nginx logs each request's time, method, path, protocol, status, size and duration, but not the client's address. The account id in `/v1/identity/<id>/keys` and the share code in `/v1/identity/resolve/<code>` are cut from the path.
+- nginx adds the client's address to every error it logs about a connection, so its error log keeps only emergencies, which are about nginx itself.
+- coturn keeps no log, because its log names every client's address.
+- The app server logs no addresses.
+- Before this, nginx's default log format recorded every request's address, and coturn's log recorded every call's.
+
+**Only its own name.** With `RELAY_HOSTNAME` set in `.env`:
+- nginx refuses a TLS connection that asks for no name or another name, before it sends the certificate.
+- It closes plain-HTTP connections for other names.
+- Scanners that sweep IP addresses get nothing back, not even the relay's name from its certificate.
+
+The name itself is public, because Certificate Transparency logs list every certificate. So this cuts the noise of address sweeps rather than hiding the relay; a scanner that knows the name gets through to nginx. Paths the relay doesn't serve get a closed connection instead of an answer. The relay stays on port 443, for the reasons in ARCHITECTURE.md ADR-26.
 
 ## Security Checklist
 

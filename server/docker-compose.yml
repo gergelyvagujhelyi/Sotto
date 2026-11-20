@@ -42,7 +42,9 @@ services:
         # relay to the other through the machine's own internal address. turnserver.conf
         # denies private ranges, so allow exactly that address, and relay only on the
         # interface the public address maps to (not the Docker bridges).
+        # No log: coturn's would name every client's address, and the relay keeps none.
         exec turnserver -c /etc/turnserver.conf --static-auth-secret=${TURN_SECRET:?Set TURN_SECRET in .env} \
+          --no-stdout-log --log-file=/dev/null \
           $${INTERNAL_IP:+--relay-ip=$$INTERNAL_IP --allowed-peer-ip=$$INTERNAL_IP} \
           $${EXTERNAL_IP:+--external-ip=$$EXTERNAL_IP$${INTERNAL_IP:+/$$INTERNAL_IP}}
     healthcheck:
@@ -88,8 +90,12 @@ services:
     ports:
       - "443:443"
       - "80:80"
+    environment:
+      # The relay's name: nginx then answers only that name (nginx-relay-hostname.sh).
+      RELAY_HOSTNAME: ${RELAY_HOSTNAME:-}
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-relay-hostname.sh:/docker-entrypoint.d/40-relay-hostname.sh:ro
       - ${TLS_CERT_PATH:?Set TLS_CERT_PATH in .env}:/etc/nginx/ssl/cert.pem:ro
       - ${TLS_KEY_PATH:?Set TLS_KEY_PATH in .env}:/etc/nginx/ssl/key.pem:ro
     depends_on:

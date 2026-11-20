@@ -78,7 +78,7 @@ The server runs at http://localhost:8000. In setup, debug builds suggest `http:/
 The app works with any Sotto relay, so you can run one for your own people:
 
 1. **A server and a domain.** A small Linux machine with Docker will do. Point a domain at it and get a TLS certificate for that domain, for example from Let's Encrypt.
-2. **Configure it.** In `server/`, copy `.env.example` to `.env` and set `POSTGRES_PASSWORD`, `TURN_SECRET`, `TLS_CERT_PATH` and `TLS_KEY_PATH`. Outside Google Cloud, also set `TURN_RELAY_IP` to the server's public IP address and `TURN_INTERNAL_IP` to the address of its network interface (the same one if the server isn't behind NAT).
+2. **Configure it.** In `server/`, copy `.env.example` to `.env` and set `POSTGRES_PASSWORD`, `TURN_SECRET`, `TLS_CERT_PATH` and `TLS_KEY_PATH`. Set `RELAY_HOSTNAME` to the relay's name, so it refuses connections that don't ask for it, which most scanners don't. Outside Google Cloud, also set `TURN_RELAY_IP` to the server's public IP address and `TURN_INTERNAL_IP` to the address of its network interface (the same one if the server isn't behind NAT).
 3. **Start it** with `docker compose up -d --build`. Open TCP ports 80 and 443, and for calls UDP port 3478 and UDP ports 49152–65535.
 4. **Join it first.** In the app's setup, type the relay's address, like `relay.example.com`. The first account on a new relay needs no invite. After that, new people join with a member's invite (`INVITE_ONLY=true`, the default); `INVITE_ONLY=false` lets anyone who knows the address join.
 
