@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -99,6 +100,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
 import com.sotto.app.ui.components.runScramble
+import com.sotto.app.ui.contacts.RemoveContactDialog
 import com.sotto.app.ui.theme.LocalReduceMotion
 import kotlin.math.PI
 import kotlin.math.roundToInt
@@ -174,6 +176,7 @@ fun ChatScreen(
     val contact by viewModel.contact.collectAsState()
     var confirmBlock by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
 
     if (renaming) {
@@ -207,6 +210,17 @@ fun ChatScreen(
                 viewModel.deleteChat(onDeleted = onBack)
             },
             onDismiss = { confirmDelete = false },
+        )
+    }
+
+    if (confirmRemove) {
+        RemoveContactDialog(
+            name = conversation?.contactDisplayName,
+            onConfirm = {
+                confirmRemove = false
+                viewModel.removeContact(onRemoved = onBack)
+            },
+            onDismiss = { confirmRemove = false },
         )
     }
 
@@ -294,6 +308,7 @@ fun ChatScreen(
         onUnblock = viewModel::unblock,
         onRename = { renaming = true },
         onDelete = { confirmDelete = true },
+        onRemoveContact = { confirmRemove = true },
     )
 }
 
@@ -326,6 +341,7 @@ fun ChatContent(
     onUnblock: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onRemoveContact: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val today = rememberToday()
@@ -415,6 +431,7 @@ fun ChatContent(
                     onUnblock = onUnblock,
                     onRename = onRename,
                     onDelete = onDelete,
+                    onRemoveContact = onRemoveContact,
                 )
             },
         ) { padding ->
@@ -578,6 +595,7 @@ private fun ChatTopBar(
     onUnblock: () -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
+    onRemoveContact: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     var showMenu by remember { mutableStateOf(false) }
@@ -670,6 +688,14 @@ private fun ChatTopBar(
                             onClick = {
                                 showMenu = false
                                 onDelete()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Remove contact") },
+                            leadingIcon = { Icon(Icons.Rounded.PersonRemove, contentDescription = null, tint = colors.error) },
+                            onClick = {
+                                showMenu = false
+                                onRemoveContact()
                             },
                         )
                     }

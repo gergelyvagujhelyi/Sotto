@@ -9,6 +9,7 @@ Nothing yet.
 ## 0.6.5 — 2026-11-20
 
 - **A call without internet says so** — With no internet connection, a call now says "No internet connection" and the chat records "Call failed". Before, the call screen said "Call failed" and closed, and the chat recorded "Unanswered call", though the other phone never rang. The screen that says why a call ended now stays up long enough to read (4 seconds).
+- **Remove a contact** — Each contact in New chat's list has a menu (⋮) with Remove contact, and so does a chat's menu. After asking, it removes the contact and deletes the chat with them from this phone. They aren't told, and if they write again, it arrives as a message request. Contacts whose accounts were deleted no longer have to stay in the list.
 - **Delete a chat** — A chat's menu (⋮) has Delete chat. After asking, it removes the chat, its messages and its call history from this phone. The other person keeps their copy, and a new message from them starts a new chat. On a message request it does what Reject does.
 - **Call buttons take a tap on their label too** — On the call screen, a tap on the word under a button (Accept, Decline, Mute, Louder, Speaker, End) now works like a tap on the button. Before, only the round button reacted, and a tap on "End" did nothing, which once left a call running. A screen reader reads each button once.
 - **Lint** — Lint's code warnings are dealt with. Small fixes:

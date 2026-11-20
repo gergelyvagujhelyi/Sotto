@@ -3,6 +3,7 @@ package com.sotto.app.ui.contacts
 import android.app.Activity
 import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,9 +26,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -131,6 +136,7 @@ fun AddContactScreen(
         onSubmit = viewModel::submitShareCode,
         onScanQr = onScanQr,
         showNameHint = !hasMyName,
+        onRemoveContact = { viewModel.removeContact(it.userId) },
     )
 }
 
@@ -146,8 +152,10 @@ fun AddContactContent(
     onSubmit: () -> Unit,
     onScanQr: () -> Unit,
     showNameHint: Boolean = false,
+    onRemoveContact: (Contact) -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    var removing by remember { mutableStateOf<Contact?>(null) }
     val canSubmit = shareCodeInput.isNotBlank() && state !is AddContactState.Loading
     var showMyQr by rememberSaveable { mutableStateOf(false) }
     // Gives the bar its solid colour once content scrolls under it.
@@ -259,7 +267,12 @@ fun AddContactContent(
                     // Namespaced: user ids come from the relay, and one equal to a fixed
                     // key above would crash the list (duplicate key) on every open.
                     itemsIndexed(contacts, key = { _, contact -> "contact:${contact.userId}" }) { index, contact ->
-                        ContactRow(contact, first = index == 0, last = index == contacts.lastIndex)
+                        ContactRow(
+                            contact,
+                            first = index == 0,
+                            last = index == contacts.lastIndex,
+                            onRemove = { removing = contact },
+                        )
                     }
                 }
             }
@@ -268,6 +281,17 @@ fun AddContactContent(
 
     if (showMyQr && myShareCode != null) {
         ShareCodeQrDialog(shareCode = myShareCode, onDismiss = { showMyQr = false })
+    }
+
+    removing?.let { contact ->
+        RemoveContactDialog(
+            name = contact.displayName,
+            onConfirm = {
+                removing = null
+                onRemoveContact(contact)
+            },
+            onDismiss = { removing = null },
+        )
     }
 }
 
@@ -418,7 +442,7 @@ private fun ShareCodeField(
 }
 
 @Composable
-private fun ContactRow(contact: Contact, first: Boolean, last: Boolean) {
+private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onRemove: () -> Unit) {
     val aurora = Aurora.colors
     val radius = 26.dp
     val small = 6.dp
@@ -434,7 +458,8 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean) {
             .padding(bottom = if (last) 0.dp else 2.dp),
         shape = shape,
         fill = aurora.glass,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        // The ⋮ button is 48 dp tall: less padding keeps the row its old height.
+        contentPadding = PaddingValues(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             GradientAvatar(name = contact.displayName, seed = contact.userId, size = 40.dp)
@@ -444,7 +469,30 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean) {
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
             )
+            Box {
+                var menu by remember { mutableStateOf(false) }
+                IconButton(onClick = { menu = true }) {
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "Options for ${contact.displayName}")
+                }
+                DropdownMenu(
+                    expanded = menu,
+                    onDismissRequest = { menu = false },
+                    shape = RoundedCornerShape(16.dp),
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Remove contact") },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.PersonRemove, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        },
+                        onClick = {
+                            menu = false
+                            onRemove()
+                        },
+                    )
+                }
+            }
         }
     }
 }

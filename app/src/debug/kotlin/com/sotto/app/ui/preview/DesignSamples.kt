@@ -22,6 +22,7 @@ import com.sotto.app.ui.chat.DeleteChatDialog
 import com.sotto.app.ui.chat.RenameContactDialog
 import com.sotto.app.ui.contacts.AddContactContent
 import com.sotto.app.ui.contacts.AddContactState
+import com.sotto.app.ui.contacts.RemoveContactDialog
 import com.sotto.app.ui.contacts.ScanQrContent
 import com.sotto.app.ui.contacts.ShareCodeQrDialog
 import com.sotto.app.ui.conversations.ConversationsContent
@@ -73,9 +74,11 @@ internal fun DesignSample(name: String) {
             onUnblock = {},
             onRename = {},
             onDelete = {},
+            onRemoveContact = {},
         ).also {
             if (name == "chat-block-dialog") BlockContactDialog(name = "Maja Sjöberg", onConfirm = {}, onDismiss = {})
             if (name == "chat-delete-dialog") DeleteChatDialog(name = "Maja Sjöberg", onConfirm = {}, onDismiss = {})
+            if (name == "chat-remove-contact-dialog") RemoveContactDialog(name = "Maja Sjöberg", onConfirm = {}, onDismiss = {})
             if (name == "chat-rename-dialog") {
                 RenameContactDialog(currentName = "Maja Sjöberg", theirOwnName = "Maja", onSave = {}, onDismiss = {})
             }

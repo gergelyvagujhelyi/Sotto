@@ -95,6 +95,14 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { conversationRepository.unblockUser(contactId) }
     }
 
+    /** Remove this contact, and the chat with them, from this phone; [onRemoved] runs after. */
+    fun removeContact(onRemoved: () -> Unit) {
+        viewModelScope.launch {
+            conversationRepository.removeContact(contactId)
+            onRemoved()
+        }
+    }
+
     /**
      * Delete this chat, its messages and call history, from this phone; [onDeleted] runs after.
      * The contact stays, and a new message from them starts a new chat. A message request
