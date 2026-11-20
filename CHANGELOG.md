@@ -11,7 +11,7 @@ Nothing yet.
 - **A call you answer is never "missed"** — If you answer a call and it can't connect, the chat now records "Call failed", and no missed-call notification appears. Before, it was logged as a missed call, with a notification, though you had answered it. If either of you hangs up before it connects, it's logged as an incoming call. Answering without internet says "No internet connection".
 - **Relay: its health page names its release** — The relay's `/health` reports the release it belongs to (now 0.6.6). It had said 0.6.0 since that release. A test keeps it in step with the app's version.
 - **Release notes start with the changelog** — The release build puts the version's section of this changelog at the top of its release notes. It was added by hand before.
-- **Build: setup-java v5** — The release and check builds use actions/setup-java v5, since GitHub deprecated v4.
+- **Build: current GitHub Actions** — The release and check builds use the versions that run on Node 24: setup-java v5, checkout v5, setup-python v6, setup-gradle v5, upload-artifact v6 and action-gh-release v3. GitHub had deprecated setup-java v4 and the Node 20 versions.
 
 ## 0.6.5 — 2026-11-20
 
