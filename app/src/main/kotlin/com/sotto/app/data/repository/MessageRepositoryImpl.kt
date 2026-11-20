@@ -53,7 +53,6 @@ class MessageRepositoryImpl @Inject constructor(
     private val contactNames: ContactNameStore,
 ) : MessageRepository {
 
-    private val fetchLock = kotlinx.coroutines.sync.Mutex()
     private val peerLocks = ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
     private val headerJson = Json { ignoreUnknownKeys = true }
 
@@ -404,43 +403,14 @@ class MessageRepositoryImpl @Inject constructor(
         messageDao.deleteOlderThan(conversationId, timestampMillis)
     }
 
-    override suspend fun fetchPendingFromServer() {
-        if (!fetchLock.tryLock()) {
-            // A fetch is running but already has its /pending list; make it run
-            // once more so a message announced now isn't missed until the next poll.
-            fetchRequestedAgain = true
-            return
-        }
-        try {
-            do {
-                fetchRequestedAgain = false
-                fetchPendingInternal()
-            } while (fetchRequestedAgain)
-        } finally {
-            fetchLock.unlock()
-            // A request that came in while this run was failing, being cancelled, or
-            // past its last check returned without fetching: run it here, or the
-            // message it announced waits for the next poll (up to 15 minutes).
-            if (fetchRequestedAgain) {
-                rerunScope.launch {
-                    try {
-                        fetchPendingFromServer()
-                    } catch (e: Exception) {
-                        if (e is kotlinx.coroutines.CancellationException) throw e
-                        if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Re-requested fetch failed: ${e.message}")
-                    }
-                }
-            }
-        }
-    }
-
-    private val rerunScope = kotlinx.coroutines.CoroutineScope(
-        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    /** One fetch at a time; see [PendingFetchGate]. */
+    private val fetchGate = PendingFetchGate(
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     )
 
-    /** Set when a fetch is requested while one is running; the running one loops again. */
-    @Volatile
-    private var fetchRequestedAgain = false
+    override suspend fun fetchPendingFromServer() = fetchGate.fetchOrRequest(::fetchPendingInternal)
+
+    override suspend fun fetchPendingAndWait() = fetchGate.fetchAndWait(::fetchPendingInternal)
 
     private suspend fun fetchPendingInternal() {
         pruneInMemoryMaps()
