@@ -7,11 +7,23 @@ The client fetches encrypted envelopes directly from this server after wake-up.
 import asyncio
 import logging
 import warnings
+from datetime import timedelta
 from typing import Optional
 
 from app.config import FIREBASE_CREDENTIALS
 
 logger = logging.getLogger(__name__)
+
+# How long Firebase keeps a push for a phone it can't reach (no signal, switched off).
+# A call's push matters only while the call rings: later, it would ring for a call that's over.
+CALL_PUSH_TTL = timedelta(seconds=60)
+# A message's push waits as long as Firebase allows. Until 2026-11-20 it also lasted 60 s, so
+# a phone that came back from more than a minute without signal got no wake-up, and its
+# messages waited for the app's 15-minute check (or for it to be opened).
+MESSAGE_PUSH_TTL = timedelta(days=28)
+# Message pushes replace each other while they wait: a phone that comes back gets one wake-up,
+# and that one fetch brings everything waiting. Call pushes don't collapse.
+MESSAGE_COLLAPSE_KEY = "new_message"
 
 _firebase_initialized = False
 
@@ -70,6 +82,7 @@ async def send_push_notification(
     recipient_id: Optional[str] = None,
     sender_id: Optional[str] = None,
     fid: Optional[str] = None,
+    for_call: bool = False,
 ) -> bool:
     """Send a wake-up push to a device.
 
@@ -82,6 +95,9 @@ async def send_push_notification(
 
     If the FCM token is invalid/expired, it is automatically cleared from
     the database so future sends fall back to polling.
+
+    ``for_call``: a call offer's push, which lasts a minute (``CALL_PUSH_TTL``); a message's
+    lasts as long as Firebase allows and collapses with the next (``MESSAGE_PUSH_TTL``).
     """
     if fid:
         target, column, value = {"fid": fid}, "fcm_fid", fid
@@ -107,7 +123,8 @@ async def send_push_notification(
                 data=data,
                 android=messaging.AndroidConfig(
                     priority="high",
-                    ttl=60,
+                    ttl=CALL_PUSH_TTL if for_call else MESSAGE_PUSH_TTL,
+                    collapse_key=None if for_call else MESSAGE_COLLAPSE_KEY,
                 ),
                 **target,
             )

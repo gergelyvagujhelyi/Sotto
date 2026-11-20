@@ -73,3 +73,22 @@ async def test_a_dead_token_does_not_clear_a_newer_installation_id(monkeypatch, 
     monkeypatch.setattr(messaging, "send", gone)
     assert not await push.send_push_notification(fcm_token="OLD", recipient_id="u1")
     assert await _targets() == (None, FID)
+
+
+async def test_a_message_push_waits_for_the_phone_and_collapses(sent):
+    # A phone without signal for more than a minute still gets woken when it's back, once,
+    # however many messages came meanwhile.
+    assert await push.send_push_notification(fid=FID, recipient_id="u1")
+    android = sent[0].android
+    assert android.priority == "high"
+    assert android.ttl == push.MESSAGE_PUSH_TTL
+    assert android.collapse_key == "new_message"
+
+
+async def test_a_call_push_lasts_a_minute_and_never_collapses(sent):
+    # Later than that it would ring for a call that's over.
+    assert await push.send_push_notification(fid=FID, recipient_id="u1", for_call=True)
+    android = sent[0].android
+    assert android.priority == "high"
+    assert android.ttl == push.CALL_PUSH_TTL
+    assert android.collapse_key is None

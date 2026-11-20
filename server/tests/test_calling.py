@@ -223,6 +223,32 @@ async def test_ice_restart_is_buffered_for_an_offline_peer_and_never_pushed(clie
 
 
 @pytest.mark.asyncio
+async def test_a_call_offer_wakes_an_offline_phone_with_a_call_push(client: AsyncClient, monkeypatch):
+    import app.routers.calling as calling
+
+    pushed = []
+
+    async def fake_push(**kwargs):
+        pushed.append(kwargs)
+
+    monkeypatch.setattr(calling, "send_push_notification", fake_push)
+    _clear_signal_buffer()
+    alice = await _bootstrap_user(client, "offer_push_alice")
+    bob = await _bootstrap_user(client, "offer_push_bob")
+    await client.post("/v1/push/register", json={"token": "bob-token"}, headers=_auth(bob))
+
+    resp = await client.post("/v1/calls/signal", headers=_auth(alice), json={
+        "recipient_id": bob["user_id"], "signal_type": "call_offer",
+        "call_id": "c-offer", "encrypted_payload": "offer",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["delivered"] is False
+    # A call's push: it lasts a minute, so it never rings for a call that's over.
+    assert len(pushed) == 1 and pushed[0]["for_call"] is True
+    _clear_signal_buffer()
+
+
+@pytest.mark.asyncio
 async def test_ice_restarts_count_toward_the_signal_limit_not_the_offer_limit(client: AsyncClient):
     from app.services import call_rate_limiter
 
