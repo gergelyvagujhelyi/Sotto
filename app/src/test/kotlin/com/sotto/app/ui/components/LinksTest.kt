@@ -45,8 +45,36 @@ class LinksTest {
     }
 
     @Test
+    fun `bare addresses become links`() {
+        assertEquals(listOf("444.hu" to "https://444.hu"), links("444.hu"))
+        assertEquals(listOf("444.hu" to "https://444.hu"), links("Read 444.hu."))
+        assertEquals(listOf("index.hu/belfold/2026" to "https://index.hu/belfold/2026"), links("see index.hu/belfold/2026!"))
+        assertEquals(listOf("sl.se", "example.com"), links("sl.se or example.com").map { it.first })
+        assertEquals(listOf("news.bbc.co.uk"), links("(news.bbc.co.uk)").map { it.first })
+        assertEquals(listOf("SVT.SE"), links("SVT.SE").map { it.first })
+        assertEquals(listOf("localhost.se:8080/x"), links("localhost.se:8080/x").map { it.first })
+    }
+
+    @Test
+    fun `file names, emails and missing spaces stay plain`() {
+        val none = emptyList<Pair<String, String>>()
+        assertEquals(none, links("notes.txt, song.mp3, README.md, main.py, photo.jpg"))
+        assertEquals(none, links("mail anna@444.hu or anna.berg@sl.se"))
+        assertEquals(none, links("Bye.So long, version 1.2.3, 3.14, e.g. this"))
+        assertEquals(none, links("Node.js and ok.Then"))
+    }
+
+    @Test
+    fun `a bare address inside a full link is found once`() {
+        assertEquals(
+            listOf("https://444.hu/x" to "https://444.hu/x", "www.sl.se" to "https://www.sl.se"),
+            links("https://444.hu/x www.sl.se"),
+        )
+    }
+
+    @Test
     fun `things that only look like links are left alone`() {
-        assertEquals(emptyList<Pair<String, String>>(), links("example.se, notes.txt, e.g. this"))
+        assertEquals(emptyList<Pair<String, String>>(), links("notes.txt, e.g. this"))
         assertEquals(emptyList<Pair<String, String>>(), links("www. and https:// alone"))
         assertEquals(emptyList<Pair<String, String>>(), links("xhttps://a.se"))
         assertEquals(emptyList<Pair<String, String>>(), links("plain text"))

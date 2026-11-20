@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Addresses without `https://` are links too** — `444.hu`, `sl.se` or `index.hu/belfold` now open on tap, as in WhatsApp. 0.7.0 only made links of addresses starting with `https://`, `http://` or `www.`. An address counts when it ends in a real domain ending (every country's, and the common ones such as `.com` or `.org`), so file names such as `notes.txt` or `README.md` and email addresses stay plain text.
 
 ## 0.7.0 — 2026-11-20
 
