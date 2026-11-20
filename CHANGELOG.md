@@ -4,6 +4,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.0 — 2026-11-20
+
 - **Links in messages open on tap** — Web addresses in a chat (starting with `https://`, `http://` or `www.`) are underlined and open in your browser when you tap them. A Sotto invite link opens in Sotto. Addresses without those beginnings, such as `example.com`, stay plain text, so file names and abbreviations aren't mistaken for links.
 - **Replies** — Swipe a message to the right to reply to it, as in WhatsApp. A bar above the text box shows what you're replying to (× cancels). The reply shows the start of the original above its text; tap it to jump to the original, which lights up for a moment. The quote travels inside the encrypted message, so it still shows if the original was deleted. Screen readers offer "Reply" as an action on each message. **Both phones need this version:** an older Sotto shows a reply as unreadable text.
 
