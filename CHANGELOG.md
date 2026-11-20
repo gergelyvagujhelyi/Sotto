@@ -4,10 +4,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-- **Delete a chat** — A chat's menu (⋮) has Delete chat. After asking, it removes the chat, its messages and its call history from this phone. The other person keeps their copy, and a new message from them starts a new chat. On a message request it does what Reject does.
+Nothing yet.
 
 ## 0.6.5 — 2026-11-20
 
+- **Delete a chat** — A chat's menu (⋮) has Delete chat. After asking, it removes the chat, its messages and its call history from this phone. The other person keeps their copy, and a new message from them starts a new chat. On a message request it does what Reject does.
 - **Call buttons take a tap on their label too** — On the call screen, a tap on the word under a button (Accept, Decline, Mute, Louder, Speaker, End) now works like a tap on the button. Before, only the round button reacted, and a tap on "End" did nothing, which once left a call running. A screen reader reads each button once.
 - **Lint** — Lint's code warnings are dealt with. Small fixes:
   - the launcher icon folder no longer has a redundant Android-version suffix;
