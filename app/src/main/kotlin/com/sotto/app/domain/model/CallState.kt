@@ -47,6 +47,8 @@ data class CallState(
     val relayUnavailable: Boolean = false,
     /** True when the caller is not a known contact (fetched on demand). */
     val isNewContact: Boolean = false,
+    /** The user answered this incoming call; it may still fail before it connects. */
+    val answered: Boolean = false,
     /** True when the call uses hybrid PQC (ML-KEM-768 + X25519). */
     val pqcEstablished: Boolean = false,
     /** Connected before, but the connection dropped: trying to get it back (network change). */

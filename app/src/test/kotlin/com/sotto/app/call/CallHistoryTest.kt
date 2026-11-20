@@ -3,6 +3,7 @@ package com.sotto.app.call
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.MessageState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,6 +46,32 @@ class CallHistoryTest {
             assertEquals(it.name, MessageState.CALL_INCOMING, callEventState(isOutgoing = false, wasConnected = true, endStatus = it))
         }
         assertEquals("Voice call", callEventPreview(MessageState.CALL_OUTGOING, CallStatus.ENDED))
+    }
+
+    @Test
+    fun `a call you answered that couldn't connect is a failed call, with no missed-call notification`() {
+        listOf(CallStatus.FAILED, CallStatus.NO_RELAY, CallStatus.NO_NETWORK).forEach {
+            val state = callEventState(isOutgoing = false, wasConnected = false, endStatus = it, answered = true)
+            assertEquals(it.name, MessageState.CALL_FAILED, state)
+            assertEquals(it.name, "Call failed", callEventPreview(state, it))
+            assertFalse(it.name, notifiesMissedCall(state, it))
+        }
+    }
+
+    @Test
+    fun `a call you answered that was hung up before it connected is an incoming call, not missed`() {
+        val state = callEventState(isOutgoing = false, wasConnected = false, endStatus = CallStatus.ENDED, answered = true)
+        assertEquals(MessageState.CALL_INCOMING, state)
+        assertFalse(notifiesMissedCall(state, CallStatus.ENDED))
+    }
+
+    @Test
+    fun `only calls you neither answered nor declined notify as missed`() {
+        assertTrue(notifiesMissedCall(callEventState(false, false, CallStatus.ENDED), CallStatus.ENDED))
+        assertTrue(notifiesMissedCall(callEventState(false, false, CallStatus.UNAVAILABLE), CallStatus.UNAVAILABLE))
+        assertFalse(notifiesMissedCall(callEventState(false, false, CallStatus.REJECTED), CallStatus.REJECTED))
+        assertFalse(notifiesMissedCall(callEventState(false, true, CallStatus.ENDED), CallStatus.ENDED))
+        assertFalse(notifiesMissedCall(callEventState(true, false, CallStatus.ENDED), CallStatus.ENDED))
     }
 
     @Test

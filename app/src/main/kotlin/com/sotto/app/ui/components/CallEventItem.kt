@@ -24,7 +24,8 @@ fun CallEventItem(
 
     val icon = when {
         isMissed -> Icons.AutoMirrored.Rounded.CallMissed
-        isOutgoingMissed || isFailed -> Icons.AutoMirrored.Rounded.CallMade
+        isOutgoingMissed -> Icons.AutoMirrored.Rounded.CallMade
+        isFailed -> if (isOutgoing) Icons.AutoMirrored.Rounded.CallMade else Icons.AutoMirrored.Rounded.CallReceived
         isOutgoing -> Icons.AutoMirrored.Rounded.CallMade
         else -> Icons.AutoMirrored.Rounded.CallReceived
     }
