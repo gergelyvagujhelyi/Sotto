@@ -29,6 +29,9 @@ import kotlinx.coroutines.CancellationException
  * A freshly installed app on a phone's slow background cores ran past them. Android then
  * froze it and cut its network halfway (the download was done, the confirmation never sent),
  * and the message showed only when the app was opened.
+ *
+ * BootReceiver queues it too, after a reboot or an app update, for the same reason: the app
+ * starts in the background, and messages that arrived meanwhile have no push left to wake it.
  */
 @HiltWorker
 class PushSyncWorker @AssistedInject constructor(

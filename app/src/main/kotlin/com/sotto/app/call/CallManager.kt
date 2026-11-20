@@ -194,6 +194,12 @@ class CallManager @Inject constructor(
         var mayGoDirect = false
         /** Hosts of the relay's TURN servers, to tell a relayed path from a direct one. */
         var turnHosts: Set<String> = emptySet()
+        /**
+         * The other phone's local-network addresses, from the host candidates it sent: what a direct
+         * Wi-Fi link (TDLS) would be set up with. The selected pair can't tell: WebRTC hides the
+         * address of a peer-reflexive remote candidate. Never logged.
+         */
+        val peerLanAddresses: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
         /** The ICE servers in use; TURN credentials are renewed through ICE restarts. */
         var iceServers: List<IceServerDto> = emptyList()
         /** How long the TURN credentials last from when they were fetched; times their renewal. */
@@ -975,6 +981,13 @@ class CallManager @Inject constructor(
         val candidateJson = decryptPayload(signal.senderId, signal.callId, signal.encryptedPayload)
         val candidate = json.decodeFromString<IceCandidateDto>(candidateJson)
         logInfo("Remote ICE candidate: ${candidateType(candidate.sdp) ?: "?"}/${candidateFamily(candidate.sdp) ?: "?"} (generation ${candidate.gen})")
+        if (candidateType(candidate.sdp) == "host") {
+            candidateAddress(candidate.sdp)?.takeIf(::isLocalNetworkAddress)?.let { address ->
+                callLink.peerLanAddresses += address
+                // Already direct (a candidate after an ICE restart): keep TDLS off for it too.
+                if (callLink.lastPath == CallPath.DIRECT) keepTdlsOff(address)
+            }
+        }
         // Applied now if its generation's description is; otherwise it waits (bounded) or,
         // from an older generation, is dropped.
         if (callLink.gate.offer(candidate)) {
@@ -1028,6 +1041,7 @@ class CallManager @Inject constructor(
         }
         _callSessionKeys.clear()
         synchronized(audioLock) { abandonAudioFocus() }
+        scope.launch(tdlsDispatcher) { tdlsGuard.restoreAll() }
 
         // Dispose WebRTC resources off the main thread to avoid ANR
         if (engine != null) {
@@ -1264,6 +1278,10 @@ class CallManager @Inject constructor(
                 // Candidate types only: never log addresses.
                 logInfo("Call path: ${candidateType(local.sdp) ?: "?"} -> ${candidateType(remote.sdp) ?: "?"} ($path)")
                 _callState.update { if (it?.callId == callLink.callId) it.copy(path = path) else it }
+                if (path == CallPath.DIRECT) {
+                    keepTdlsOff(candidateAddress(remote.sdp))
+                    callLink.peerLanAddresses.forEach(::keepTdlsOff)
+                }
                 if (path == CallPath.RELAYED && callLink.lastPath == CallPath.DIRECT) logDirectLoss(callLink)
                 callLink.lastPath = path
                 if (path == CallPath.RELAYED && callLink.direct) logPairsLater(callLink)
@@ -2192,6 +2210,29 @@ class CallManager @Inject constructor(
 
     private fun logDebug(msg: String) {
         if (BuildConfig.DEBUG) Log.d(TAG, msg)
+    }
+
+    /**
+     * Wi-Fi's direct links between devices (TDLS) stay off with the other phone during a direct
+     * call on the same Wi-Fi ([TdlsGuard]). One thread, in order, so a call's end can't overtake
+     * the next call's request.
+     */
+    private val tdlsDispatcher = Dispatchers.IO.limitedParallelism(1)
+    private val tdlsGuard by lazy {
+        val wifi = context.getSystemService(android.net.wifi.WifiManager::class.java)
+        TdlsGuard { address, enabled ->
+            // A phone without TDLS has nothing to turn off: counted as not done, so not logged.
+            val tdlsWifi = wifi?.takeIf { it.isTdlsSupported } ?: error("no TDLS on this phone")
+            tdlsWifi.setTdlsEnabled(address, enabled)
+        }
+    }
+
+    private fun keepTdlsOff(remoteAddress: String?) {
+        remoteAddress ?: return
+        scope.launch(tdlsDispatcher) {
+            // Never log the address.
+            if (tdlsGuard.keepOff(remoteAddress)) logInfo("Wi-Fi direct link (TDLS) to the other phone kept off for this call")
+        }
     }
 
     /** Shown in release builds too, to follow a call's connection: never addresses or keys. */

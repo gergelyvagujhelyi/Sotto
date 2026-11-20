@@ -40,8 +40,9 @@ class FcmService : FirebaseMessagingService() {
         // The push notification is a "wake-up" signal only.
         // We never send message content through FCM — the encrypted envelope
         // is fetched directly from the relay server.
-        // Ensure WebSocket is connected so buffered call signals are delivered
-        webSocketClient.ensureConnected()
+        // Connect the WebSocket so buffered call signals are delivered, unless it's being
+        // connected right now (a push that started the app) or is open and alive.
+        webSocketClient.connectUnlessWorking()
 
         // Fetch pending messages in an expedited job; notifications are shown by
         // MessageRepositoryImpl after decryption with actual content. Not here: Android
