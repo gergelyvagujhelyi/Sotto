@@ -43,7 +43,6 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.PhoneLocked
 import androidx.compose.material.icons.rounded.SwapCalls
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.runtime.mutableStateOf
@@ -111,8 +110,6 @@ import com.sotto.app.ui.components.GlassCard
 import com.sotto.app.ui.components.QrCodeImage
 import com.sotto.app.ui.components.SectionLabel
 import com.sotto.app.ui.components.SoftButton
-import com.sotto.app.ui.components.canShowCallsOnLockScreen
-import com.sotto.app.ui.components.openLockScreenCallsSettings
 import com.sotto.app.ui.theme.Aurora
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailabilityLight
@@ -269,11 +266,9 @@ fun SettingsScreen(
     fun isBatteryOptimised() =
         context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == false
     var batteryOptimised by remember { mutableStateOf(isBatteryOptimised()) }
-    var lockScreenCallsAllowed by remember { mutableStateOf(canShowCallsOnLockScreen(context)) }
     // Re-checked when coming back from Android's dialog or its settings.
     LifecycleResumeEffect(Unit) {
         batteryOptimised = isBatteryOptimised()
-        lockScreenCallsAllowed = canShowCallsOnLockScreen(context)
         onPauseOrDispose { }
     }
     val noGooglePush = remember {
@@ -324,8 +319,6 @@ fun SettingsScreen(
         noRelayPush = !viewModel.relayCanPush,
         batteryOptimised = batteryOptimised,
         onAllowBackgroundActivity = { allowBackgroundActivity() },
-        lockScreenCallsAllowed = lockScreenCallsAllowed,
-        onAllowLockScreenCalls = { openLockScreenCallsSettings(context) },
         onDisappearingChange = viewModel::updateDisappearingMessages,
         onRetentionChange = viewModel::requestRetention,
         blockedUsers = blockedUsers,
@@ -363,8 +356,6 @@ fun SettingsContent(
     /** Android may still stop the app in the background (battery optimisation is on). */
     batteryOptimised: Boolean,
     onAllowBackgroundActivity: () -> Unit,
-    lockScreenCallsAllowed: Boolean = true,
-    onAllowLockScreenCalls: () -> Unit = {},
     onDisappearingChange: (DisappearingDuration) -> Unit,
     onRetentionChange: (days: Int) -> Unit,
     blockedUsers: List<BlockedUser>,
@@ -479,17 +470,6 @@ fun SettingsContent(
 
                 SectionLabel("Calls", Modifier.padding(start = 4.dp))
                 SettingsGroup {
-                    if (!lockScreenCallsAllowed) {
-                        SettingsRow(
-                            icon = Icons.Rounded.PhoneLocked,
-                            title = "Show calls on the lock screen",
-                            subtitle = "Until you allow it, Android shows incoming calls on a locked phone " +
-                                "only as a notification",
-                            onClick = onAllowLockScreenCalls,
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                        RowDivider()
-                    }
                     SettingsSwitchRow(
                         icon = Icons.Rounded.GraphicEq,
                         title = "High-quality calls",

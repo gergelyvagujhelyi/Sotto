@@ -247,11 +247,10 @@ Since 0.5.8 a relay-only call is given the TURN server alone, no STUN server, an
 ### WebSocket Frame Size Limits (v0.5.0)
 WebSocket frames are capped at 8 KB pre-authentication and 80 KB post-authentication to prevent memory exhaustion from oversized frames. The post-auth limit accommodates the largest valid call signal (65 KB encrypted payload + signatures + metadata). The server-side pending call signal buffer is also globally capped at 10K recipient entries with stale-entry pruning.
 
-### Calls on the lock screen (0.5.12)
-An incoming call opens its own call screen (`CallActivity`), which the manifest allows to show over the lock screen and turn the screen on, so a call can be answered without unlocking. Only that screen shows there:
+### Calls on the lock screen (0.5.12, no full-screen alert since 0.6.0)
+An incoming call is a notification that rings, with Answer and Decline; it never takes over the screen (the app doesn't ask for `USE_FULL_SCREEN_INTENT`). Answer opens the call's own screen (`CallActivity`), which the manifest allows to show over the lock screen, so a call can be answered without unlocking. Only that screen shows there:
 - Leaving it on a locked phone sends it to the background; the chats stay behind the lock.
 - On the lock screen the call notification says only "Incoming call". The caller's name shows once unlocked (the notification's public version).
-- On Android 14+ the full-screen part needs the user's permission, and the app asks for it. Without it a call is a notification, which still rings.
 
 ### Receipts (delivered since 0.5.10)
 - **Read receipts** are sent by the reader's app only while its user has them on. They're signed by the reader and go through `/v1/receipts`, apart from the message queue. The relay learns which messages were read and when.

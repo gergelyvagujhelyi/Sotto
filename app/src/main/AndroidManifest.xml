@@ -22,7 +22,6 @@
          service, and asking to be exempt from battery optimisation so Doze doesn't cut it off. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <!-- Scanning someone's share-code QR. The camera is optional, so phones without one
          can still install the app. -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -91,17 +90,17 @@
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone" />
 
-        <!-- The call screen for call notifications. Android only opens an activity from a
-             notification over the lock screen without unlocking when the manifest says it
-             may show there; MainActivity must not (its chats would show too). -->
+        <!-- The call screen for call notifications. Answer on a locked phone opens it over the
+             lock screen without unlocking, which Android only allows when the manifest says it
+             may show there; MainActivity must not (its chats would show too). Incoming calls
+             never take over the screen by themselves: no full-screen alert. -->
         <activity
             android:name=".call.CallActivity"
             android:exported="false"
             android:launchMode="singleTask"
             android:taskAffinity="com.vagujhelyigergely.sotto.call"
             android:excludeFromRecents="true"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true" />
+            android:showWhenLocked="true" />
 
         <receiver
             android:name=".call.CallActionReceiver"
