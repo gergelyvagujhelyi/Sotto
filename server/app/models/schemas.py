@@ -134,7 +134,7 @@ class ErrorResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "0.6.0"
+    version: str  # config.RELAY_VERSION
     # Lets an app tell a Sotto relay from any other server...
     service: str = "sotto-relay"
     # ...and whether a new account here needs an invite.

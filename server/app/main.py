@@ -184,7 +184,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Sotto Relay",
     description="Privacy-first encrypted message relay server.",
-    version="0.6.0",
+    version=config.RELAY_VERSION,
     lifespan=lifespan,
     # Disable docs and OpenAPI schema in production
     docs_url="/docs" if DEBUG else None,
