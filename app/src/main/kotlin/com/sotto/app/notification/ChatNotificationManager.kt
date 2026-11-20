@@ -10,9 +10,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
 import androidx.core.content.ContextCompat
 import com.sotto.app.R
 import com.sotto.app.MainActivity
+import com.sotto.app.data.local.dao.MessageDao
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.domain.repository.SettingsRepository
@@ -25,6 +27,7 @@ import javax.inject.Singleton
 class ChatNotificationManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settingsRepository: SettingsRepository,
+    private val messageDao: MessageDao,
 ) {
     init {
         createNotificationChannels()
@@ -84,12 +87,18 @@ class ChatNotificationManager @Inject constructor(
 
         val settings = settingsRepository.getPrivacySettings().firstOrNull() ?: PrivacySettings()
 
-        val (title, body) = when (settings.lockScreenPreview) {
-            LockScreenPreviewMode.SHOW_ALL -> senderName to messageBody
-            LockScreenPreviewMode.SENDER_ONLY -> senderName to "New message"
-            LockScreenPreviewMode.HIDE_BODY -> senderName to "New message"
-            LockScreenPreviewMode.HIDE_ALL -> "Sotto" to "New message"
-        }
+        // Every message since the user last opened the chat, not only this one.
+        val unread = conversationId?.let { id ->
+            messageDao.getUnseenIncomingTexts(id, NotificationCompat.MessagingStyle.MAXIMUM_RETAINED_MESSAGES)
+                .map { NotifiedMessage(it.text, it.timestamp) }
+        }.orEmpty()
+        val content = messageNotificationContent(
+            mode = settings.lockScreenPreview,
+            senderName = senderName,
+            unread = unread,
+            unreadCount = conversationId?.let { messageDao.countUnseenIncoming(it) } ?: 0,
+            latest = NotifiedMessage(messageBody, System.currentTimeMillis()),
+        )
 
         val visibility = when (settings.lockScreenPreview) {
             LockScreenPreviewMode.SHOW_ALL -> NotificationCompat.VISIBILITY_PUBLIC
@@ -115,19 +124,25 @@ class ChatNotificationManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setContentText(body)
+            .setContentTitle(content.title)
+            .setContentText(content.text)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(visibility)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setGroup(GROUP_CHATS)
-            .build()
+        if (content.messages.isNotEmpty()) {
+            val sender = Person.Builder().setName(senderName).setKey(senderId).build()
+            val style = NotificationCompat.MessagingStyle(Person.Builder().setName("You").build())
+            content.messages.forEach { style.addMessage(it.text, it.timestamp, sender) }
+            builder.setStyle(style)
+        }
+        if (content.count > 1) builder.setNumber(content.count)
 
-        post(notificationId, notification)
+        post(notificationId, builder.build())
         postGroupSummary(visibility)
     }
 

@@ -7,6 +7,9 @@ import androidx.room.Query
 import com.sotto.app.data.local.entity.MessageEntity
 import kotlinx.coroutines.flow.Flow
 
+/** A received message's text and time, for its chat's notification. */
+data class UnseenText(val text: String, val timestamp: Long)
+
 @Dao
 interface MessageDao {
 
@@ -41,6 +44,20 @@ interface MessageDao {
             "AND state = 'DELIVERED' AND timestamp < :before"
     )
     suspend fun markIncomingSeen(conversationId: String, before: Long)
+
+    /**
+     * The newest [limit] received messages of a conversation not seen yet, oldest first:
+     * what its notification lists.
+     */
+    @Query(
+        "SELECT plaintext AS text, timestamp FROM (SELECT plaintext, timestamp FROM messages " +
+            "WHERE conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED' " +
+            "ORDER BY timestamp DESC LIMIT :limit) ORDER BY timestamp ASC"
+    )
+    suspend fun getUnseenIncomingTexts(conversationId: String, limit: Int): List<UnseenText>
+
+    @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED'")
+    suspend fun countUnseenIncoming(conversationId: String): Int
 
     /** Cheap trigger for marking a visible chat read. */
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED'")
