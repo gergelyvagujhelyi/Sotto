@@ -1157,7 +1157,7 @@ class CallManager @Inject constructor(
             )
 
             // Update the conversation preview
-            updateConversationPreview(conversationId, peerId, callEventPreview(messageState, endStatus), now)
+            updateConversationPreview(conversationId, peerId, callEventPreview(messageState, endStatus, wasConnected), now)
 
             // Show missed call notification for incoming calls the user didn't answer or reject
             if (notifiesMissedCall(messageState, endStatus)) {

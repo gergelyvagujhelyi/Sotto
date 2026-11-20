@@ -14,7 +14,7 @@ class CallHistoryTest {
         // The test call of 2026-11-20 15:16 from the Note 9 in airplane mode.
         val state = callEventState(isOutgoing = true, wasConnected = false, endStatus = CallStatus.NO_NETWORK)
         assertEquals(MessageState.CALL_FAILED, state)
-        assertEquals("Call failed", callEventPreview(state, CallStatus.NO_NETWORK))
+        assertEquals("Call failed", callEventPreview(state, CallStatus.NO_NETWORK, wasConnected = false))
         assertTrue(state.isCallEvent)
     }
 
@@ -35,7 +35,7 @@ class CallHistoryTest {
         ).forEach { (status, preview) ->
             val state = callEventState(isOutgoing = true, wasConnected = false, endStatus = status)
             assertEquals(status.name, MessageState.CALL_OUTGOING_MISSED, state)
-            assertEquals(status.name, preview, callEventPreview(state, status))
+            assertEquals(status.name, preview, callEventPreview(state, status, wasConnected = false))
         }
     }
 
@@ -45,7 +45,7 @@ class CallHistoryTest {
             assertEquals(it.name, MessageState.CALL_OUTGOING, callEventState(isOutgoing = true, wasConnected = true, endStatus = it))
             assertEquals(it.name, MessageState.CALL_INCOMING, callEventState(isOutgoing = false, wasConnected = true, endStatus = it))
         }
-        assertEquals("Voice call", callEventPreview(MessageState.CALL_OUTGOING, CallStatus.ENDED))
+        assertEquals("Voice call", callEventPreview(MessageState.CALL_OUTGOING, CallStatus.ENDED, wasConnected = true))
     }
 
     @Test
@@ -53,7 +53,7 @@ class CallHistoryTest {
         listOf(CallStatus.FAILED, CallStatus.NO_RELAY, CallStatus.NO_NETWORK).forEach {
             val state = callEventState(isOutgoing = false, wasConnected = false, endStatus = it, answered = true)
             assertEquals(it.name, MessageState.CALL_FAILED, state)
-            assertEquals(it.name, "Call failed", callEventPreview(state, it))
+            assertEquals(it.name, "Call failed", callEventPreview(state, it, wasConnected = false))
             assertFalse(it.name, notifiesMissedCall(state, it))
         }
     }
@@ -63,6 +63,9 @@ class CallHistoryTest {
         val state = callEventState(isOutgoing = false, wasConnected = false, endStatus = CallStatus.ENDED, answered = true)
         assertEquals(MessageState.CALL_INCOMING, state)
         assertFalse(notifiesMissedCall(state, CallStatus.ENDED))
+        // The chat list says so too: it said "Voice call" in 0.6.6, as if you had talked.
+        assertEquals("Incoming call", callEventPreview(state, CallStatus.ENDED, wasConnected = false))
+        assertEquals("Voice call", callEventPreview(MessageState.CALL_INCOMING, CallStatus.ENDED, wasConnected = true))
     }
 
     @Test
@@ -79,7 +82,7 @@ class CallHistoryTest {
         listOf(CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY, CallStatus.REJECTED).forEach {
             assertEquals(it.name, MessageState.CALL_MISSED, callEventState(isOutgoing = false, wasConnected = false, endStatus = it))
         }
-        assertEquals("Declined call", callEventPreview(MessageState.CALL_MISSED, CallStatus.REJECTED))
-        assertEquals("Missed call", callEventPreview(MessageState.CALL_MISSED, CallStatus.ENDED))
+        assertEquals("Declined call", callEventPreview(MessageState.CALL_MISSED, CallStatus.REJECTED, wasConnected = false))
+        assertEquals("Missed call", callEventPreview(MessageState.CALL_MISSED, CallStatus.ENDED, wasConnected = false))
     }
 }

@@ -73,8 +73,10 @@ class ConversationRepositoryImpl @Inject constructor(
 
     override suspend fun clearUnread(conversationId: String) {
         conversationDao.clearUnread(conversationId)
-        // The user is looking at the chat: its message notification is read.
-        notificationManager.get().cancelNotification(conversationId)
+        // The user is looking at the chat: its notifications are seen, the missed-call one too
+        // (the chat shows those calls), so the next missed call counts from one.
+        val contactId = conversationDao.getByIdOnce(conversationId)?.contactId
+        notificationManager.get().cancelNotification(conversationId, contactId)
     }
 
     override suspend fun deleteConversation(conversationId: String) {

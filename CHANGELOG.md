@@ -6,6 +6,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.6.7 — 2026-11-20
+
+- **Missed calls are counted** — If you miss several calls from the same person, their notification now says how many, such as "2 missed calls", at the time of the last one. Before, each missed call replaced the previous notification. Opening the chat now clears its missed-call notification too, as it does for messages.
+- **An answered call that didn't connect, in the chat list** — If you answer a call and either of you hangs up before it connects, the chat list now says "Incoming call", as the chat does. 0.6.6 said "Voice call", as if you had talked.
+
 ## 0.6.6 — 2026-11-20
 
 - **A chat's notification shows all its new messages** — When several messages arrive, the chat's notification now lists all of them since you last opened the chat. Before, each new message replaced the previous one. When the notification hides message text (lock-screen preview setting), it says how many there are, such as "3 new messages".
