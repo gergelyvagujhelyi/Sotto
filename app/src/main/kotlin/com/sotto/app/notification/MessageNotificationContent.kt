@@ -42,3 +42,6 @@ internal fun messageNotificationContent(
         LockScreenPreviewMode.HIDE_ALL -> MessageNotificationContent("Sotto", howMany, emptyList(), count)
     }
 }
+
+/** A caller's missed-call notification: how many calls from them went unanswered since it was last seen. */
+internal fun missedCallsText(count: Int): String = if (count <= 1) "Missed call" else "$count missed calls"

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Bundle
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -155,11 +156,16 @@ class ChatNotificationManager @Inject constructor(
 
         val settings = settingsRepository.getPrivacySettings().firstOrNull() ?: PrivacySettings()
 
+        val notificationId = (MISSED_CALL_PREFIX + callerId).hashCode() and Int.MAX_VALUE
+        // One notification per caller: a call missed while it still shows counts on from it, so a
+        // second missed call no longer replaces the first. Seeing it (opening it or the chat, or
+        // swiping it away) starts the count again.
+        val missed = (shownMissedCalls(notificationId) ?: 0) + 1
         val (title, body) = when (settings.lockScreenPreview) {
-            LockScreenPreviewMode.SHOW_ALL -> callerName to "Missed call"
-            LockScreenPreviewMode.SENDER_ONLY -> callerName to "Missed call"
-            LockScreenPreviewMode.HIDE_BODY -> callerName to "Missed call"
-            LockScreenPreviewMode.HIDE_ALL -> "Sotto" to "Missed call"
+            LockScreenPreviewMode.SHOW_ALL,
+            LockScreenPreviewMode.SENDER_ONLY,
+            LockScreenPreviewMode.HIDE_BODY -> callerName to missedCallsText(missed)
+            LockScreenPreviewMode.HIDE_ALL -> "Sotto" to missedCallsText(missed)
         }
 
         val visibility = when (settings.lockScreenPreview) {
@@ -176,8 +182,6 @@ class ChatNotificationManager @Inject constructor(
                 putExtra(EXTRA_CONTACT_ID, callerId)
             }
         }
-
-        val notificationId = (MISSED_CALL_PREFIX + callerId).hashCode() and Int.MAX_VALUE
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -196,6 +200,9 @@ class ChatNotificationManager @Inject constructor(
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MISSED_CALL)
             .setGroup(GROUP_CHATS)
+            .setNumber(missed)
+            // Its time is the last call's, and the count rides along for the next one.
+            .addExtras(Bundle().apply { putInt(EXTRA_MISSED_CALLS, missed) })
             .build()
 
         post(notificationId, notification)
@@ -248,6 +255,15 @@ class ChatNotificationManager @Inject constructor(
         }
     }
 
+    /**
+     * How many missed calls the notification [id] counts while it shows; null when it doesn't.
+     * One posted before the count existed stands for a single call.
+     */
+    private fun shownMissedCalls(id: Int): Int? =
+        context.getSystemService(NotificationManager::class.java)?.activeNotifications
+            ?.firstOrNull { it.id == id }
+            ?.notification?.extras?.getInt(EXTRA_MISSED_CALLS, 1)
+
     /** Drop the summary once no chat notification is left under it. */
     private fun cancelEmptyGroupSummary() {
         val active = context.getSystemService(NotificationManager::class.java)?.activeNotifications ?: return
@@ -290,5 +306,7 @@ class ChatNotificationManager @Inject constructor(
         private const val GROUP_CHATS = "com.sotto.app.CHATS"
         private const val GROUP_SUMMARY_ID = 0x5C11
         private const val MISSED_CALL_PREFIX = "missed-call-"
+        /** In a missed-call notification's extras: how many calls it counts. */
+        private const val EXTRA_MISSED_CALLS = "com.sotto.app.MISSED_CALLS"
     }
 }

@@ -60,4 +60,11 @@ class MessageNotificationContentTest {
         assertEquals("wants to connect", content.text)
         assertEquals(1, content.count)
     }
+
+    @Test
+    fun `missed calls from one person are counted`() {
+        assertEquals("Missed call", missedCallsText(1))
+        assertEquals("2 missed calls", missedCallsText(2))
+        assertEquals("5 missed calls", missedCallsText(5))
+    }
 }
