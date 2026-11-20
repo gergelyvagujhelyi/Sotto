@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Relay: messages after a signal gap** — A phone that comes back from more than a minute without signal (a tunnel, a flight, a dead zone) is now woken for the messages that came meanwhile. Before, the relay's push to wake it lasted only 60 seconds, so those messages waited for the app's 15-minute check or for it to be opened. A message's push now lasts as long as Firebase allows, and they collapse into one, so the phone wakes once and fetches everything. A call's push still lasts a minute, so a missed call never rings late.
 
 ## 0.6.4 — 2026-11-20
 

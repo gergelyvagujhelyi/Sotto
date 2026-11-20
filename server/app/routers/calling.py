@@ -93,6 +93,7 @@ async def _wake_for_call(db: AsyncSession, callee_id: str, caller_id: str) -> No
             fid=target.fcm_fid,
             recipient_id=callee_id,
             sender_id=caller_id,
+            for_call=True,
         )
 
 
