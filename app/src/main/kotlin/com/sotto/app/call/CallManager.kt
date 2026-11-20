@@ -678,7 +678,7 @@ class CallManager @Inject constructor(
         val state = _callState.value ?: return
         if (state.direction != CallDirection.INCOMING || state.status != CallStatus.RINGING) return
 
-        _callState.value = state.copy(status = CallStatus.CONNECTING, isNewContact = false)
+        _callState.value = state.copy(status = CallStatus.CONNECTING, isNewContact = false, answered = true)
 
         scope.launch {
             // Persist the new contact now that the user has approved the call.
@@ -733,7 +733,14 @@ class CallManager @Inject constructor(
                 requestAudioFocusIfActive(state.callId)
             } catch (e: Exception) {
                 logError("Failed to accept call: ${e::class.simpleName}: ${e.message}", e)
-                endCall(if (e is NoRelayException) CallStatus.NO_RELAY else CallStatus.FAILED, state.callId)
+                endCall(
+                    when {
+                        e is NoRelayException -> CallStatus.NO_RELAY
+                        !hasInternet() -> CallStatus.NO_NETWORK
+                        else -> CallStatus.FAILED
+                    },
+                    state.callId,
+                )
                 try {
                     sendSignal(state.peerId, "call_hangup", state.callId, "")
                 } catch (_: Exception) { }
@@ -1125,7 +1132,7 @@ class CallManager @Inject constructor(
             // Map direction + end status to a message state.
             // Use wasConnected (not durationSeconds) to avoid sub-second
             // connected calls being classified as missed.
-            val messageState = callEventState(isOutgoing, wasConnected, endStatus)
+            val messageState = callEventState(isOutgoing, wasConnected, endStatus, answered = callState.answered)
 
             // Find or create conversation for this peer
             val conversationId = getOrCreateConversationId(peerId)
@@ -1153,7 +1160,7 @@ class CallManager @Inject constructor(
             updateConversationPreview(conversationId, peerId, callEventPreview(messageState, endStatus), now)
 
             // Show missed call notification for incoming calls the user didn't answer or reject
-            if (messageState == MessageState.CALL_MISSED && endStatus != CallStatus.REJECTED) {
+            if (notifiesMissedCall(messageState, endStatus)) {
                 notificationManager.showMissedCallNotification(
                     callerId = peerId,
                     callerName = callState.peerDisplayName,

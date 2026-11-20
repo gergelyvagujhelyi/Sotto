@@ -24,7 +24,7 @@ enum class MessageState {
     KEY_ROTATED_REMOTE,
     /** Remote peer deleted their account. */
     ACCOUNT_DELETED,
-    /** Outgoing voice call that failed before it connected (no internet, no relay, an error). */
+    /** Voice call that failed before it connected (no internet, no relay, an error): outgoing, or incoming and answered. */
     CALL_FAILED;
 
     val isTerminal: Boolean
