@@ -58,13 +58,14 @@ class FcmService : FirebaseMessagingService() {
         // allowance for urgent work on a busy day, messages waited 20-70 s (the owner's
         // wife's phone, 2026-11-20). The job is still there for a slow start, such as a fresh
         // install on a phone's background cores, which ran past those seconds in 0.6.1.
-        val fetched = runBlocking {
-            fetchWithin(DIRECT_FETCH_BUDGET_MS) { messageRepository.fetchPendingAndWait() }
+        val result = runBlocking {
+            fetchOrQueueJob(
+                budgetMs = DIRECT_FETCH_BUDGET_MS,
+                fetch = { messageRepository.fetchPendingAndWait() },
+                queueJob = { PushSyncWorker.enqueue(applicationContext) },
+            )
         }
-        if (!fetched) {
-            Log.w("FcmService", "Fetch on push didn't finish in ${DIRECT_FETCH_BUDGET_MS} ms; the job takes over")
-            PushSyncWorker.enqueue(applicationContext)
-        }
+        handOverMessage(result, DIRECT_FETCH_BUDGET_MS)?.let { Log.w("FcmService", it) }
     }
 
     /**
