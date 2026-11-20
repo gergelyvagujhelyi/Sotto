@@ -14,6 +14,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -62,6 +64,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -87,6 +90,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -486,7 +490,18 @@ private fun RoundCallButton(
 ) {
     // The pulse draws outside the button's bounds, so it doesn't change the layout.
     val pulse = if (beckon) rememberPulse() else null
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val interaction = remember { MutableInteractionSource() }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        // The whole button takes the tap, its label too. Only the circle used to, so a tap on
+        // "End" under it did nothing, and a call went on that way.
+        modifier = Modifier.clickable(
+            interactionSource = interaction,
+            indication = null,
+            role = Role.Button,
+            onClick = onClick,
+        ),
+    ) {
         Box(
             modifier = Modifier
                 .size(size)
@@ -501,14 +516,21 @@ private fun RoundCallButton(
                 .shadow(20.dp, CircleShape, ambientColor = colors.first(), spotColor = colors.first())
                 .background(Brush.linearGradient(colors), CircleShape)
                 .clip(CircleShape)
-                .clickable(role = Role.Button, onClick = onClick),
+                // The ripple stays on the circle.
+                .indication(interaction, ripple()),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = contentDescription, tint = Color.White, modifier = Modifier.size(size * 0.44f))
         }
         if (label != null) {
             Spacer(Modifier.height(10.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Read out once, as the icon's description: the label only repeats it.
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.clearAndSetSemantics {},
+            )
         }
     }
 }
@@ -588,14 +610,25 @@ private fun CallToggleButton(
     checked: Boolean,
     onToggle: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    val interaction = remember { MutableInteractionSource() }
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        // The whole button toggles, its label too (see RoundCallButton).
+        modifier = Modifier.toggleable(
+            value = checked,
+            interactionSource = interaction,
+            indication = null,
+            role = Role.Switch,
+            onValueChange = { onToggle() },
+        ),
+    ) {
         Box(
             modifier = Modifier
                 .size(64.dp)
                 .clip(CircleShape)
                 .background(if (checked) Color.White else Color.White.copy(alpha = 0.10f))
                 .border(1.dp, Color.White.copy(alpha = if (checked) 0f else 0.12f), CircleShape)
-                .toggleable(value = checked, role = Role.Switch, onValueChange = { onToggle() }),
+                .indication(interaction, ripple()),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -612,7 +645,8 @@ private fun CallToggleButton(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 96.dp),
+            // Read out once, as the icon's description and the switch's state.
+            modifier = Modifier.widthIn(max = 96.dp).clearAndSetSemantics {},
         )
     }
 }
