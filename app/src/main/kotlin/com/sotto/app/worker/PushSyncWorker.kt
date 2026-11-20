@@ -25,10 +25,12 @@ import kotlinx.coroutines.CancellationException
  * Fetches the messages a push announced, as an expedited job: Android keeps the app running,
  * with network access, until the job ends, however long a slow phone takes.
  *
- * The push callback used to do this itself, within the few seconds Android gives a push.
- * A freshly installed app on a phone's slow background cores ran past them. Android then
- * froze it and cut its network halfway (the download was done, the confirmation never sent),
- * and the message showed only when the app was opened.
+ * Since 0.6.9 the push callback fetches first, within [com.sotto.app.notification.DIRECT_FETCH_BUDGET_MS],
+ * and queues this job only if that didn't finish: Android decides when a job runs, and on a
+ * strict phone that could be a minute later. From 0.6.1 to 0.6.8 this job did every fetch,
+ * because a freshly installed app on a phone's slow background cores ran past the few seconds
+ * Android gives a push. Android then froze it and cut its network halfway (the download was
+ * done, the confirmation never sent), and the message showed only when the app was opened.
  *
  * BootReceiver queues it too, after a reboot or an app update, for the same reason: the app
  * starts in the background, and messages that arrived meanwhile have no push left to wake it.

@@ -1,6 +1,7 @@
 package com.sotto.app.notification
 
 import com.sotto.app.data.remote.WebSocketClient
+import com.sotto.app.domain.repository.MessageRepository
 import com.sotto.app.domain.repository.PushTokenRepository
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
@@ -20,11 +21,13 @@ class FcmService : FirebaseMessagingService() {
 
     @Inject lateinit var pushTokenRepository: PushTokenRepository
     @Inject lateinit var webSocketClient: WebSocketClient
+    @Inject lateinit var messageRepository: MessageRepository
 
     // Firebase calls these on a background thread and stops the service as soon as
     // they return; work launched into a scope would be cancelled in onDestroy before
-    // its first network call. A short call (registration) runs inside the callback;
-    // fetching messages goes to an expedited job, which Android lets finish.
+    // its first network call. Short work (registration, a push's own fetch) runs inside
+    // the callback, within a budget; anything longer goes to an expedited job, which
+    // Android lets finish.
 
     override fun onRegistered(installationId: String) {
         super.onRegistered(installationId)
@@ -48,12 +51,20 @@ class FcmService : FirebaseMessagingService() {
         // connected right now (a push that started the app) or is open and alive.
         webSocketClient.connectUnlessWorking()
 
-        // Fetch pending messages in an expedited job; notifications are shown by
-        // MessageRepositoryImpl after decryption with actual content. Not here: Android
-        // gives a push only a few seconds, and a slow start (a fresh install on a phone's
-        // background cores) ran past them, so the app was frozen halfway and the message
-        // waited until it was opened (PushSyncWorker).
-        PushSyncWorker.enqueue(applicationContext)
+        // Fetch the messages now, within the few seconds Android gives a push; notifications
+        // are shown by MessageRepositoryImpl after decryption. Only if that fails or runs out
+        // of time does the expedited job take over. Since 0.6.1 the job did every fetch, but
+        // Android decides when a job runs: on a strict phone, or once the app had used up its
+        // allowance for urgent work on a busy day, messages waited 20-70 s (the owner's
+        // wife's phone, 2026-11-20). The job is still there for a slow start, such as a fresh
+        // install on a phone's background cores, which ran past those seconds in 0.6.1.
+        val fetched = runBlocking {
+            fetchWithin(DIRECT_FETCH_BUDGET_MS) { messageRepository.fetchPendingAndWait() }
+        }
+        if (!fetched) {
+            Log.w("FcmService", "Fetch on push didn't finish in ${DIRECT_FETCH_BUDGET_MS} ms; the job takes over")
+            PushSyncWorker.enqueue(applicationContext)
+        }
     }
 
     /**
