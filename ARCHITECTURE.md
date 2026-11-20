@@ -281,3 +281,13 @@
 
 **Tradeoff**: Without WebRTC's automatic gain, a phone with a quiet microphone sends a quieter voice. Louder (ADR-23) lifts it on the listener's side, and "WebRTC voice processing" brings the gain back on the speaker's side. Phones differ, so calls sound less alike from phone to phone than with WebRTC's processing everywhere.
 
+
+---
+
+## ADR-26: The relay stays on 443, answers only its own name and logs no addresses
+
+**Decision**: nginx refuses every connection that doesn't ask for the relay's name (`RELAY_HOSTNAME`, set in `.env`). A TLS handshake without that name fails before the certificate is sent (`ssl_reject_handshake`), and plain HTTP for another name is closed. Paths the relay doesn't serve get a closed connection (444) instead of a 404. nginx logs requests without the client's address, and without the account ids and share codes in paths. Its error log keeps only emergencies, and coturn keeps no log. The relay stays on port 443.
+
+**Why**: The owner asked whether a random port would keep scanners away. It would cut the noise, but every install stores the relay's address, so moving it needs an app update and leaves older installs unable to connect. Android verifies App Links only on 443, so invite links would open the browser instead of the app. Hotel and office networks often allow only 443. Nor would it hide the relay: Certificate Transparency logs publish its name, and scanners such as Censys sweep every port. Most scanners sweep IP addresses without a name, so refusing unnamed connections turns them away on 443, and they don't even learn the name from the certificate. The owner also wants no IP addresses logged. Before this, nginx's default log format recorded every client's address, and coturn's log recorded every call's.
+
+**Tradeoff**: Without `RELAY_HOSTNAME`, nginx answers any name, as before, so existing relays keep working until it's set. The error log no longer shows upstream failures; the access log still shows them by their status.

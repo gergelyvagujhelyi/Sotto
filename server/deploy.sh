@@ -13,16 +13,17 @@ cd "$REPO_ROOT"
 
 COMPOSE="docker compose -f server/docker-compose.yml"
 
-# nginx.conf is bind-mounted as a single file: `git reset --hard` replaces the file, but the
-# running nginx keeps reading the old one, and `up -d` doesn't recreate nginx for it. So
-# compare what nginx is running with the repo's file, and when they differ, check the new
-# one with `nginx -t` and recreate nginx. Skipped while nginx is down (a certificate
-# renewal stops it and starts it again by itself).
+# nginx.conf and nginx-relay-hostname.sh are bind-mounted as single files: `git reset --hard`
+# replaces the files, but the running nginx keeps reading the old ones, and `up -d` doesn't
+# recreate nginx for them. So compare what nginx is running with the repo's files, and when
+# they differ, check the new ones with `nginx -t` and recreate nginx. Skipped while nginx is
+# down (a certificate renewal stops it and starts it again by itself).
 apply_nginx_conf() {
     local running wanted
-    running=$($COMPOSE exec -T nginx cat /etc/nginx/conf.d/default.conf 2>/dev/null | sha256sum | cut -d' ' -f1) || return 0
+    # The script is missing in an nginx started before it existed: compare without it then.
+    running=$($COMPOSE exec -T nginx sh -c 'cat /etc/nginx/conf.d/default.conf; cat /docker-entrypoint.d/40-relay-hostname.sh 2>/dev/null || true' 2>/dev/null | sha256sum | cut -d' ' -f1) || return 0
     [ -n "$running" ] || return 0
-    wanted=$(sha256sum < server/nginx.conf | cut -d' ' -f1)
+    wanted=$(cat server/nginx.conf server/nginx-relay-hostname.sh | sha256sum | cut -d' ' -f1)
     # Empty output from a failed exec hashes to this; treat it as "nginx not running".
     [ "$running" != "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ] || return 0
     [ "$running" = "$wanted" ] && return 0
