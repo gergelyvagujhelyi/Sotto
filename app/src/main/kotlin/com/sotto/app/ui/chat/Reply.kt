@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.sotto.app.domain.model.Message
-import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.ui.components.BubbleQuote
 import com.sotto.app.ui.theme.Aurora
@@ -64,12 +63,6 @@ private val ReplyThreshold = 64.dp
 
 /** How far it follows the finger at most. */
 private val ReplyMaxDrag = 96.dp
-
-/** Messages that can be replied to: readable ones (not the "could not decrypt" placeholders). */
-internal val Message.canReply: Boolean
-    get() = !state.isCallEvent && !state.isKeyChangeEvent &&
-        state != MessageState.REJECTED && state != MessageState.DECRYPT_FAILED &&
-        plaintext.isNotEmpty()
 
 /**
  * Drag [content] towards the end (right, or left in right-to-left languages) to reply,

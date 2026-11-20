@@ -27,6 +27,7 @@ class LinksTest {
         assertEquals(listOf("https://a.se", "www.b.se"), links("https://a.se, www.b.se!").map { it.first })
         assertEquals(listOf("https://a.se/x"), links("(see https://a.se/x)").map { it.first })
         assertEquals(listOf("https://a.se"), links("\"https://a.se\"").map { it.first })
+        assertEquals(listOf("https://a.se/x"), links("'https://a.se/x'").map { it.first })
     }
 
     @Test
