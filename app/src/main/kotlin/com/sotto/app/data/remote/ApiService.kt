@@ -1,0 +1,66 @@
+package com.sotto.app.data.remote
+
+import com.sotto.app.data.remote.dto.AckRequest
+import com.sotto.app.data.remote.dto.BootstrapRequest
+import com.sotto.app.data.remote.dto.BootstrapResponse
+import com.sotto.app.data.remote.dto.InviteDto
+import com.sotto.app.data.remote.dto.KeyBundleDto
+import com.sotto.app.data.remote.dto.PendingMessageDto
+import com.sotto.app.data.remote.dto.PushTokenRequest
+import com.sotto.app.data.remote.dto.RelayHealthDto
+import com.sotto.app.data.remote.dto.ResolveShareCodeResponse
+import com.sotto.app.data.remote.dto.CallSignalRequest
+import com.sotto.app.data.remote.dto.CallSignalResponse
+import com.sotto.app.data.remote.dto.IceServersResponse
+import com.sotto.app.data.remote.dto.KeyRotationRequest
+import com.sotto.app.data.remote.dto.KeyRotationResponse
+import com.sotto.app.data.remote.dto.SendMessageRequest
+import com.sotto.app.data.remote.dto.SendMessageResponse
+
+/**
+ * API contract for the Sotto relay server.
+ *
+ * The server is a minimal envelope relay — it never sees plaintext message content.
+ * It stores only:
+ * - userId → publicKeyBundle mapping (for key discovery)
+ * - userId → Firebase installation ID (older apps: FCM token), for push wake-ups
+ * - Pending encrypted envelopes (deleted after delivery acknowledgement)
+ *
+ * Endpoints:
+ * POST   /v1/identity/bootstrap         — register a guest identity
+ * GET    /v1/identity/{userId}/keys      — fetch a user's public key bundle
+ * POST   /v1/identity/resolve            — resolve a share code to a key bundle
+ * POST   /v1/messages/send               — submit an encrypted envelope for relay
+ * GET    /v1/messages/pending             — fetch pending envelopes
+ * POST   /v1/messages/ack                — acknowledge receipt of messages
+ * POST   /v1/push/register               — register the push target (installation ID)
+ * DELETE /v1/push/register               — unregister it
+ * PUT    /v1/identity/me/keys            — rotate public keys
+ */
+interface ApiService {
+    suspend fun bootstrapIdentity(request: BootstrapRequest): BootstrapResponse
+
+    /** A one-time invite for someone to join this relay (any member may create one). */
+    suspend fun createInvite(): InviteDto
+
+    /** Whether [baseUrl] is a Sotto relay, and whether it wants an invite. */
+    suspend fun relayHealth(baseUrl: String): RelayHealthDto
+    suspend fun fetchKeyBundle(userId: String): KeyBundleDto?
+    suspend fun resolveShareCode(shareCode: String): ResolveShareCodeResponse?
+    suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse
+    suspend fun fetchPendingMessages(): List<PendingMessageDto>
+    suspend fun acknowledgeMessages(request: AckRequest)
+    suspend fun registerPushToken(request: PushTokenRequest)
+    suspend fun unregisterPushToken()
+    suspend fun sendCallSignal(request: CallSignalRequest): CallSignalResponse
+    suspend fun getIceServers(): IceServersResponse
+    suspend fun rotateKeys(request: KeyRotationRequest): KeyRotationResponse
+    suspend fun deleteIdentity()
+
+    // Read receipts (best effort; a server without them yields nothing).
+    suspend fun sendReceipt(request: com.sotto.app.data.remote.dto.ReceiptRequest) {}
+    suspend fun fetchPendingReceipts(): List<com.sotto.app.data.remote.dto.ReceiptDto> = emptyList()
+    suspend fun ackReceipts(request: com.sotto.app.data.remote.dto.ReceiptAckRequest) {}
+    suspend fun fetchDeliveryReceipts(): List<com.sotto.app.data.remote.dto.DeliveryReceiptDto> = emptyList()
+    suspend fun ackDeliveryReceipts(request: com.sotto.app.data.remote.dto.ReceiptAckRequest) {}
+}

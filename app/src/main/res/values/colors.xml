@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Keep in sync with the Compose background colours in ui/theme/Color.kt. -->
+    <color name="window_background">#FFF7F7FC</color>
+</resources>

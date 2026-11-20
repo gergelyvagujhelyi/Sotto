@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status bar icon: the app's brand mark (the launcher glyph, a speech bubble with a
+     keyhole) as a white silhouette; Android uses only its alpha. Same path as
+     ic_brand_mark, on a slightly larger canvas for the status bar's padding. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="52"
+    android:viewportHeight="52">
+    <group
+        android:translateX="-28"
+        android:translateY="-30">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M46,34 H62 A14,14 0 0 1 76,48 V56 A14,14 0 0 1 62,70 H49 Q43.5,71.5 36,78 Q37.6,72 36.1,65.9 A14,14 0 0 1 32,56 V48 A14,14 0 0 1 46,34 Z M51.8,53.5 A5.5,5.5 0 1 1 56.2,53.5 L57.1,59.6 Q57.3,61 55.9,61 H52.1 Q50.7,61 50.9,59.6 Z" />
+    </group>
+</vector>
