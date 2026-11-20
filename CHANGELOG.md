@@ -8,6 +8,7 @@ Nothing yet.
 
 ## 0.6.6 — 2026-11-20
 
+- **A chat's notification shows all its new messages** — When several messages arrive, the chat's notification now lists all of them since you last opened the chat. Before, each new message replaced the previous one. When the notification hides message text (lock-screen preview setting), it says how many there are, such as "3 new messages".
 - **A call you answer is never "missed"** — If you answer a call and it can't connect, the chat now records "Call failed", and no missed-call notification appears. Before, it was logged as a missed call, with a notification, though you had answered it. If either of you hangs up before it connects, it's logged as an incoming call. Answering without internet says "No internet connection".
 - **Relay: its health page names its release** — The relay's `/health` reports the release it belongs to (now 0.6.6). It had said 0.6.0 since that release. A test keeps it in step with the app's version.
 - **Release notes start with the changelog** — The release build puts the version's section of this changelog at the top of its release notes. It was added by hand before.
