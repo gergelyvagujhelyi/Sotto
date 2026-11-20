@@ -16,7 +16,14 @@ interface MessageRepository {
     suspend fun retryFailed(messageId: String)
     suspend fun deleteMessage(messageId: String)
     suspend fun deleteMessagesOlderThan(conversationId: String, timestampMillis: Long)
+    /** Fetch pending messages; when a fetch is running, make it fetch once more and return at once. */
     suspend fun fetchPendingFromServer()
+    /**
+     * Fetch pending messages, waiting for a running fetch first rather than returning early.
+     * For background work that must not end before the messages are in (a push's job).
+     * Throws when the fetch fails.
+     */
+    suspend fun fetchPendingAndWait()
     suspend fun reEstablishSession(contactId: String)
     /** Set the conversation the user is currently viewing. Messages arriving for
      *  this conversation will not increment the unread counter. Pass null on exit. */

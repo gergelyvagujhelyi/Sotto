@@ -6,6 +6,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.6.1 — 2026-11-20
+
+- **Messages arrive while Sotto is closed** — A message that came in while Sotto was closed could stay unshown until you opened the app. A push wakes the app for only a few seconds. A slow start ran past them, and Android froze the app halfway: just after installing or updating, the app's code isn't optimised yet and the phone runs background apps on its slower cores. The push now starts an expedited job, which Android lets finish, so the notification comes as soon as the message is in.
+
 ## 0.6.0 — 2026-11-20
 
 - **ChatControll is now Sotto** — A new name, from *sotto voce*: "speaking quietly so others can't overhear". Sotto is a new app (new app ID), so it doesn't update ChatControll: install Sotto, join with an invite (an invite from ChatControll works too), then wipe ChatControll's data in its Settings, which also deletes that account, and uninstall it. Messages, calls and the relay work as before.
