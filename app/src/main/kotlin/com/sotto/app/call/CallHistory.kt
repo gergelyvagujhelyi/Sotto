@@ -33,9 +33,11 @@ internal fun callEventState(
 internal fun notifiesMissedCall(state: MessageState, endStatus: CallStatus): Boolean =
     state == MessageState.CALL_MISSED && endStatus != CallStatus.REJECTED
 
-/** The chat list's preview of that entry. */
-internal fun callEventPreview(state: MessageState, endStatus: CallStatus): String = when (state) {
-    MessageState.CALL_OUTGOING, MessageState.CALL_INCOMING -> "Voice call"
+/** The chat list's preview of that entry; [wasConnected] as for [callEventState]. */
+internal fun callEventPreview(state: MessageState, endStatus: CallStatus, wasConnected: Boolean): String = when (state) {
+    MessageState.CALL_OUTGOING -> "Voice call"
+    // Answered, but hung up before it connected: the chat says "Incoming call" too.
+    MessageState.CALL_INCOMING -> if (wasConnected) "Voice call" else "Incoming call"
     MessageState.CALL_FAILED -> "Call failed"
     MessageState.CALL_OUTGOING_MISSED -> when (endStatus) {
         CallStatus.REJECTED -> "Call declined"
