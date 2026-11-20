@@ -1,5 +1,6 @@
 package com.sotto.app.data.repository
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -117,6 +118,9 @@ class SettingsRepositoryImpl @Inject constructor(
         wipeLocal()
     }
 
+    // stopService below finds the service by its component, so a new Intent stops it
+    // (lint's ImplicitSamInstance takes stopService for a listener removal).
+    @SuppressLint("ImplicitSamInstance")
     private suspend fun wipeLocal() {
         webSocketClient.disconnect()
         // The setting is wiped below; stop its service so it doesn't keep the wiped app connected.

@@ -4,6 +4,7 @@ import com.sotto.app.data.remote.WebSocketClient
 import com.sotto.app.domain.repository.PushTokenRepository
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import android.annotation.SuppressLint
 import android.util.Log
 import dagger.hilt.android.AndroidEntryPoint
 import com.sotto.app.worker.PushSyncWorker
@@ -11,6 +12,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 
+// Pushes address this installation's Firebase installation ID (onRegistered), not an FCM
+// token, so there's no onNewToken to implement (MissingFirebaseInstanceTokenRefresh).
+@SuppressLint("MissingFirebaseInstanceTokenRefresh")
 @AndroidEntryPoint
 class FcmService : FirebaseMessagingService() {
 

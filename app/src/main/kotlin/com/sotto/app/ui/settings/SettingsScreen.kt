@@ -1,9 +1,7 @@
 package com.sotto.app.ui.settings
 
-import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
 import android.os.PowerManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -51,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.sotto.app.domain.model.DisplayNames
 import com.sotto.app.ui.components.AuroraTextField
@@ -278,11 +277,11 @@ fun SettingsScreen(
     // Asks Android to stop optimising the app's battery use, so Doze doesn't cut the
     // background connection off. Lint flags this request (BatteryLife); a chat app keeping its
     // own connection on phones without Google push is what the exemption is meant for.
-    @SuppressLint("BatteryLife")
+    // app/lint.xml says so to lint: it ignored a @SuppressLint on this local function.
     fun allowBackgroundActivity() {
         val request = Intent(
             android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            Uri.parse("package:${context.packageName}"),
+            "package:${context.packageName}".toUri(),
         )
         try {
             context.startActivity(request)

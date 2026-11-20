@@ -1,5 +1,6 @@
 package com.sotto.app.crypto
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
@@ -20,6 +21,11 @@ import javax.inject.Singleton
  * - The SQLCipher database encryption key is stored in EncryptedSharedPreferences
  *   (backed by Android Keystore master key).
  */
+// Keys, session state and the database passphrase are written with commit(), not apply():
+// they must be on disk before they're used, or a crash right after could lose them
+// (ApplySharedPref). Each edit is spelled out rather than restyled through the KTX edit {}
+// (UseKtx): this is the identity's store, with no tests on a device to catch a slip.
+@SuppressLint("ApplySharedPref", "UseKtx")
 @Singleton
 class KeyManager @Inject constructor(
     @ApplicationContext private val context: Context,

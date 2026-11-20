@@ -61,8 +61,10 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="sotto" android:host="invite" />
-                <data android:scheme="chatcontroll" android:host="invite" />
+                <!-- One attribute per tag: a filter's data attributes combine anyway. -->
+                <data android:scheme="sotto" />
+                <data android:scheme="chatcontroll" />
+                <data android:host="invite" />
             </intent-filter>
             <!-- Invite links: https://<relay>/invite#c=<code>&s=<share code>. Android opens the
                  owner's relay's links here once its /.well-known/assetlinks.json verifies them;
@@ -104,7 +106,8 @@
             android:launchMode="singleTask"
             android:taskAffinity="com.vagujhelyigergely.sotto.call"
             android:excludeFromRecents="true"
-            android:showWhenLocked="true" />
+            android:showWhenLocked="true"
+            tools:targetApi="o_mr1" />
 
         <receiver
             android:name=".call.CallActionReceiver"
