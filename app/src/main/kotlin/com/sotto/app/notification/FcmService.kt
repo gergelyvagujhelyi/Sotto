@@ -55,8 +55,8 @@ class FcmService : FirebaseMessagingService() {
         // are shown by MessageRepositoryImpl after decryption. Only if that fails or runs out
         // of time does the expedited job take over. Since 0.6.1 the job did every fetch, but
         // Android decides when a job runs: on a strict phone, or once the app had used up its
-        // allowance for urgent work on a busy day, messages waited 20-70 s (the owner's
-        // wife's phone, 2026-11-20). The job is still there for a slow start, such as a fresh
+        // allowance for urgent work on a busy day, messages waited 20-70 s (a second test
+        // phone, 2026-11-20). The job is still there for a slow start, such as a fresh
         // install on a phone's background cores, which ran past those seconds in 0.6.1.
         val result = runBlocking {
             fetchOrQueueJob(
