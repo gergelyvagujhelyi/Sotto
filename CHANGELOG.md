@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Links in messages open on tap** — Web addresses in a chat (starting with `https://`, `http://` or `www.`) are underlined and open in your browser when you tap them. A Sotto invite link opens in Sotto. Addresses without those beginnings, such as `example.com`, stay plain text, so file names and abbreviations aren't mistaken for links.
 
 ## 0.6.9 — 2026-11-20
 

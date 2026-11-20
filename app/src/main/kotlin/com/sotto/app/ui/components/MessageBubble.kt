@@ -1,5 +1,6 @@
 package com.sotto.app.ui.components
 
+import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -45,13 +46,18 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -235,6 +241,8 @@ internal fun BubbleSurface(
             },
             color = textColor,
             scrambleMs = scrambleMs,
+            // Not in the copy flying out of the composer: it's a picture of the text.
+            links = !unreadable && look >= 1f,
         ) {
             Row(
                 // The time and ticks come in at the end of a flight.
@@ -261,6 +269,8 @@ private fun TextWithTrailingMeta(
     color: Color,
     /** Departure board running, ms since it started; null for plain text. */
     scrambleMs: Long? = null,
+    /** Web links in the text are underlined and open on tap (once the board has settled). */
+    links: Boolean = false,
     meta: @Composable () -> Unit,
 ) {
     // Written during the text's own measure pass and read right after it in the
@@ -268,7 +278,8 @@ private fun TextWithTrailingMeta(
     val textLayout = remember { arrayOfNulls<TextLayoutResult>(1) }
     // While flipping, the real text keeps the layout (the bubble never changes size) with
     // the unsettled characters transparent; their glyphs are drawn on top, in each one's box.
-    val shown = if (scrambleMs == null) AnnotatedString(text) else unsettledHidden(text, scrambleMs)
+    val linked = rememberLinked(text, color, links)
+    val shown = if (scrambleMs == null) linked else unsettledHidden(text, scrambleMs)
     val measurer = rememberTextMeasurer()
     val glyphLayouts = remember(style) { HashMap<Char, TextLayoutResult>() }
     val glyphColor = color.copy(alpha = 0.9f)
@@ -358,6 +369,42 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
     )
 }
 
+
+/**
+ * [text] with its web links ([findLinks]) underlined and opening on tap. A link's
+ * tap goes to the link, not to the bubble. With nothing to open it, a toast says so
+ * instead of the app crashing.
+ */
+@Composable
+private fun rememberLinked(text: String, color: Color, enabled: Boolean): AnnotatedString {
+    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    return remember(text, color, enabled, uriHandler) {
+        val found = if (enabled) findLinks(text) else emptyList()
+        if (found.isEmpty()) return@remember AnnotatedString(text)
+        val styles = TextLinkStyles(
+            style = SpanStyle(textDecoration = TextDecoration.Underline),
+            pressedStyle = SpanStyle(textDecoration = TextDecoration.Underline, background = color.copy(alpha = 0.2f)),
+        )
+        buildAnnotatedString {
+            append(text)
+            for (link in found) {
+                addLink(
+                    LinkAnnotation.Url(link.url, styles) {
+                        try {
+                            uriHandler.openUri(link.url)
+                        } catch (_: IllegalArgumentException) {
+                            // No browser (or other app) for it.
+                            Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    link.range.first,
+                    link.range.last + 1,
+                )
+            }
+        }
+    }
+}
 
 /** [text] with the characters that haven't settled yet (at [elapsedMs]) transparent. */
 private fun unsettledHidden(text: String, elapsedMs: Long): AnnotatedString {
