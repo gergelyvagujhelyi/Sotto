@@ -6,6 +6,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.6.4 — 2026-11-20
+
+- **A call notices when the other phone is gone** — If the other phone disappears mid-call (switched off, out of reach, or Sotto stopped on it), Sotto now shows it. Within 10 seconds of nothing arriving from their phone, the call screen says "Can't reach <name>" and the call beeps. The bar above the app and the call notification say the same. If their phone doesn't come back within a minute, the call ends with "<name>'s phone stopped responding". Before, a call whose other phone had gone could go on indefinitely: the connection kept briefly reporting itself back, which cleared "Reconnecting…" each time, so the screen showed nothing wrong. Once their audio comes back, the warning goes away.
+
 ## 0.6.3 — 2026-11-20
 
 - **Messages after a restart or an update** — After the phone restarts or Sotto updates, Sotto starts in the background, and the messages that came meanwhile are fetched in the same kind of expedited job as a push's. A message has no push left to wake the app (a push lasts a minute), and before, a slow start could be frozen halfway, so those messages could wait until you opened the app.

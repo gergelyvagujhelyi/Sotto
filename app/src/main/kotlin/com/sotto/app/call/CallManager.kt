@@ -235,6 +235,8 @@ class CallManager @Inject constructor(
         var pairLogJob: Job? = null
         /** Logs the audio bitrate once, a little after the call connects, then the voice's level. */
         var audioLogJob: Job? = null
+        /** Watches that audio keeps arriving from the other phone (watchPeer). */
+        var peerWatchJob: Job? = null
         /** The path the call last took ([CallPath]), to notice a direct one lost. */
         var lastPath: CallPath? = null
         /** Logs what the direct pairs' checks did when a direct path was lost. */
@@ -247,10 +249,11 @@ class CallManager @Inject constructor(
         var recoveryJob: Job? = null
 
         fun cancel() {
-            for (job in listOf(lossJob, networkJob, restartTimer, retransmitJob, requestJob, credentialJob, directCheckJob, pairLogJob, audioLogJob, directLossLogJob, sessionJob, toneJob, recoveryJob)) {
+            for (job in listOf(lossJob, networkJob, restartTimer, retransmitJob, requestJob, credentialJob, directCheckJob, pairLogJob, audioLogJob, directLossLogJob, sessionJob, toneJob, recoveryJob, peerWatchJob)) {
                 job?.cancel()
             }
             recoveryJob = null
+            peerWatchJob = null
             audioLogJob = null
             directLossLogJob = null
             pairLogJob = null
@@ -1334,9 +1337,14 @@ class CallManager @Inject constructor(
                 callLink.lostAt = null
                 callLink.requestJob?.cancel()
                 callLink.requestJob = null
-                stopReconnectTone(callLink)
-                // The beeping stops and the call celebrates being back.
-                if (recovered) callSounds.playReconnected()
+                // While nothing arrives from the other phone, ICE saying "connected" proves
+                // nothing (it said so for a moment after every restart while the other phone
+                // was gone): the beeping goes on until its audio does (watchPeer).
+                if (!state.peerUnreachable) {
+                    stopReconnectTone(callLink)
+                    // The beeping stops and the call celebrates being back.
+                    if (recovered) callSounds.playReconnected()
+                }
                 val firstConnect = state.connectedAt == null
                 _callState.value = state.copy(
                     status = CallStatus.CONNECTED,
@@ -1346,6 +1354,7 @@ class CallManager @Inject constructor(
                 if (firstConnect) {
                     scheduleCredentialRenewal(callLink)
                     logAudioRateLater(callLink)
+                    watchPeer(callLink)
                 }
             }
             PeerConnection.IceConnectionState.DISCONNECTED,
@@ -1453,7 +1462,7 @@ class CallManager @Inject constructor(
                 logWarn("No reconnecting tone: ${e.message}")
                 return@launch
             }
-            while (link === callLink && _callState.value?.reconnecting == true) {
+            while (link === callLink && _callState.value?.let { it.reconnecting || it.peerUnreachable } == true) {
                 tone.startTone(ToneGenerator.TONE_PROP_BEEP2, 300)
                 kotlinx.coroutines.delay(RECONNECT_TONE_INTERVAL_MS)
             }
@@ -1481,6 +1490,57 @@ class CallManager @Inject constructor(
      * is in effect. Counts RTP payload, so the frame encryption adds about 12 kbit/s. Then logs
      * how loud the voice arrives and what the leveler adds, every half minute.
      */
+    /**
+     * Watches that audio keeps arriving from the other phone, and says so when it doesn't.
+     *
+     * ICE alone can't tell. On 2026-11-20 the other phone disappeared mid-call (an emulator that
+     * was shut down). After every ICE restart, the connection reported itself back for a moment,
+     * which reset the loss timeout and cleared "Reconnecting…" each time. The call went on for 17
+     * minutes with nobody there, and the screen showed nothing wrong.
+     *
+     * The other phone sends audio as long as it's in the call ([PeerAudioWatch]). After
+     * [PEER_UNREACHABLE_MS] without any, the call shows it can't reach the other phone and beeps.
+     * After [PEER_GONE_MS], it ends ([CallStatus.PEER_GONE]).
+     */
+    private fun watchPeer(callLink: CallLink) {
+        callLink.peerWatchJob?.cancel()
+        callLink.peerWatchJob = scope.launch {
+            val watch = PeerAudioWatch(SystemClock.elapsedRealtime())
+            while (link === callLink) {
+                kotlinx.coroutines.delay(PEER_CHECK_INTERVAL_MS)
+                // No reading (stats didn't come): neither silence nor audio.
+                val received = audioBytesNow()?.second ?: continue
+                if (link !== callLink) return@launch
+                val state = _callState.value ?: return@launch
+                if (state.callId != callLink.callId || state.status != CallStatus.CONNECTED) continue
+                val silentFor = watch.silentFor(received, SystemClock.elapsedRealtime())
+                when (peerVerdict(silentFor)) {
+                    PeerVerdict.PRESENT -> if (state.peerUnreachable) {
+                        logInfo("Audio from the other phone again")
+                        _callState.value = state.copy(peerUnreachable = false)
+                        if (!state.reconnecting) {
+                            stopReconnectTone(callLink)
+                            callSounds.playReconnected()
+                        }
+                    }
+                    PeerVerdict.UNREACHABLE -> if (!state.peerUnreachable) {
+                        logWarn("Nothing from the other phone for ${silentFor / 1000} s")
+                        _callState.value = state.copy(peerUnreachable = true)
+                        callSounds.prepare()
+                        startReconnectTone(callLink)
+                    }
+                    PeerVerdict.GONE -> {
+                        logWarn("Nothing from the other phone for ${silentFor / 1000} s: ending the call")
+                        // endCall() cancels this job: send the hangup from its own coroutine.
+                        scope.launch { sendSignal(state.peerId, "call_hangup", callLink.callId, "") }
+                        endCall(CallStatus.PEER_GONE, callLink.callId)
+                        return@launch
+                    }
+                }
+            }
+        }
+    }
+
     private fun logAudioRateLater(callLink: CallLink) {
         callLink.audioLogJob?.cancel()
         callLink.audioLogJob = scope.launch {
@@ -2299,9 +2359,11 @@ class CallManager @Inject constructor(
         /** After a direct path is lost, when its pairs are looked at again. */
         private const val DIRECT_LOSS_RECHECK_MS = 5_000L
         private const val STATS_TIMEOUT_MS = 2_000L
+        /** How often the call checks that audio arrives from the other phone (watchPeer). */
+        private const val PEER_CHECK_INTERVAL_MS = 2_000L
         private val TERMINAL_STATUSES = setOf(
             CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY,
-            CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE,
+            CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE, CallStatus.PEER_GONE,
         )
     }
 }
