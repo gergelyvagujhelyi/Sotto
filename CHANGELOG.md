@@ -6,6 +6,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.1 — 2026-11-20
+
+- **Addresses without `https://` are links too** — `444.hu`, `sl.se` or `index.hu/belfold` now open on tap, as in WhatsApp. 0.7.0 only made links of addresses starting with `https://`, `http://` or `www.`. An address counts when it ends in a real domain ending (every country's, and the common ones such as `.com` or `.org`), so file names such as `notes.txt` or `README.md` and email addresses stay plain text.
+
 ## 0.7.0 — 2026-11-20
 
 - **Links in messages open on tap** — Web addresses in a chat (starting with `https://`, `http://` or `www.`) are underlined and open in your browser when you tap them. A Sotto invite link opens in Sotto. Addresses without those beginnings, such as `example.com`, stay plain text, so file names and abbreviations aren't mistaken for links.
