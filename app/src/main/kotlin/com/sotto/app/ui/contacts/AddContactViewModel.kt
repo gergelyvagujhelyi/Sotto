@@ -72,6 +72,14 @@ class AddContactViewModel @Inject constructor(
 
         _state.value = AddContactState.Loading
         viewModelScope.launch {
+            // The user's own code (pasted, or from their own invite link): say so, rather than
+            // asking the relay and failing with a generic error. Read here as well, in case
+            // the screen's copy hasn't loaded yet.
+            val mine = _myShareCode.value ?: identityRepository.getIdentity()?.shareCode
+            if (code == mine) {
+                _state.value = AddContactState.Error(OWN_SHARE_CODE_MESSAGE)
+                return@launch
+            }
             try {
                 val contact = addContact(code).getOrThrow()
                 val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
@@ -90,6 +98,9 @@ class AddContactViewModel @Inject constructor(
         _state.value = AddContactState.Idle
     }
 }
+
+/** Shown when the user tries to add their own share code. */
+const val OWN_SHARE_CODE_MESSAGE = "That's your own share code. Ask the other person for theirs."
 
 sealed interface AddContactState {
     data object Idle : AddContactState

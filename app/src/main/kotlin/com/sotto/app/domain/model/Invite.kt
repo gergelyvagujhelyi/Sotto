@@ -110,3 +110,33 @@ fun inviteLimitMessage(detail: String?): String = when (detail) {
     "invite_rate_limited" -> "Too many at once. Try again in a minute."
     else -> "Couldn't create an invite. Try again."
 }
+
+/** What opening an invite link does for someone who already has an account. */
+sealed interface MemberInviteAction {
+    /** Add contact opens with the inviter's share code filled in, to add with a tap. */
+    data class AddInviter(val shareCode: String) : MemberInviteAction
+
+    /** The member's own invite, opened to check it: nothing to add, and the code stays unused. */
+    data object OwnInvite : MemberInviteAction
+
+    /** An invite to the member's own relay without an inviter to add. */
+    data class AlreadyMember(val relayName: String) : MemberInviteAction
+
+    /** An invite to a relay other than the member's. */
+    data class OtherRelay(val relayName: String) : MemberInviteAction
+}
+
+/**
+ * What to do with this invite for a member on [myRelay] whose share code is [myShareCode]. Only
+ * a sign-up spends the code, so none of these use it up.
+ */
+fun InviteLink.actionForMember(myRelay: String?, myShareCode: String?): MemberInviteAction {
+    val relayName = relay.substringAfter("://")
+    if (relay != myRelay) return MemberInviteAction.OtherRelay(relayName)
+    val inviter = inviterShareCode ?: return MemberInviteAction.AlreadyMember(relayName)
+    if (inviter == myShareCode) return MemberInviteAction.OwnInvite
+    return MemberInviteAction.AddInviter(inviter)
+}
+
+/** Shown when the member opens their own invite link. */
+const val OWN_INVITE_MESSAGE = "This is your own invite. Send it to the person you're inviting."

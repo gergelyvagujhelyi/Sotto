@@ -4,6 +4,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.6.2 — 2026-11-20
+
+- **Opening your own invite link** — Sotto now says "This is your own invite. Send it to the person you're inviting." Before, it opened Add contact with your own share code filled in, as if you could add yourself. Opening the link never used it up: only signing up does. Add contact also recognises your own share code at once, pasted or typed, and says so, instead of asking the relay and failing with a general error.
 - **Relay: no IP addresses in its logs** — nginx's access log keeps each request's time, path, status and size, but not the client's address. Account ids and share codes are cut from paths. nginx's error log keeps only emergencies, because nginx adds the client's address to every other error. coturn keeps no log.
 - **Relay: answers only its own name** — With `RELAY_HOSTNAME` in `.env`, nginx refuses connections that don't ask for the relay's name before sending its certificate. Scanners that sweep IP addresses get nothing back, not even the name. Paths the relay doesn't serve get a closed connection instead of a 404. Without `RELAY_HOSTNAME`, nginx answers any name, as before.
 

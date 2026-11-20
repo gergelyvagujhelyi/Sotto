@@ -10,6 +10,40 @@ class InviteTest {
     private val invite = InviteLink("https://relay.example.com", "K7QXM2PA9TRB", "AbCdEfGhIjKlMn_-")
 
     @Test
+    fun `a member who opens their own invite is told so, not offered to add themselves`() {
+        assertEquals(
+            MemberInviteAction.OwnInvite,
+            invite.actionForMember("https://relay.example.com", myShareCode = "AbCdEfGhIjKlMn_-"),
+        )
+    }
+
+    @Test
+    fun `a member who opens someone else's invite can add them`() {
+        assertEquals(
+            MemberInviteAction.AddInviter("AbCdEfGhIjKlMn_-"),
+            invite.actionForMember("https://relay.example.com", myShareCode = "ZzZzZzZzZzZzZzZz"),
+        )
+        // Before the member's own identity has loaded, it's still offered (the add itself checks).
+        assertEquals(
+            MemberInviteAction.AddInviter("AbCdEfGhIjKlMn_-"),
+            invite.actionForMember("https://relay.example.com", myShareCode = null),
+        )
+    }
+
+    @Test
+    fun `invites without an inviter or for another relay only explain`() {
+        assertEquals(
+            MemberInviteAction.AlreadyMember("relay.example.com"),
+            invite.copy(inviterShareCode = null).actionForMember("https://relay.example.com", "ZzZzZzZzZzZzZzZz"),
+        )
+        // Another relay wins over everything else, the member's own share code included.
+        assertEquals(
+            MemberInviteAction.OtherRelay("relay.example.com"),
+            invite.actionForMember("https://other.example.org", myShareCode = "AbCdEfGhIjKlMn_-"),
+        )
+    }
+
+    @Test
     fun `codes ignore case, spaces and dashes, and read O as 0 and I or L as 1`() {
         assertEquals("K7QXM2PA9TRB", normalizeInviteCode("k7qx-m2pa-9trb"))
         assertEquals("K7QXM2PA9TRB", normalizeInviteCode(" K7QX M2PA 9TRB "))
