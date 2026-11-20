@@ -6,6 +6,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.6.8 — 2026-11-20
+
+- **Relay: messages are delivered promptly again** — Since 0.6.5 the relay made every message's push "collapsible", and Firebase lets a phone receive only 20 of those, then one every 3 minutes. After a busy while, messages stayed at "sent" until the other person opened the app. Message pushes are ordinary again. They still wait for a phone that's out of signal.
+- **After a long time offline** — If more than 100 pushes waited for a phone and Firebase dropped them, the app now fetches its messages as soon as Firebase says so, instead of at its next 15-minute check.
+
 ## 0.6.7 — 2026-11-20
 
 - **Missed calls are counted** — If you miss several calls from the same person, their notification now says how many, such as "2 missed calls", at the time of the last one. Before, each missed call replaced the previous notification. Opening the chat now clears its missed-call notification too, as it does for messages.

@@ -75,14 +75,15 @@ async def test_a_dead_token_does_not_clear_a_newer_installation_id(monkeypatch, 
     assert await _targets() == (None, FID)
 
 
-async def test_a_message_push_waits_for_the_phone_and_collapses(sent):
-    # A phone without signal for more than a minute still gets woken when it's back, once,
-    # however many messages came meanwhile.
+async def test_a_message_push_waits_for_the_phone_and_never_collapses(sent):
+    # A phone without signal for more than a minute still gets woken when it's back. And no
+    # collapse key: Firebase lets only 20 collapsible messages through to a phone, then 1 every
+    # 3 minutes, so with one (0.6.5 to 0.6.7) messages stayed at "sent" after a busy while.
     assert await push.send_push_notification(fid=FID, recipient_id="u1")
     android = sent[0].android
     assert android.priority == "high"
     assert android.ttl == push.MESSAGE_PUSH_TTL
-    assert android.collapse_key == "new_message"
+    assert android.collapse_key is None
 
 
 async def test_a_call_push_lasts_a_minute_and_never_collapses(sent):
