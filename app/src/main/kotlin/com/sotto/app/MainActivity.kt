@@ -33,6 +33,9 @@ import com.sotto.app.call.CallManager
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.InviteLink
+import com.sotto.app.domain.model.MemberInviteAction
+import com.sotto.app.domain.model.OWN_INVITE_MESSAGE
+import com.sotto.app.domain.model.actionForMember
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.repository.SettingsRepository
 import com.sotto.app.notification.ChatNotificationManager
@@ -253,21 +256,20 @@ class MainActivity : ComponentActivity() {
     /**
      * Someone with an account opened an invite: if its sender shares our relay, Add contact opens
      * with their share code filled in, to add with a tap (not by itself: a link can come from anyone).
+     * Their own invite, opened to check it, only says so: there's nobody to add.
      */
-    private fun handleInviteAsMember(invite: InviteLink, navController: NavHostController) {
-        val myRelay = relayConfig.baseUrl
-        val inviter = invite.inviterShareCode
-        if (invite.relay == myRelay && inviter != null) {
-            navController.navigate(Routes.ADD_CONTACT) { launchSingleTop = true }
-            navController.currentBackStackEntry?.savedStateHandle?.set(PREFILLED_SHARE_CODE_KEY, inviter)
-            return
-        }
-        val where = invite.relay.substringAfter("://")
-        val message = if (invite.relay == myRelay) {
-            "You already have an account on $where."
-        } else {
-            // Short: Android shows two lines of a toast.
-            "This invite is for $where, not your relay."
+    private suspend fun handleInviteAsMember(invite: InviteLink, navController: NavHostController) {
+        val myShareCode = identityRepository.getIdentity()?.shareCode
+        // Toasts are short: Android shows two lines.
+        val message = when (val action = invite.actionForMember(relayConfig.baseUrl, myShareCode)) {
+            is MemberInviteAction.AddInviter -> {
+                navController.navigate(Routes.ADD_CONTACT) { launchSingleTop = true }
+                navController.currentBackStackEntry?.savedStateHandle?.set(PREFILLED_SHARE_CODE_KEY, action.shareCode)
+                return
+            }
+            MemberInviteAction.OwnInvite -> OWN_INVITE_MESSAGE
+            is MemberInviteAction.AlreadyMember -> "You already have an account on ${action.relayName}."
+            is MemberInviteAction.OtherRelay -> "This invite is for ${action.relayName}, not your relay."
         }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }
