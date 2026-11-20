@@ -1,5 +1,10 @@
 name: Build & Release APK
 
+# Runs for every pushed version tag (v*), or by hand with that tag's name (workflow_dispatch).
+# GitHub never started this file for tag pushes while it was unchanged from the repository's
+# first commit (0.6.0 to 0.6.2 were started by hand); changing it in a later commit registered
+# its tag trigger. If a tag push ever starts nothing, run it by hand with the tag.
+
 on:
   push:
     tags:

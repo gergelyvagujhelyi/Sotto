@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Building** — Every pull request and every push to `develop` runs the app's unit tests and lint and the relay's tests (the Checks workflow, free on a public repository). Lint's three errors are fixed: notifications go through one helper that also copes with the permission being taken back at that moment. Pushing a version tag should start the release build by itself again; since the move to this repository, every release had to be started by hand.
 
 ## 0.6.2 — 2026-11-20
 
