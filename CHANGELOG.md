@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Delete a chat** — A chat's menu (⋮) has Delete chat. After asking, it removes the chat, its messages and its call history from this phone. The other person keeps their copy, and a new message from them starts a new chat. On a message request it does what Reject does.
 
 ## 0.6.5 — 2026-11-20
 

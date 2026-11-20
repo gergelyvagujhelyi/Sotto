@@ -46,6 +46,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.AlertDialog
@@ -172,6 +173,7 @@ fun ChatScreen(
     val isBlocked by viewModel.isBlocked.collectAsState()
     val contact by viewModel.contact.collectAsState()
     var confirmBlock by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
 
     if (renaming) {
@@ -194,6 +196,17 @@ fun ChatScreen(
                 viewModel.block(onRemoved = onBack)
             },
             onDismiss = { confirmBlock = false },
+        )
+    }
+
+    if (confirmDelete) {
+        DeleteChatDialog(
+            name = conversation?.contactDisplayName,
+            onConfirm = {
+                confirmDelete = false
+                viewModel.deleteChat(onDeleted = onBack)
+            },
+            onDismiss = { confirmDelete = false },
         )
     }
 
@@ -280,6 +293,7 @@ fun ChatScreen(
         onBlock = { confirmBlock = true },
         onUnblock = viewModel::unblock,
         onRename = { renaming = true },
+        onDelete = { confirmDelete = true },
     )
 }
 
@@ -311,6 +325,7 @@ fun ChatContent(
     onBlock: () -> Unit,
     onUnblock: () -> Unit,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val today = rememberToday()
@@ -399,6 +414,7 @@ fun ChatContent(
                     onBlock = onBlock,
                     onUnblock = onUnblock,
                     onRename = onRename,
+                    onDelete = onDelete,
                 )
             },
         ) { padding ->
@@ -561,6 +577,7 @@ private fun ChatTopBar(
     onBlock: () -> Unit,
     onUnblock: () -> Unit,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     var showMenu by remember { mutableStateOf(false) }
@@ -647,6 +664,14 @@ private fun ChatTopBar(
                                 if (isBlocked) onUnblock() else onBlock()
                             },
                         )
+                        DropdownMenuItem(
+                            text = { Text("Delete chat") },
+                            leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = colors.error) },
+                            onClick = {
+                                showMenu = false
+                                onDelete()
+                            },
+                        )
                     }
                 }
                 Spacer(Modifier.width(4.dp))
@@ -671,6 +696,28 @@ internal fun BlockContactDialog(name: String?, onConfirm: () -> Unit, onDismiss:
         },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text("Block", color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+/** Asks before deleting the chat with [name] from this phone. */
+@Composable
+internal fun DeleteChatDialog(name: String?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+        title = { Text("Delete this chat?") },
+        text = {
+            Text(
+                "Its messages and calls are deleted from this phone. ${name ?: "They"} keeps " +
+                    "their copy, and a new message from them starts a new chat."
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
