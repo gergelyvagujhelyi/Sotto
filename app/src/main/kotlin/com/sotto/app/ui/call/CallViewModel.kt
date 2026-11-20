@@ -62,7 +62,8 @@ class CallViewModel @Inject constructor(
      */
     fun onMicPermissionGranted() {
         val current = callManager.callState.value
-        if (current == null && !outgoingStarted && pendingContactId.isNotEmpty()) {
+        // A call that just ended may still be on its end screen: calling back works anyway.
+        if ((current == null || current.status.isOver) && !outgoingStarted && pendingContactId.isNotEmpty()) {
             outgoingStarted = true
             callManager.initiateCall(pendingContactId, pendingDisplayName)
         }

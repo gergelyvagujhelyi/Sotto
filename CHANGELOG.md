@@ -6,6 +6,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.6.9 — 2026-11-20
+
+- **Calling each other at the same moment** — If you and the other person call each other at once, one call now goes through: both phones keep the same one, and the other phone rings for it. Before, each phone answered the other's call with "busy", and neither went through.
+- **Calling back straight away** — A call that comes in, or that you start, right after another call ended now goes through. Before, for 2–4 seconds after a call (while "Call ended" showed), a new call got "busy", and calling back from the chat did nothing.
+
 ## 0.6.8 — 2026-11-20
 
 - **Relay: messages are delivered promptly again** — Since 0.6.5 the relay made every message's push "collapsible", and Firebase lets a phone receive only 20 of those, then one every 3 minutes. After a busy while, messages stayed at "sent" until the other person opened the app. Message pushes are ordinary again. They still wait for a phone that's out of signal.

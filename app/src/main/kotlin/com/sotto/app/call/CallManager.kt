@@ -308,7 +308,8 @@ class CallManager @Inject constructor(
     fun clearCallError() { _callError.value = null }
 
     fun initiateCall(peerId: String, peerDisplayName: String) {
-        if (_callState.value != null) {
+        // A call that just ended may still be on its end screen: calling back works anyway.
+        if (_callState.value?.status?.isOver == false) {
             _callError.value = "Already in a call"
             return
         }
@@ -345,6 +346,12 @@ class CallManager @Inject constructor(
                 logDebug("Creating SDP offer")
                 val sdp = webRtcEngine?.createOffer()
                     ?: throw IllegalStateException("WebRTC engine not initialized")
+                if (_callState.value?.callId != callId) {
+                    // Ended while the offer was made: hung up, or it gave way to the peer's
+                    // call when both called at once. Sent now, the peer would note a missed call.
+                    logDebug("Call ended before its offer went out: not sending it")
+                    return@launch
+                }
                 logDebug("Sending call_offer signal")
                 val offer = SdpPayload(
                     sdp,
@@ -491,6 +498,9 @@ class CallManager @Inject constructor(
             // pattern is safe regardless of dispatcher.
             var earlyCandidatesForOffer: List<CallSignalDto> = emptyList()
             var missedCallToRecord: CallState? = null
+            var verdict = OfferVerdict.RING
+            /** Our own outgoing call, dropped for the peer's when both called at once. */
+            var droppedCallId: String? = null
             signalMutex.withLock {
                 // Reject replayed signals (same signature = same signal)
                 val now = System.currentTimeMillis()
@@ -529,9 +539,22 @@ class CallManager @Inject constructor(
                                 direction = CallDirection.INCOMING,
                                 status = CallStatus.ENDED,
                             )
-                        } else if (_callState.value != null) {
-                            // Already in a call — flag for busy signal outside mutex
+                        } else if (
+                            offerVerdict(_callState.value, link?.answered == true, signal.senderId, signal.callId)
+                                .also { verdict = it }
+                                .let { it == OfferVerdict.BUSY || it == OfferVerdict.KEEP_OURS }
+                        ) {
+                            // Busy (answered outside the mutex), or both called at once and
+                            // the peer drops theirs for ours: nothing to do for this offer.
                         } else {
+                            if (verdict == OfferVerdict.TAKE_THEIRS) {
+                                // Both called at once and ours gives way: it ends without a
+                                // trace (no "call failed"), and this one rings instead.
+                                val ours = _callState.value!!
+                                logInfo("Both called at once: ringing for their call instead of ours")
+                                endCall(CallStatus.ENDED, ours.callId, record = false)
+                                droppedCallId = ours.callId
+                            }
                             // Reset the guard for this new inbound call
                             endCallGuard.set(false)
                             val displayName = verifiedContact.displayName
@@ -640,6 +663,9 @@ class CallManager @Inject constructor(
             try {
                 when (signal.signalType) {
                     "call_offer" -> {
+                        // Ours gave way to theirs: tell them, so the offer of ours they got
+                        // can't ring later (once their call is over, say).
+                        droppedCallId?.let { sendSignal(signal.senderId, "call_hangup", it, "") }
                         if (missedCallToRecord != null) {
                             recordCallEvent(missedCallToRecord!!, CallStatus.ENDED)
                         } else if (_callState.value?.callId == signal.callId) {
@@ -656,6 +682,8 @@ class CallManager @Inject constructor(
                                     logWarn("Dropping early ICE candidate: ${e.message}")
                                 }
                             }
+                        } else if (verdict == OfferVerdict.KEEP_OURS) {
+                            logInfo("Both called at once: the other phone rings for ours instead")
                         } else {
                             // Already in a call — send busy outside the mutex
                             sendSignal(signal.senderId, "call_busy", signal.callId, "")
@@ -1032,7 +1060,7 @@ class CallManager @Inject constructor(
      * that call is already over and another has started (setup can block for
      * longer than the 2 s cleanup), the late failure must not end the new one.
      */
-    private fun endCall(status: CallStatus, callId: String? = null) {
+    private fun endCall(status: CallStatus, callId: String? = null, record: Boolean = true) {
         if (callId != null && _callState.value?.callId != callId) {
             logDebug("Not ending the current call for a stale call's $status")
             return
@@ -1083,7 +1111,7 @@ class CallManager @Inject constructor(
         }
 
         // Record the call event in conversation history
-        if (endingState != null) {
+        if (endingState != null && record) {
             scope.launch {
                 recordCallEvent(endingState, status)
             }
@@ -1097,9 +1125,10 @@ class CallManager @Inject constructor(
             kotlinx.coroutines.delay(if (status in READ_STATUSES) 4000 else 2000)
             if (_callState.value?.callId == endedCallId) {
                 _callState.value = null
+                // Reset guard so the next call can use endCall(). Not when a new call
+                // already took over: it reset the guard itself, and may have ended since.
+                endCallGuard.set(false)
             }
-            // Reset guard so the next call can use endCall()
-            endCallGuard.set(false)
         }
     }
 
@@ -2371,11 +2400,7 @@ class CallManager @Inject constructor(
         private const val STATS_TIMEOUT_MS = 2_000L
         /** How often the call checks that audio arrives from the other phone (watchPeer). */
         private const val PEER_CHECK_INTERVAL_MS = 2_000L
-        private val TERMINAL_STATUSES = setOf(
-            CallStatus.ENDED, CallStatus.FAILED, CallStatus.NO_RELAY,
-            CallStatus.REJECTED, CallStatus.BUSY, CallStatus.UNAVAILABLE, CallStatus.PEER_GONE,
-            CallStatus.NO_NETWORK,
-        )
+        private val TERMINAL_STATUSES = CallStatus.values().filter { it.isOver }.toSet()
         /** End states whose reason takes reading: kept on screen for 4 s rather than 2. */
         private val READ_STATUSES = setOf(CallStatus.PEER_GONE, CallStatus.NO_NETWORK)
     }
@@ -2435,3 +2460,40 @@ data class IceCandidateDto(
     /** ICE restart generation: 0 (and left out) for the first exchange, and from older apps. */
     val gen: Int = 0,
 )
+
+/** What an incoming call offer gets, given the call we have now ([current]). */
+internal enum class OfferVerdict {
+    /** No call going on (or only one on its end screen): ring. */
+    RING,
+    /** In another call: answer busy. */
+    BUSY,
+    /** We called them as they called us, and theirs wins: drop ours and ring for theirs. */
+    TAKE_THEIRS,
+    /** We called them as they called us, and ours wins: they ring for ours, so ignore theirs. */
+    KEEP_OURS,
+}
+
+/**
+ * The verdict for an offer [callId] from [senderId]. When two people call each other at
+ * the same moment, both phones keep the call with the smaller id, so they agree on one
+ * without talking it over (before, each answered the other's offer with busy, and
+ * neither call went through). [ourCallAnswered]: the peer already answered our call.
+ *
+ * The id starts with a random UUID, so which call wins is random, not "who called first".
+ * On purpose: the time in the id comes from each phone's own clock, and two phones' clocks
+ * often differ by more than the second or so in which both calls cross. What matters is
+ * that both phones pick the same call, and ids are never equal. (Older apps' ids are a
+ * bare UUID, without a time.)
+ */
+internal fun offerVerdict(current: CallState?, ourCallAnswered: Boolean, senderId: String, callId: String): OfferVerdict {
+    if (current == null || current.status.isOver) return OfferVerdict.RING
+    val bothCalling = current.direction == CallDirection.OUTGOING &&
+        current.peerId == senderId &&
+        !ourCallAnswered &&
+        (current.status == CallStatus.CONNECTING || current.status == CallStatus.RINGING)
+    return when {
+        !bothCalling -> OfferVerdict.BUSY
+        callId < current.callId -> OfferVerdict.TAKE_THEIRS
+        else -> OfferVerdict.KEEP_OURS
+    }
+}

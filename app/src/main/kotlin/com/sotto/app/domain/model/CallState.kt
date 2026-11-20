@@ -29,6 +29,11 @@ enum class CallStatus {
     PEER_GONE,
     /** The phone has no internet connection, so the call couldn't start. */
     NO_NETWORK,
+    ;
+
+    /** The call is over. Its end screen may still show for a moment, but a new call can start. */
+    val isOver: Boolean
+        get() = this != RINGING && this != CONNECTING && this != CONNECTED
 }
 
 data class CallState(
