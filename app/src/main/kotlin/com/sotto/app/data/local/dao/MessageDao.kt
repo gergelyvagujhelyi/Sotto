@@ -94,6 +94,10 @@ interface MessageDao {
     @Query("UPDATE messages SET encryptedBody = :encryptedBody, nonce = :nonce WHERE id = :messageId")
     suspend fun updateEncryptedBody(messageId: String, encryptedBody: ByteArray, nonce: ByteArray)
 
+    /** The user's own messages in a chat, newest first: to find the one a reply names by its relay id. */
+    @Query("SELECT id FROM messages WHERE conversationId = :conversationId AND isOutgoing = 1 ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getOutgoingIds(conversationId: String, limit: Int): List<String>
+
     @Query("SELECT * FROM messages WHERE id = :messageId")
     suspend fun getById(messageId: String): MessageEntity?
 

@@ -23,6 +23,10 @@ data class MessageEntity(
     val timestamp: Long,
     val expiresAt: Long?,
     val isOutgoing: Boolean,
+    /** The message this one replies to (see ReplyRef); null when it isn't a reply. */
+    val replyToId: String? = null,
+    val replyQuote: String? = null,
+    val replyToOwn: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

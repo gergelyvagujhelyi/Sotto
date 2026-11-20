@@ -49,12 +49,17 @@ internal fun DesignSample(name: String) {
             onRejectRequest = {},
             onBlockRequest = {},
         )
-        "chat", "chat-request", "chat-reset", "chat-blocked", "chat-block-dialog", "chat-rename-dialog" -> ChatContent(
+        "chat", "chat-reply", "chat-request", "chat-reset", "chat-blocked", "chat-block-dialog", "chat-rename-dialog" -> ChatContent(
             contactName = if (name == "chat-request") "Tilda Lindqvist" else "Maja Sjöberg",
             avatarSeed = if (name == "chat-request") "u-tilda" else "u-maja",
             isEncrypted = true,
             encryptionInfo = SampleData.PQC_INFO,
-            messages = if (name == "chat-request") SampleData.messages.take(1) else SampleData.messages,
+            messages = when (name) {
+                "chat-request" -> SampleData.messages.take(1)
+                "chat-reply" -> SampleData.replyMessages
+                else -> SampleData.messages
+            },
+            replyingTo = if (name == "chat-reply") SampleData.replyMessages.first() else null,
             composerText = draft,
             needsSessionReset = name == "chat-reset",
             peerDeleted = false,
@@ -194,6 +199,7 @@ private annotation class ThemePreviews
 @ThemePreviews @Composable private fun ChatsPreview() = SottoTheme { DesignSample("conversations") }
 @ThemePreviews @Composable private fun ChatsEmptyPreview() = SottoTheme { DesignSample("conversations-empty") }
 @ThemePreviews @Composable private fun ChatPreview() = SottoTheme { DesignSample("chat") }
+@ThemePreviews @Composable private fun ChatReplyPreview() = SottoTheme { DesignSample("chat-reply") }
 @ThemePreviews @Composable private fun ChatRequestPreview() = SottoTheme { DesignSample("chat-request") }
 @ThemePreviews @Composable private fun ChatBlockedPreview() = SottoTheme { DesignSample("chat-blocked") }
 @ThemePreviews @Composable private fun BlockDialogPreview() = SottoTheme { DesignSample("chat-block-dialog") }

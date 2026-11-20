@@ -12,4 +12,5 @@ data class Message(
     val timestamp: Instant,
     val expiresAt: Instant? = null,
     val isOutgoing: Boolean,
+    val replyTo: ReplyRef? = null,
 )

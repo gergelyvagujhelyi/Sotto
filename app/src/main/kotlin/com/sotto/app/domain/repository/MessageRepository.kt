@@ -5,7 +5,8 @@ import kotlinx.coroutines.flow.Flow
 
 interface MessageRepository {
     fun getMessages(conversationId: String): Flow<List<Message>>
-    suspend fun sendMessage(conversationId: String, recipientId: String, plaintext: String): Message
+    /** Send [plaintext]; with [replyTo], as a reply to that message of this chat. */
+    suspend fun sendMessage(conversationId: String, recipientId: String, plaintext: String, replyTo: Message? = null): Message
     /**
      * Send the user's own [name] to [recipientId], end-to-end encrypted like a message.
      * Nothing is stored or shown on this side.

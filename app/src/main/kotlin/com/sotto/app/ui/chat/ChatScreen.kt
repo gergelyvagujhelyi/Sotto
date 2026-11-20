@@ -157,6 +157,10 @@ import com.sotto.app.ui.theme.Aurora
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import kotlin.time.Duration.Companion.minutes
 
 @Composable
@@ -174,6 +178,7 @@ fun ChatScreen(
     val encryptionInfo by viewModel.encryptionInfo.collectAsState()
     val isBlocked by viewModel.isBlocked.collectAsState()
     val contact by viewModel.contact.collectAsState()
+    val replyingTo by viewModel.replyingTo.collectAsState()
     var confirmBlock by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -309,6 +314,9 @@ fun ChatScreen(
         onRename = { renaming = true },
         onDelete = { confirmDelete = true },
         onRemoveContact = { confirmRemove = true },
+        replyingTo = replyingTo,
+        onReply = viewModel::startReply,
+        onCancelReply = viewModel::cancelReply,
     )
 }
 
@@ -342,8 +350,22 @@ fun ChatContent(
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onRemoveContact: () -> Unit,
+    /** The message the composer replies to, if any. */
+    replyingTo: Message? = null,
+    onReply: (Message) -> Unit = {},
+    onCancelReply: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
+    val quoteName = contactName ?: "Them"
+    val scope = rememberCoroutineScope()
+    // The message a tapped quote led to, tinted for a moment.
+    var highlighted by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(highlighted) {
+        if (highlighted != null) {
+            delay(1_200)
+            highlighted = null
+        }
+    }
     val today = rememberToday()
     // Built off the main thread, so a long history doesn't cost a frame on every
     // new message. Until the first pass finishes the list is just empty.
@@ -371,7 +393,8 @@ fun ChatContent(
     val sendWithFlight: () -> Unit = {
         val text = composerText.trim()
         val origin = composerTextOrigin[0]
-        flight = if (!reduceMotion && origin != null && text.isNotEmpty() && text.length <= FLIGHT_MAX_CHARS) {
+        // A reply's bubble has the quote too, so it rises into place instead of flying.
+        flight = if (!reduceMotion && origin != null && text.isNotEmpty() && text.length <= FLIGHT_MAX_CHARS && replyingTo == null) {
             SendFlight(text, origin)
         } else {
             null
@@ -461,6 +484,18 @@ fun ChatContent(
                                 ChatRowItem(
                                     row = row,
                                     onRetry = onRetry,
+                                    contactName = quoteName,
+                                    onReply = onReply,
+                                    onQuoteClick = { targetId ->
+                                        val index = newestFirst.indexOfFirst { it.key == "m:$targetId" }
+                                        if (index < 0) {
+                                            scope.launch { snackbarHostState.showSnackbar("That message isn't on this phone any more.") }
+                                        } else {
+                                            scope.launch { listState.animateScrollToItem(index) }
+                                            highlighted = targetId
+                                        }
+                                    },
+                                    highlighted = id != null && id == highlighted,
                                     animateIn = id != null && arrivals[id] == true,
                                     onAnimateInDone = { id?.let { arrivals.remove(it) } },
                                     hidden = inFlight != null,
@@ -554,7 +589,27 @@ fun ChatContent(
                         }
                     }
 
+                    // Asking to reply opens the keyboard, as it would to write anything.
+                    val composerFocus = remember { FocusRequester() }
+                    val keyboard = LocalSoftwareKeyboardController.current
+                    LaunchedEffect(replyingTo?.id) {
+                        if (replyingTo != null) {
+                            runCatching { composerFocus.requestFocus() }
+                            keyboard?.show()
+                        }
+                    }
+                    AnimatedVisibility(
+                        visible = replyingTo != null && !needsSessionReset && !isBlocked,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically(),
+                    ) {
+                        // Keeps showing the last one while it animates out.
+                        val shownReply = remember { arrayOfNulls<Message>(1) }
+                        replyingTo?.let { shownReply[0] = it }
+                        shownReply[0]?.let { ReplyPreview(it, quoteName, onCancel = onCancelReply) }
+                    }
                     Composer(
+                        modifier = Modifier.focusRequester(composerFocus),
                         text = composerText,
                         onTextChange = onComposerChange,
                         onSend = sendWithFlight,
@@ -873,6 +928,10 @@ private fun ChatRowItem(
     row: ChatRow,
     onRetry: (String) -> Unit,
     modifier: Modifier = Modifier,
+    contactName: String = "",
+    onReply: (Message) -> Unit = {},
+    onQuoteClick: (String) -> Unit = {},
+    highlighted: Boolean = false,
     animateIn: Boolean = false,
     onAnimateInDone: () -> Unit = {},
     hidden: Boolean = false,
@@ -897,29 +956,38 @@ private fun ChatRowItem(
                     isOutgoing = message.isOutgoing,
                     modifier = modifier.padding(vertical = 6.dp),
                 )
-                else -> MessageBubble(
-                    text = when {
-                        message.state == MessageState.REJECTED -> "⛔ Message rejected (unsigned or unverifiable)"
-                        message.state == MessageState.DECRYPT_FAILED -> "⚠ Could not decrypt this message"
-                        message.plaintext.isEmpty() -> "..."
-                        else -> message.plaintext
-                    },
-                    timestamp = time,
-                    isOutgoing = message.isOutgoing,
-                    state = message.state,
-                    groupedWithPrevious = row.groupedWithPrevious,
-                    modifier = modifier.padding(top = if (row.groupedWithPrevious) 2.dp else 8.dp),
-                    // Failed sends: tap to retry.
-                    onClick = if (message.isOutgoing && message.state == MessageState.FAILED) {
-                        { onRetry(message.id) }
-                    } else {
-                        null
-                    },
-                    animateIn = animateIn,
-                    onAnimateInDone = onAnimateInDone,
-                    hidden = hidden,
-                    onBubblePlaced = onBubblePlaced,
-                )
+                else -> SwipeToReply(
+                    enabled = message.canReply,
+                    onReply = { onReply(message) },
+                    modifier = modifier
+                        .padding(top = if (row.groupedWithPrevious) 2.dp else 8.dp)
+                        .replyHighlight(highlighted),
+                ) {
+                    MessageBubble(
+                        text = when {
+                            message.state == MessageState.REJECTED -> "⛔ Message rejected (unsigned or unverifiable)"
+                            message.state == MessageState.DECRYPT_FAILED -> "⚠ Could not decrypt this message"
+                            message.plaintext.isEmpty() -> "..."
+                            else -> message.plaintext
+                        },
+                        timestamp = time,
+                        isOutgoing = message.isOutgoing,
+                        state = message.state,
+                        groupedWithPrevious = row.groupedWithPrevious,
+                        quote = message.bubbleQuote(contactName),
+                        onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },
+                        // Failed sends: tap to retry.
+                        onClick = if (message.isOutgoing && message.state == MessageState.FAILED) {
+                            { onRetry(message.id) }
+                        } else {
+                            null
+                        },
+                        animateIn = animateIn,
+                        onAnimateInDone = onAnimateInDone,
+                        hidden = hidden,
+                        onBubblePlaced = onBubblePlaced,
+                    )
+                }
             }
         }
     }
@@ -1022,6 +1090,7 @@ private fun NoticeCard(
 
 @Composable
 private fun Composer(
+    modifier: Modifier = Modifier,
     text: String,
     onTextChange: (String) -> Unit,
     onSend: () -> Unit,
@@ -1040,7 +1109,7 @@ private fun Composer(
             value = text,
             onValueChange = onTextChange,
             placeholder = placeholder,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).then(modifier),
             enabled = enabled,
             maxLines = 5,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
