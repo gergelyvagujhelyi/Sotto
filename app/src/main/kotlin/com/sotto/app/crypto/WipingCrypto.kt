@@ -85,3 +85,22 @@ private fun gcm(encrypt: Boolean, key: ByteArray, nonce: ByteArray, aad: ByteArr
     }
     return cipher
 }
+
+/**
+ * Wipes every byte array held by [obj] (its own fields and its superclasses'), for
+ * BouncyCastle's key parameter objects: they keep the key material in byte arrays and have
+ * no wipe of their own. Only for objects made for one use and dropped after: anything else
+ * sharing those arrays would be wiped too. PqcWipingTest checks it leaves nothing usable.
+ */
+internal fun wipeByteArrayFields(obj: Any) {
+    var type: Class<*>? = obj.javaClass
+    while (type != null && type != Any::class.java) {
+        for (field in type.declaredFields) {
+            if (field.type != ByteArray::class.java || java.lang.reflect.Modifier.isStatic(field.modifiers)) continue
+            field.isAccessible = true
+            (field.get(obj) as ByteArray?)?.fill(0)
+        }
+        type = type.superclass
+    }
+}
+
