@@ -149,7 +149,10 @@ import com.sotto.app.ui.components.GlassIconButton
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.GradientText
 import com.sotto.app.ui.components.KeyChangeEventItem
+import com.sotto.app.ui.components.BubbleReactions
 import com.sotto.app.ui.components.MessageBubble
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.components.blockTouches
 import com.sotto.app.ui.components.isExiting
@@ -317,6 +320,7 @@ fun ChatScreen(
         replyingTo = replyingTo,
         onReply = viewModel::startReply,
         onCancelReply = viewModel::cancelReply,
+        onReact = viewModel::react,
     )
 }
 
@@ -354,6 +358,8 @@ fun ChatContent(
     replyingTo: Message? = null,
     onReply: (Message) -> Unit = {},
     onCancelReply: () -> Unit = {},
+    /** React to a message with an emoji (its current one takes it back). */
+    onReact: (Message, String) -> Unit = { _, _ -> },
 ) {
     val listState = rememberLazyListState()
     val quoteName = contactName ?: "Them"
@@ -486,6 +492,7 @@ fun ChatContent(
                                     onRetry = onRetry,
                                     contactName = quoteName,
                                     onReply = onReply,
+                                    onReact = onReact,
                                     onQuoteClick = { targetId ->
                                         val index = newestFirst.indexOfFirst { it.key == "m:$targetId" }
                                         if (index < 0) {
@@ -930,6 +937,7 @@ private fun ChatRowItem(
     modifier: Modifier = Modifier,
     contactName: String = "",
     onReply: (Message) -> Unit = {},
+    onReact: (Message, String) -> Unit = { _, _ -> },
     onQuoteClick: (String) -> Unit = {},
     highlighted: Boolean = false,
     animateIn: Boolean = false,
@@ -956,12 +964,24 @@ private fun ChatRowItem(
                     isOutgoing = message.isOutgoing,
                     modifier = modifier.padding(vertical = 6.dp),
                 )
-                else -> SwipeToReply(
+                else -> {
+                var picking by remember { mutableStateOf(false) }
+                var pickingMore by remember { mutableStateOf(false) }
+                val haptics = LocalHapticFeedback.current
+                val react = { emoji: String ->
+                    picking = false
+                    pickingMore = false
+                    onReact(message, emoji)
+                }
+                if (pickingMore) {
+                    MoreReactionsSheet(current = message.myReaction, onPick = react, onDismiss = { pickingMore = false })
+                }
+                SwipeToReply(
                     enabled = message.canReply,
                     onReply = { onReply(message) },
                     modifier = modifier
                         .padding(top = if (row.groupedWithPrevious) 2.dp else 8.dp)
-                        .replyHighlight(highlighted),
+                        .replyHighlight(highlighted || picking),
                 ) {
                     MessageBubble(
                         text = when {
@@ -986,7 +1006,35 @@ private fun ChatRowItem(
                         onAnimateInDone = onAnimateInDone,
                         hidden = hidden,
                         onBubblePlaced = onBubblePlaced,
+                        onLongClick = if (message.canReact) {
+                            {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                picking = true
+                            }
+                        } else {
+                            null
+                        },
+                        reactions = BubbleReactions(message.theirReaction, message.myReaction, contactName)
+                            .takeUnless { it.isEmpty },
+                        onReactionsClick = if (message.canReact) ({ picking = true }) else null,
+                        overlay = if (picking) {
+                            {
+                                ReactionPicker(
+                                    current = message.myReaction,
+                                    alignEnd = message.isOutgoing,
+                                    onPick = react,
+                                    onMore = {
+                                        picking = false
+                                        pickingMore = true
+                                    },
+                                    onDismiss = { picking = false },
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
+                }
                 }
             }
         }

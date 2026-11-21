@@ -4,9 +4,11 @@ import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -49,10 +51,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.TextLinkStyles
@@ -101,6 +106,14 @@ fun MessageBubble(
     hidden: Boolean = false,
     /** Where the bubble itself is on screen (root coordinates), for that copy to land on. */
     onBubblePlaced: ((Rect) -> Unit)? = null,
+    /** Holding the bubble: react to it. */
+    onLongClick: (() -> Unit)? = null,
+    /** The emoji reactions on it, shown under its corner; null when none. */
+    reactions: BubbleReactions? = null,
+    /** Tapping the reactions: change or take back the user's. */
+    onReactionsClick: (() -> Unit)? = null,
+    /** Shown above the bubble while it's held, e.g. the reaction picker. */
+    overlay: (@Composable () -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     // [rise] goes from 1 (low and small, as if coming up from below) to 0 (in place);
@@ -133,6 +146,7 @@ fun MessageBubble(
             state = state,
             groupedWithPrevious = groupedWithPrevious,
             onClick = onClick,
+            onLongClick = onLongClick,
             scrambleMs = scrambleMs,
             quote = quote,
             onQuoteClick = onQuoteClick,
@@ -153,6 +167,21 @@ fun MessageBubble(
                     }
                 },
         )
+        overlay?.invoke()
+        if (reactions != null && !reactions.isEmpty && !hidden) {
+            ReactionChip(
+                reactions = reactions,
+                onClick = onReactionsClick,
+                modifier = Modifier
+                    .padding(horizontal = 10.dp)
+                    // Tucked over the bubble's bottom edge, as on WhatsApp.
+                    .layout { measurable, constraints ->
+                        val placeable = measurable.measure(constraints)
+                        val overlap = ReactionOverlap.roundToPx()
+                        layout(placeable.width, placeable.height - overlap) { placeable.place(0, -overlap) }
+                    },
+            )
+        }
         if (failed) {
             // The label says "tap to retry", so it retries too, not just the bubble.
             Text(
@@ -189,6 +218,7 @@ internal val BubbleTextInsetTop = 9.dp
  * [look] blends it in for the copy that flies out of the composer: at 0 it's the
  * composer's plain text (no fill, no time), at 1 a finished bubble.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun BubbleSurface(
     text: String,
@@ -199,6 +229,7 @@ internal fun BubbleSurface(
     onClick: (() -> Unit)?,
     scrambleMs: Long?,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
     look: Float = 1f,
     quote: BubbleQuote? = null,
     onQuoteClick: (() -> Unit)? = null,
@@ -244,7 +275,18 @@ internal fun BubbleSurface(
             .then(modifier)
             .then(surface)
             .clip(shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(
+                when {
+                    onLongClick != null -> Modifier.combinedClickable(
+                        onClickLabel = null,
+                        onLongClickLabel = "React",
+                        onLongClick = onLongClick,
+                        onClick = onClick ?: {},
+                    )
+                    onClick != null -> Modifier.clickable(onClick = onClick)
+                    else -> Modifier
+                },
+            )
             .then(
                 // A quote sits close to the bubble's edge; the text keeps its usual inset.
                 if (quote == null) {
@@ -291,6 +333,41 @@ internal fun BubbleSurface(
             }
         }
     }
+}
+
+/** The reactions on a bubble: the contact's emoji and the user's, each null when they gave none. */
+data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String = "Them") {
+    val isEmpty: Boolean get() = theirs == null && mine == null
+}
+
+/** How far the reaction chip reaches up over the bubble. */
+private val ReactionOverlap = 6.dp
+
+/** The reactions under a bubble: one emoji each, or one emoji and "2" when both gave the same. */
+@Composable
+private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val colors = MaterialTheme.colorScheme
+    val shape = RoundedCornerShape(12.dp)
+    val label = when {
+        reactions.theirs != null && reactions.theirs == reactions.mine -> "${reactions.mine} 2"
+        else -> listOfNotNull(reactions.theirs, reactions.mine).joinToString(" ")
+    }
+    val description = listOfNotNull(
+        reactions.theirs?.let { "${reactions.theirName} reacted $it" },
+        reactions.mine?.let { "You reacted $it" },
+    ).joinToString(", ")
+    Text(
+        text = label,
+        style = MaterialTheme.typography.bodyMedium,
+        color = colors.onSurface,
+        modifier = modifier
+            .clip(shape)
+            .background(colors.surfaceContainerHigh, shape)
+            .border(1.dp, Aurora.colors.glassBorder, shape)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Change your reaction", onClick = onClick) else Modifier)
+            .semantics { contentDescription = description }
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    )
 }
 
 /** What a reply bubble shows of the message it answers. [author] is "You" or the contact's name. */

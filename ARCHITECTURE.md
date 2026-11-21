@@ -301,3 +301,11 @@
 **Why**: The owner asked for WhatsApp-style replies. A separate kind of envelope would show the relay which messages are replies; inside the encryption the relay sees an ordinary message, as with `ProfilePayload`. Sending the quote rather than only the id means the reply still shows what it answers when the original was deleted or disappeared on either phone, or arrived before the receiver joined from a new install.
 
 **Tradeoff**: Sotto 0.6.9 and older don't know the prefix, and show a reply from a newer phone as its raw payload. Everyone has to update together. The quote is a copy, so editing or deleting the original never changes it.
+
+## ADR-28: A reaction is an unstored message naming another
+
+**Decision**: A reaction's plaintext is `"\u0001sotto/reaction/v1:" + {"to", "emoji", "mine"}` (`ReactionPayload`), sent like a profile: an ordinary envelope that neither phone stores as a message. `to` and `mine` name the message the way a reply names its original (ADR-27). An empty `emoji` takes the reaction back. Each message holds at most one reaction from each side, in `messages.myReaction` and `theirReaction` (Room 13). The sender shows its reaction at once and puts the old one back if the send fails. The receiver drops a reaction to a message it no longer has, or to one outside the sender's chat. A reaction to the user's own message is notified, but counts as no unread message and leaves the chat's preview alone, as on WhatsApp.
+
+**Why**: The owner asked for reactions "like in facebook or whatsapp". As with replies, a separate kind of envelope would show the relay which messages are reactions. Chats are one-to-one, so two columns hold every reaction a message can have, and a reaction goes when its message does (deleted, disappeared, or the chat cleared).
+
+**Tradeoff**: Sotto 0.7.1 and older show a reaction as raw payload, so everyone has to update together. A reaction that can't be sent isn't queued: it goes back, and the user is told to try again. A reaction from "+" accepts any short emoji-looking text (`ReactionPayload.isEmoji`), not only the offered ones.

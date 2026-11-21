@@ -31,7 +31,23 @@ internal fun messageNotificationContent(
     unread: List<NotifiedMessage>,
     unreadCount: Int,
     latest: NotifiedMessage,
+    /** [latest] is a reaction, which isn't among [unread] (nor counted in [unreadCount]). */
+    latestIsReaction: Boolean = false,
 ): MessageNotificationContent {
+    if (latestIsReaction) {
+        val listed = unread + latest
+        val howMany = when (unreadCount) {
+            0 -> "New reaction"
+            1 -> "New message and a reaction"
+            else -> "$unreadCount new messages and a reaction"
+        }
+        return when (mode) {
+            LockScreenPreviewMode.SHOW_ALL -> MessageNotificationContent(senderName, latest.text, listed, unreadCount)
+            LockScreenPreviewMode.SENDER_ONLY,
+            LockScreenPreviewMode.HIDE_BODY -> MessageNotificationContent(senderName, howMany, emptyList(), unreadCount)
+            LockScreenPreviewMode.HIDE_ALL -> MessageNotificationContent("Sotto", howMany, emptyList(), unreadCount)
+        }
+    }
     val listed = unread.ifEmpty { listOf(latest) }
     val count = maxOf(unreadCount, listed.size)
     val howMany = if (count == 1) "New message" else "$count new messages"
