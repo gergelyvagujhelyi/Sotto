@@ -73,6 +73,9 @@ services:
       APP_DOWNLOAD_URL: ${APP_DOWNLOAD_URL:-}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
       MAX_MESSAGES_PER_MINUTE: ${MAX_MESSAGES_PER_MINUTE:-60}
+      # Accept each auth token once (refuse replays). Only with every phone on 0.7.3+:
+      # older apps sometimes sent identical tokens. Off unless .env turns it on.
+      AUTH_SINGLE_USE_TOKENS: ${AUTH_SINGLE_USE_TOKENS:-false}
       # nginx reaches the server over the compose network, not from 127.0.0.1.
       # Without this every client shares nginx's IP for IP rate limiting.
       # Only nginx can reach server:8000 (expose, not published).
