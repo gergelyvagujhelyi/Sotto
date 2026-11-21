@@ -27,6 +27,9 @@ data class MessageEntity(
     val replyToId: String? = null,
     val replyQuote: String? = null,
     val replyToOwn: Boolean = false,
+    /** The emoji the user reacted to this message with, and the contact's; null when none. */
+    val myReaction: String? = null,
+    val theirReaction: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

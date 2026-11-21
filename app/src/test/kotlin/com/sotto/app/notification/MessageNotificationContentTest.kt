@@ -67,4 +67,27 @@ class MessageNotificationContentTest {
         assertEquals("2 missed calls", missedCallsText(2))
         assertEquals("5 missed calls", missedCallsText(5))
     }
+
+    @Test
+    fun `a reaction is listed after the unread messages and isn't counted as one`() {
+        val reaction = NotifiedMessage("Reacted ❤️ to \"Fika?\"", 4_000)
+        val content = messageNotificationContent(LockScreenPreviewMode.SHOW_ALL, "Maja", unread, 3, reaction, latestIsReaction = true)
+        assertEquals(listOf("Hej!", "Är du hemma?", "Ring mig", reaction.text), content.messages.map { it.text })
+        assertEquals(reaction.text, content.text)
+        assertEquals(3, content.count)
+
+        val alone = messageNotificationContent(LockScreenPreviewMode.SHOW_ALL, "Maja", emptyList(), 0, reaction, latestIsReaction = true)
+        assertEquals(listOf(reaction.text), alone.messages.map { it.text })
+        assertEquals(0, alone.count)
+    }
+
+    @Test
+    fun `with text hidden a reaction says only that there is one`() {
+        val reaction = NotifiedMessage("Reacted ❤️ to \"Fika?\"", 4_000)
+        assertEquals("New reaction", messageNotificationContent(LockScreenPreviewMode.HIDE_BODY, "Maja", emptyList(), 0, reaction, true).text)
+        assertEquals("3 new messages and a reaction", messageNotificationContent(LockScreenPreviewMode.SENDER_ONLY, "Maja", unread, 3, reaction, true).text)
+        val hidden = messageNotificationContent(LockScreenPreviewMode.HIDE_ALL, "Maja", unread, 3, reaction, true)
+        assertEquals("Sotto", hidden.title)
+        assertTrue(hidden.messages.isEmpty())
+    }
 }

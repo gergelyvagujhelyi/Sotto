@@ -98,6 +98,12 @@ interface MessageDao {
     @Query("SELECT id FROM messages WHERE conversationId = :conversationId AND isOutgoing = 1 ORDER BY timestamp DESC LIMIT :limit")
     suspend fun getOutgoingIds(conversationId: String, limit: Int): List<String>
 
+    @Query("UPDATE messages SET myReaction = :emoji WHERE id = :messageId")
+    suspend fun setMyReaction(messageId: String, emoji: String?)
+
+    @Query("UPDATE messages SET theirReaction = :emoji WHERE id = :messageId")
+    suspend fun setTheirReaction(messageId: String, emoji: String?)
+
     @Query("SELECT * FROM messages WHERE id = :messageId")
     suspend fun getById(messageId: String): MessageEntity?
 

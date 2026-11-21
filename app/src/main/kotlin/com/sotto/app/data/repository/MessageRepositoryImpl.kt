@@ -18,6 +18,7 @@ import com.sotto.app.data.remote.dto.SendMessageRequest
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ProfilePayload
+import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.ReplyRef
 import com.sotto.app.domain.repository.CryptoEngine
@@ -56,6 +57,8 @@ class MessageRepositoryImpl @Inject constructor(
 ) : MessageRepository {
 
     private val peerLocks = ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
+    /** One reaction send at a time, so quick changes reach the contact in the order made. */
+    private val reactionLock = kotlinx.coroutines.sync.Mutex()
     private val headerJson = Json { ignoreUnknownKeys = true }
 
     /** Track consecutive decrypt failures per message to avoid infinite retry. */
@@ -252,21 +255,52 @@ class MessageRepositoryImpl @Inject constructor(
      */
     override suspend fun sendProfile(recipientId: String, name: String) =
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            val senderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
-            val envelope = encryptFor(recipientId, ProfilePayload.encode(name).toByteArray(Charsets.UTF_8))
-            val sigPayload = buildMessageSigPayload(senderId, recipientId, envelope.nonce, envelope.ciphertext)
-            apiService.sendMessage(
-                SendMessageRequest(
-                    recipientId = recipientId,
-                    encryptedBody = Base64.encodeToString(envelope.ciphertext, Base64.NO_WRAP),
-                    nonce = Base64.encodeToString(envelope.nonce, Base64.NO_WRAP),
-                    signature = Base64.encodeToString(keyManager.sign(sigPayload), Base64.NO_WRAP),
-                    pqcSignature = signWithMlDsa(sigPayload),
-                    clientMessageId = UUID.randomUUID().toString(),
-                )
-            )
-            Unit
+            sendUnstored(recipientId, ProfilePayload.encode(name))
         }
+
+    /**
+     * Shown at once, then sent like a profile: a [ReactionPayload] in an ordinary envelope,
+     * stored as no message on either side. If it can't be sent, the reaction goes back to
+     * what it was (unless the user changed it again meanwhile). Not cancellable once
+     * started: the ratchet has advanced by then.
+     */
+    override suspend fun sendReaction(message: Message, recipientId: String, emoji: String?) =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            reactionLock.withLock {
+                val me = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+                val entity = messageDao.getById(message.id) ?: return@withLock
+                // Only a message between the user and this contact.
+                val peer = if (entity.isOutgoing) entity.recipientId else entity.senderId
+                require(peer == recipientId) { "Not a message of this chat" }
+                val previous = entity.myReaction
+                if (previous == emoji) return@withLock
+                messageDao.setMyReaction(entity.id, emoji)
+                val to = if (entity.isOutgoing) ReceiptManager.relayMessageId(me, entity.id) else entity.id
+                try {
+                    sendUnstored(recipientId, ReactionPayload.encode(to, emoji, mine = entity.isOutgoing))
+                } catch (e: Exception) {
+                    if (messageDao.getById(entity.id)?.myReaction == emoji) messageDao.setMyReaction(entity.id, previous)
+                    throw e
+                }
+            }
+        }
+
+    /** Encrypt, sign and send [payload] to [recipientId] like a message, storing nothing. */
+    private suspend fun sendUnstored(recipientId: String, payload: String) {
+        val senderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+        val envelope = encryptFor(recipientId, payload.toByteArray(Charsets.UTF_8))
+        val sigPayload = buildMessageSigPayload(senderId, recipientId, envelope.nonce, envelope.ciphertext)
+        apiService.sendMessage(
+            SendMessageRequest(
+                recipientId = recipientId,
+                encryptedBody = Base64.encodeToString(envelope.ciphertext, Base64.NO_WRAP),
+                nonce = Base64.encodeToString(envelope.nonce, Base64.NO_WRAP),
+                signature = Base64.encodeToString(keyManager.sign(sigPayload), Base64.NO_WRAP),
+                pqcSignature = signWithMlDsa(sigPayload),
+                clientMessageId = UUID.randomUUID().toString(),
+            )
+        )
+    }
 
     override suspend fun markDelivered(messageId: String) {
         messageDao.updateState(messageId, MessageState.DELIVERED.name)
@@ -628,6 +662,12 @@ class MessageRepositoryImpl @Inject constructor(
             receivedIds.add(dto.messageId)
             return
         }
+        // A reaction: it goes on the message it names, and is no message of its own.
+        if (ReactionPayload.isReaction(plaintextStr)) {
+            applyReceivedReaction(dto.senderId, localUserId, plaintextStr)
+            receivedIds.add(dto.messageId)
+            return
+        }
 
         val conversationId = getOrCreateConversationId(dto.senderId)
 
@@ -702,6 +742,36 @@ class MessageRepositoryImpl @Inject constructor(
                 conversationId = conversationId,
             )
         }
+    }
+
+    /**
+     * A contact reacted to a message of their chat (or took their reaction back). Dropped
+     * when that message isn't on this phone any more, or isn't one of that chat. A reaction
+     * to one of the user's own messages is notified, as on WhatsApp, but isn't counted
+     * as unread and doesn't change the chat's preview.
+     */
+    private suspend fun applyReceivedReaction(senderId: String, me: String, plaintext: String) {
+        val reaction = ReactionPayload.decode(plaintext) ?: return
+        val conversation = conversationDao.getByContactId(senderId) ?: return
+        // "mine" is the sender's: their own message, stored here under the relay's id.
+        val targetId = if (reaction.mine) reaction.to else findOwnByRelayId(conversation.id, me, reaction.to) ?: return
+        val target = messageDao.getById(targetId) ?: return
+        // Only the contact's reactions arrive here (the user's own are stored when sent).
+        // "mine" is theirs, so the target is the user's message exactly when it's false.
+        if (target.conversationId != conversation.id || target.isOutgoing == reaction.mine) return
+        if (!reaction.mine && target.recipientId != senderId) return
+        if (reaction.mine && target.senderId != senderId) return
+        messageDao.setTheirReaction(target.id, reaction.emoji)
+
+        val emoji = reaction.emoji ?: return
+        if (!target.isOutgoing || !conversation.isApproved || conversation.id == activeConversationId) return
+        notificationManager.showMessageNotification(
+            senderId = senderId,
+            senderName = contactDao.getByUserId(senderId)?.displayName ?: senderId.take(8),
+            messageBody = reactionNotificationText(emoji, target.plaintext),
+            conversationId = conversation.id,
+            isReaction = true,
+        )
     }
 
     private enum class SigCheck { VALID, INVALID, PQC_MISSING }
@@ -1040,6 +1110,12 @@ class MessageRepositoryImpl @Inject constructor(
     }
 }
 
+/** What a reaction's notification says, e.g. `Reacted ❤️ to "See you at 6"`. */
+internal fun reactionNotificationText(emoji: String, original: String): String {
+    val quote = original.trim().replace(Regex("\\s+"), " ").let { if (it.length > 60) it.take(59).trimEnd() + "…" else it }
+    return if (quote.isEmpty()) "Reacted $emoji to your message" else "Reacted $emoji to \"$quote\""
+}
+
 private fun MessageEntity.toDomain(localUserId: String): Message {
     return Message(
         id = id,
@@ -1052,5 +1128,7 @@ private fun MessageEntity.toDomain(localUserId: String): Message {
         expiresAt = expiresAt?.let { Instant.fromEpochMilliseconds(it) },
         isOutgoing = isOutgoing,
         replyTo = replyToId?.let { ReplyRef(it, replyQuote.orEmpty(), replyToOwn) },
+        myReaction = myReaction,
+        theirReaction = theirReaction,
     )
 }

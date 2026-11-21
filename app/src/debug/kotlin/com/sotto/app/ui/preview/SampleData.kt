@@ -85,17 +85,17 @@ internal object SampleData {
         message("m12", at(0, 9, 13), "On my way", outgoing = true, state = MessageState.SENDING),
     )
 
-    /** A chat with replies and links, for the "chat-reply" sample. */
+    /** A chat with replies, reactions and links, for the "chat-reply" sample. */
     val replyMessages: List<Message> = listOf(
         message("r1", at(0, 9, 2), "Fika at Vete-Katten at 3? Their menu: https://www.vetekatten.se/meny", outgoing = false),
         message("r2", at(0, 9, 4), "Can't at 3, I have the dentist 🦷", outgoing = true, state = MessageState.SEEN),
-        message("r3", at(0, 9, 5), "Then after work?", outgoing = false),
+        message("r3", at(0, 9, 5), "Then after work?", outgoing = false).copy(myReaction = "👍"),
         message("r4", at(0, 9, 6), "Yes! 5:30 works", outgoing = true, state = MessageState.SEEN)
             .copy(replyTo = ReplyRef("r3", "Then after work?", toOwn = false)),
         message("r5", at(0, 9, 8), "Poor you. Good luck!", outgoing = false)
-            .copy(replyTo = ReplyRef("r2", "Can't at 3, I have the dentist 🦷", toOwn = true)),
+            .copy(myReaction = "🙏", replyTo = ReplyRef("r2", "Can't at 3, I have the dentist 🦷", toOwn = true)),
         message("r6", at(0, 9, 9), "The cardamom buns are the best", outgoing = true, state = MessageState.DELIVERED)
-            .copy(replyTo = ReplyRef("r1", "Fika at Vete-Katten at 3? Their menu: https://www.vetekatten.se/meny", toOwn = false)),
+            .copy(theirReaction = "❤️", myReaction = "❤️", replyTo = ReplyRef("r1", "Fika at Vete-Katten at 3? Their menu: https://www.vetekatten.se/meny", toOwn = false)),
     )
 
     val contacts = listOf(

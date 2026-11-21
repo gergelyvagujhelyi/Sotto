@@ -8,6 +8,11 @@ interface MessageRepository {
     /** Send [plaintext]; with [replyTo], as a reply to that message of this chat. */
     suspend fun sendMessage(conversationId: String, recipientId: String, plaintext: String, replyTo: Message? = null): Message
     /**
+     * React to [message] with [emoji] (null takes the reaction back), and tell its chat's
+     * contact. Shown at once; undone if it can't be sent.
+     */
+    suspend fun sendReaction(message: Message, recipientId: String, emoji: String?)
+    /**
      * Send the user's own [name] to [recipientId], end-to-end encrypted like a message.
      * Nothing is stored or shown on this side.
      */

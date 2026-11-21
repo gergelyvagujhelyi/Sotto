@@ -6,6 +6,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.2 — 2026-11-21
+
+- **Reactions** — Hold a message to react to it with an emoji, as in WhatsApp: 👍 ❤️ 😂 😮 😢 🙏, or **+** for more. The reaction shows under the message's corner; when you both pick the same one it shows once with a 2. Tap a reaction (or hold the message again) to change yours; picking the same emoji again takes it back. You get a notification when someone reacts to your message, but it doesn't count as an unread message. Reactions travel inside the encryption like messages. **Both phones need this version:** an older Sotto shows a reaction as unreadable text.
+
 ## 0.7.1 — 2026-11-20
 
 - **Addresses without `https://` are links too** — `444.hu`, `sl.se` or `index.hu/belfold` now open on tap, as in WhatsApp. 0.7.0 only made links of addresses starting with `https://`, `http://` or `www.`. An address counts when it ends in a real domain ending (every country's, and the common ones such as `.com` or `.org`), so file names such as `notes.txt` or `README.md` and email addresses stay plain text.

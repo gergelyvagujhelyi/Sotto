@@ -256,6 +256,36 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * React to [message] with [emoji]; picking the reaction it already has takes it back.
+     * Checked like sending: not to a blocked contact, an unanswered request, and so on.
+     */
+    fun react(message: Message, emoji: String) {
+        if (!message.canReact) return
+        val next = emoji.takeUnless { it == message.myReaction }
+        viewModelScope.launch {
+            val conv = conversationRepository.getConversation(conversationId).first()
+            val blocked = when {
+                conv == null -> "This conversation no longer exists."
+                conversationRepository.observeBlocked(contactId).first() ->
+                    "You blocked this contact. Unblock them to react."
+                conv.peerDeleted -> "This user has deleted their account."
+                conv.needsSessionReset -> "Peer rotated keys. Tap the banner above to resume sending."
+                !conv.isApproved -> "Accept this message request before reacting."
+                else -> null
+            }
+            if (blocked != null) {
+                _sendError.value = blocked
+                return@launch
+            }
+            try {
+                messageRepository.sendReaction(message, contactId, next)
+            } catch (e: Exception) {
+                _sendError.value = "Couldn't send the reaction. Check your connection and try again."
+            }
+        }
+    }
+
     fun reEstablishSession() {
         _isReEstablishing.value = true
         _sendError.value = null

@@ -83,6 +83,8 @@ class ChatNotificationManager @Inject constructor(
         senderName: String,
         messageBody: String,
         conversationId: String? = null,
+        /** [messageBody] is a reaction: it isn't stored, so it's listed after the unread messages. */
+        isReaction: Boolean = false,
     ) {
         if (!hasNotificationPermission()) return
 
@@ -99,6 +101,7 @@ class ChatNotificationManager @Inject constructor(
             unread = unread,
             unreadCount = conversationId?.let { messageDao.countUnseenIncoming(it) } ?: 0,
             latest = NotifiedMessage(messageBody, System.currentTimeMillis()),
+            latestIsReaction = isReaction,
         )
 
         val visibility = when (settings.lockScreenPreview) {
