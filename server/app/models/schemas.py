@@ -146,9 +146,8 @@ class HealthResponse(BaseModel):
     service: str = "sotto-relay"
     # ...and whether a new account here needs an invite.
     invite_required: bool = False
-    # The APK of the app release that goes with this relay (same version), once it can be
-    # downloaded; null before. A phone on an older app offers it as an update.
-    app_download_url: Optional[str] = None
+    # No download link: phones hear whether their update is out from the Sotto-App-Ready
+    # header, and update through SourceDrop; the invite page links to the repository.
 
 
 class InviteResponse(BaseModel):

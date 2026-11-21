@@ -337,5 +337,4 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     return HealthResponse(
         version=app.version,
         invite_required=config.INVITE_ONLY and founded,
-        app_download_url=app_release_service.app_release.download_url,
     )

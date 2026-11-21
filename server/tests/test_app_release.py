@@ -34,7 +34,7 @@ async def test_not_ready_while_the_apk_is_missing():
     seen = []
     async with _client(404, seen=seen) as client:
         assert await release.check(client) is False
-    assert release.download_url is None
+    assert release.ready is False
     assert seen == [("HEAD", URL)]
 
 
@@ -42,14 +42,14 @@ async def test_ready_once_github_redirects_to_the_apk():
     release = AppRelease(TEMPLATE, "9.9.9")
     async with _client(302) as client:
         assert await release.check(client) is True
-    assert release.download_url == URL
+    assert release.ready is True
 
 
 async def test_a_network_error_is_not_ready_and_does_not_raise():
     release = AppRelease(TEMPLATE, "9.9.9")
     async with _client(httpx.ConnectError) as client:
         assert await release.check(client) is False
-    assert release.download_url is None
+    assert release.ready is False
 
 
 async def test_watch_checks_until_the_apk_appears_then_stops():
@@ -59,7 +59,7 @@ async def test_watch_checks_until_the_apk_appears_then_stops():
         release.watch(interval_s=0, client=_client(404, 404, 302, seen=seen)), timeout=5
     )
     assert len(seen) == 3
-    assert release.download_url == URL
+    assert release.ready is True
 
 
 async def test_without_a_release_address_nothing_is_checked():
@@ -67,17 +67,18 @@ async def test_without_a_release_address_nothing_is_checked():
     seen = []
     await asyncio.wait_for(release.watch(interval_s=0, client=_client(302, seen=seen)), timeout=5)
     assert seen == []
-    assert release.download_url is None
+    assert release.ready is False
 
 
-async def test_health_carries_the_download_link_only_when_ready(client: AsyncClient, monkeypatch):
+async def test_health_never_offers_a_download(client: AsyncClient, monkeypatch):
     release = AppRelease(TEMPLATE, "9.9.9")
     monkeypatch.setattr(app_release_module, "app_release", release)
 
-    assert (await client.get("/health")).json()["app_download_url"] is None
-
-    release.ready = True
-    assert (await client.get("/health")).json()["app_download_url"] == URL
+    for ready in (False, True):
+        release.ready = ready
+        body = (await client.get("/health")).text
+        assert "app_download_url" not in body
+        assert ".apk" not in body
 
 
 def test_the_suite_never_checks_github():
