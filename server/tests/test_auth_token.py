@@ -3,7 +3,12 @@
 import base64
 
 import pytest
-from pqcrypto.sign.ml_dsa_65 import keygen, sign
+from pqcrypto.sign.ml_dsa_65 import sign
+
+try:  # pqcrypto 1.x
+    from pqcrypto.sign.ml_dsa_65 import keygen
+except ImportError:  # 0.x, as pinned for the relay
+    from pqcrypto.sign.ml_dsa_65 import generate_keypair as keygen
 
 from app import config
 from app.auth import TOKEN_MAX_AGE_MS, verify_token
