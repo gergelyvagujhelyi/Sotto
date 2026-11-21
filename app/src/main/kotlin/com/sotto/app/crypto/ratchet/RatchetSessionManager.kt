@@ -166,14 +166,15 @@ class RatchetSessionManager @Inject constructor(
 
         // Regular message: try current session, then previous ones.
         var duplicate: DuplicateMessageException? = null
-        var lastError: Exception? = null
+        // Why each session failed (they can differ: wrong chain in one, a bad tag in another).
+        val errors = mutableListOf<Exception>()
         for (state in record.all()) {
             try {
                 return@withLock decryptInto(peer.userId, record, state, header, envelope.ciphertext, headerBytes)
             } catch (e: DuplicateMessageException) {
                 duplicate = e
             } catch (e: Exception) {
-                lastError = e
+                errors += e
             }
         }
         if (duplicate == null) {
@@ -185,7 +186,8 @@ class RatchetSessionManager @Inject constructor(
                 throw DuplicateMessageException("Message from a retired session")
             }
         }
-        throw duplicate ?: SecurityException("No session could decrypt the message", lastError)
+        throw duplicate ?: SecurityException("No session could decrypt the message", errors.lastOrNull())
+            .apply { errors.dropLast(1).forEach(::addSuppressed) }
     }
 
     override suspend fun resetSession(peerUserId: String) = mutex.withLock {
@@ -241,10 +243,7 @@ class RatchetSessionManager @Inject constructor(
         return state
     }
 
-    private fun createInitiatorSession(peer: PeerKeys): RatchetState {
-        val local = keyManager.loadIdentityKeyPair()
-            ?: throw IllegalStateException("No local identity")
-
+    private fun createInitiatorSession(peer: PeerKeys): RatchetState = keyManager.withIdentityKeyPair { local ->
         var kemSecret = ByteArray(0)
         var kemCiphertext: ByteArray? = null
         if (peer.pqcEncapsulationKey.isNotEmpty()) {
@@ -263,8 +262,6 @@ class RatchetSessionManager @Inject constructor(
             initiatorIdentityKey = local.publicIdentityKey,
             responderIdentityKey = peer.publicIdentityKey,
         )
-        local.privateIdentityKey.fill(0)
-        local.privateSigningKey.fill(0)
 
         val state = ratchet.initAlice(sk, peer.publicIdentityKey.copyOf())
         sk.fill(0)
@@ -273,13 +270,10 @@ class RatchetSessionManager @Inject constructor(
         state.confirmed = false
         state.pendingKemCiphertext = kemCiphertext
         state.pqcEstablished = pqc
-        return state
-    }
+        state
+    } ?: throw IllegalStateException("No local identity")
 
-    private fun createResponderSession(peer: PeerKeys, init: SessionInit): RatchetState {
-        val local = keyManager.loadIdentityKeyPair()
-            ?: throw IllegalStateException("No local identity")
-
+    private fun createResponderSession(peer: PeerKeys, init: SessionInit): RatchetState = keyManager.withIdentityKeyPair { local ->
         var kemSecret = ByteArray(0)
         val kemCt = init.kemCiphertext
         if (kemCt != null) {
@@ -313,15 +307,13 @@ class RatchetSessionManager @Inject constructor(
             sk.copyOf(),
             DhKeyPair(local.publicIdentityKey.copyOf(), local.privateIdentityKey.copyOf()),
         )
-        local.privateIdentityKey.fill(0)
-        local.privateSigningKey.fill(0)
         sk.fill(0)
         state.sessionTag = init.sessionTag
         state.isInitiator = false
         state.confirmed = true
         state.pqcEstablished = pqc
-        return state
-    }
+        state
+    } ?: throw IllegalStateException("No local identity")
 
     private fun deriveSessionSecret(
         localPrivateIdentityKey: ByteArray,
@@ -395,12 +387,8 @@ class RatchetSessionManager @Inject constructor(
         }
     }
 
-    private fun localWinsTie(peer: PeerKeys): Boolean {
-        val local = keyManager.loadIdentityKeyPair() ?: return false
-        local.privateIdentityKey.fill(0)
-        local.privateSigningKey.fill(0)
-        return local.publicIdentityKey.toHex() < peer.publicIdentityKey.toHex()
-    }
+    private fun localWinsTie(peer: PeerKeys): Boolean =
+        keyManager.withIdentityKeyPair { it.publicIdentityKey.toHex() < peer.publicIdentityKey.toHex() } ?: false
 
     private fun newSessionTag(): String {
         val tag = ByteArray(SESSION_TAG_BYTES).also { secureRandom.nextBytes(it) }

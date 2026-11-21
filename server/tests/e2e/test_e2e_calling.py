@@ -12,6 +12,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.e2e.conftest import User, bootstrap_user
+from tests.auth_helpers import fresh_ts_ms
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -196,7 +197,7 @@ def test_ws_call_signal_delivery():
         bob_id, bob_pk = _boot("ws_bob")
 
         def _token(pk, uid):
-            ts = str(int(_time.time() * 1000))
+            ts = str(fresh_ts_ms())
             payload = f"{uid}.{ts}"
             sig = pk.sign(payload.encode())
             return f"{payload}.{base64.b64encode(sig).decode()}"
@@ -254,7 +255,7 @@ def test_ws_ice_restart_delivery():
         bob_id, bob_pk = _boot("ws_bob_restart")
 
         def _token(pk, uid):
-            ts = str(int(_time.time() * 1000))
+            ts = str(fresh_ts_ms())
             payload = f"{uid}.{ts}"
             sig = pk.sign(payload.encode())
             return f"{payload}.{base64.b64encode(sig).decode()}"
