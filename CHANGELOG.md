@@ -4,6 +4,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.3 — 2026-11-21
+
 - **A departure board for sent messages** — A message you send now settles like a split-flap board at a station or airport: each letter flips forward through the board's letters and lands on the real one, the flaps folding over their middle. It's quicker too, at most 0.45 s instead of 0.8 s. Board letters stay within their character's width instead of running into each other.
 - **Broken conversations repair themselves every time** — When a contact's messages can't be decrypted, Sotto asks their phone to start a new session. Until now it asked only once per contact while the app was running: if the same contact's session broke again later, their messages stayed unreadable until Sotto was restarted or you tapped re-establish. Now it asks again whenever a session that worked breaks.
 - **Sending survives a blip** — If the relay answers with a server error (it's restarting, say) or the connection drops mid-send, Sotto now tries again twice within about 2 seconds before showing "Not delivered". The same goes for fetching messages and acknowledging them. Signing up, invites, key changes, deleting your account, receipts and call setup are never sent twice.
@@ -17,6 +21,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
   - The download always comes from Sotto's official releases. The relay only says *whether* the update is out, so a relay can't send you to some other file. Your phone never contacts GitHub for this.
   - This version is the first that shows it, so it starts helping from the update after this one.
 - **Relay: says which version it runs, and when its app is out** — Every HTTP answer has `Sotto-Relay-Version` and `Sotto-App-Ready` headers, and the WebSocket's `auth_ok` has `relay_version` and `app_ready`. The release workflow tells the relay when the APK is published with `POST /v1/app-release`, signed with the workflow's own Ed25519 key (GitHub secret `CI_RELEASE_KEY`; the relay checks it against `CI_RELEASE_PUBLIC_KEY`, whose default is the official key). The relay then tells connected phones (`app_release`) and pushes the others. In case that call doesn't come (a restart, or CI couldn't reach the relay), the relay also looks for the APK itself every 5 minutes (`APP_RELEASE_APK_URL`; empty turns it off). `/health` has `app_download_url` once the APK is out.
+- **Reacting leaves the chat as it is** — Holding a message to react closed the keyboard, so the whole chat jumped down, and **+** opened a sheet that did the same. Now the keyboard stays open and nothing moves: the reactions open over the message, and **+** turns them into a grid of every reaction in the same place. Tap outside or press Back to close them.
 
 ## 0.7.2 — 2026-11-21
 

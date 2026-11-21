@@ -1,5 +1,16 @@
 package com.sotto.app.ui.chat
 
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -7,7 +18,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,12 +27,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,59 +52,91 @@ import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.ui.theme.Aurora
 
 /**
- * The quick reactions over a held message, as on WhatsApp: six emoji and "+" for more.
- * The user's current reaction is ringed; picking it again takes it back. Shown above
- * the message, or below it when the message is at the top of the screen.
+ * The quick reactions over a held message, as on WhatsApp: six emoji and "+" for more,
+ * which turns the bar into a grid of every reaction ([expanded]). The user's current
+ * reaction is ringed; picking it again takes it back. Shown above the message, or below
+ * it when the message is at the top of the screen.
+ *
+ * Never takes focus: a focused popup (or a bottom sheet) takes it from the text box, the
+ * keyboard closes, and the whole chat jumps. So the keyboard stays as it was, and Back is
+ * handled by the chat (it closes this). A popup that doesn't take focus lets taps outside
+ * it through to the chat, though, so this one covers the whole window: a tap anywhere but
+ * the picker only closes it, instead of also opening a link or retrying a message.
  */
 @Composable
 internal fun ReactionPicker(
     current: String?,
     alignEnd: Boolean,
+    expanded: Boolean,
     onPick: (String) -> Unit,
     onMore: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val gap = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.roundToPx() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val gap = with(density) { 6.dp.roundToPx() }
+    // The popup covers the status bar too; the picker stays below it.
+    val statusBar = WindowInsets.statusBars.getTop(density)
+    // Where the held message is, in window coordinates (the popup itself fills the window).
+    var anchor by remember { mutableStateOf<IntRect?>(null) }
+    val wholeWindow = remember { WholeWindow { anchor = it } }
     Popup(
-        popupPositionProvider = AboveOrBelow(alignEnd, gap),
+        popupPositionProvider = wholeWindow,
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+        // Not clipped: the window starts under the status bar, where the anchor coordinates start too.
+        properties = PopupProperties(focusable = false, dismissOnClickOutside = false, clippingEnabled = false),
     ) {
-        val shape = RoundedCornerShape(28.dp)
-        Row(
-            modifier = Modifier
-                .padding(4.dp)
-                .shadow(6.dp, shape)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, Aurora.colors.glassBorder, shape)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        Box(Modifier.fillMaxSize()) {
+            // Behind the picker: a tap anywhere else only closes it.
+            Spacer(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onDismiss() } })
+            val bounds = anchor ?: return@Box
+            Layout(content = {
+                if (expanded) MoreReactions(current, onPick) else QuickReactions(current, onPick, onMore)
+            }) { measurables, constraints ->
+                val window = IntSize(constraints.maxWidth, constraints.maxHeight)
+                val picker = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
+                val at = aboveOrBelow(bounds, window, layoutDirection, IntSize(picker.width, picker.height), alignEnd, gap, statusBar)
+                layout(window.width, window.height) { picker.place(at) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickReactions(current: String?, onPick: (String) -> Unit, onMore: () -> Unit) {
+    val shape = RoundedCornerShape(28.dp)
+    Row(
+        modifier = Modifier
+            .padding(4.dp)
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, Aurora.colors.glassBorder, shape)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ReactionPayload.QUICK.forEach { emoji ->
+            EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) })
+        }
+        // A reaction from "+" that isn't a quick one shows ringed in the "+" place.
+        val other = current?.takeIf { it !in ReactionPayload.QUICK }
+        if (other != null) {
+            EmojiChoice(other, selected = true, onClick = { onPick(other) })
+        }
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                .clickable(onClickLabel = "More reactions", role = Role.Button, onClick = onMore),
+            contentAlignment = Alignment.Center,
         ) {
-            ReactionPayload.QUICK.forEach { emoji ->
-                EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) })
-            }
-            // A reaction from "+" that isn't a quick one shows ringed in the "+" place.
-            val other = current?.takeIf { it !in ReactionPayload.QUICK }
-            if (other != null) {
-                EmojiChoice(other, selected = true, onClick = { onPick(other) })
-            }
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                    .clickable(onClickLabel = "More reactions", role = Role.Button, onClick = onMore),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Rounded.Add,
-                    contentDescription = "More reactions",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+            Icon(
+                Icons.Rounded.Add,
+                contentDescription = "More reactions",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -122,43 +161,59 @@ private fun EmojiChoice(emoji: String, selected: Boolean, onClick: () -> Unit, s
     }
 }
 
-/** All the reactions behind "+", in a sheet. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** All the reactions behind "+": a scrolling grid in the picker's place. */
 @Composable
-internal fun MoreReactionsSheet(current: String?, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+private fun MoreReactions(current: String?, onPick: (String) -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(6),
+        contentPadding = PaddingValues(6.dp),
+        modifier = Modifier
+            .padding(4.dp)
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, Aurora.colors.glassBorder, shape)
+            .size(width = 300.dp, height = 248.dp),
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(52.dp),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
-            modifier = Modifier.navigationBarsPadding(),
-        ) {
-            items(ReactionPayload.MORE.distinct()) { emoji ->
-                Box(Modifier.padding(4.dp), contentAlignment = Alignment.Center) {
-                    EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) }, size = 44)
-                }
+        items(ReactionPayload.MORE.distinct()) { emoji ->
+            Box(Modifier.padding(2.dp), contentAlignment = Alignment.Center) {
+                EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) }, size = 44)
             }
         }
     }
 }
 
-/** Above the anchor, lined up with its [alignEnd] side; below it when there's no room above. */
-private class AboveOrBelow(private val alignEnd: Boolean, private val gap: Int) : PopupPositionProvider {
+/** Fills the window, and tells where its anchor (the held message) is. */
+private class WholeWindow(private val onAnchor: (IntRect) -> Unit) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val end = alignEnd != (layoutDirection == LayoutDirection.Rtl)
-        val x = if (end) anchorBounds.right - popupContentSize.width else anchorBounds.left
-        val above = anchorBounds.top - popupContentSize.height - gap
-        val y = if (above >= 0) above else anchorBounds.bottom + gap
-        return IntOffset(
-            x.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width)),
-            y.coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height)),
-        )
+        onAnchor(anchorBounds)
+        return IntOffset.Zero
     }
+}
+
+/** Above the anchor, lined up with its [alignEnd] side; below it when there's no room above. */
+private fun aboveOrBelow(
+    anchorBounds: IntRect,
+    windowSize: IntSize,
+    layoutDirection: LayoutDirection,
+    popupContentSize: IntSize,
+    alignEnd: Boolean,
+    gap: Int,
+    /** Nothing above this (the status bar). */
+    top: Int,
+): IntOffset {
+    val end = alignEnd != (layoutDirection == LayoutDirection.Rtl)
+    val x = if (end) anchorBounds.right - popupContentSize.width else anchorBounds.left
+    val above = anchorBounds.top - popupContentSize.height - gap
+    val y = if (above >= top) above else anchorBounds.bottom + gap
+    return IntOffset(
+        x.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width)),
+        y.coerceIn(top, maxOf(top, windowSize.height - popupContentSize.height)),
+    )
 }
