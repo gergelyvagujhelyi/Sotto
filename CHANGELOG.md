@@ -6,6 +6,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.5 — 2026-11-21
+
+- **Updates through SourceDrop** — When a new Sotto is out, the notice in the chat list no longer downloads the APK: its "Open SourceDrop" button, and a tap on the update notification, open SourceDrop, which installs apps straight from their source. Without SourceDrop on the phone, they open its page instead.
+- **Relay: the invite page links to Sotto on GitHub** — For people who don't have Sotto yet, step 1 of the invite page was "Download Sotto", straight to the APK. It's now "Get Sotto on GitHub", linking to the repository's main page. `APP_DOWNLOAD_URL` still changes where it points.
+
 ## 0.7.4 — 2026-11-21
 
 - **Keys no longer linger in memory** — Your private keys and each conversation's session state (the keys of its next messages) were stored as text, and every use left copies in memory that couldn't be wiped. That included keys forward secrecy says are gone: on a phone, after 10 more messages, 166 old session states were still in memory, and an old chain key up to 35 times. Now keys are stored in their own encrypted files and read straight into memory that is wiped after use. Each used key is wiped as soon as the conversation moves past it, and the cryptography no longer makes copies of keys. Measured after an update: nothing of your signing or identity key, and nothing of any past session key, is left in memory. Of the two post-quantum keys, over 30 copies of key material were left after a single use; now 6 short-lived ones remain, made inside the BouncyCastle library while it computes, and none of the seeds or the parts that can sign. Your keys and conversations move to the new storage by themselves after updating: same keys, and no conversation needs to start over.

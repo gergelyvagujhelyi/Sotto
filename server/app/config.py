@@ -9,7 +9,7 @@ load_dotenv()
 
 # The release this relay belongs to: the app's versionName in app/build.gradle.kts, so
 # /health tells which code a relay runs. tests/test_version.py keeps the two in step.
-RELAY_VERSION = "0.7.4"
+RELAY_VERSION = "0.7.5"
 
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL", "sqlite+aiosqlite:///./sotto.db"
@@ -65,10 +65,11 @@ APP_LINK_CERT_FINGERPRINTS: list = [
     ])).split(",")
     if f.strip()
 ]
-# Where the invite page sends people who don't have the app yet.
+# Where the invite page sends people who don't have the app yet: Sotto's page on GitHub,
+# not the APK itself (the name is kept so existing .env files still work).
 APP_DOWNLOAD_URL: str = (
     os.getenv("APP_DOWNLOAD_URL")
-    or "https://github.com/gergelyvagujhelyi/Sotto/releases/latest/download/app-release.apk"
+    or "https://github.com/gergelyvagujhelyi/Sotto"
 )
 # Where the APK of the app release that goes with this relay appears ({version} is
 # RELAY_VERSION). Until it exists, phones on older apps say an update is on its way; then

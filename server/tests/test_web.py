@@ -38,6 +38,9 @@ async def test_invite_page_loads_nothing_from_elsewhere(client: AsyncClient):
     assert "innerHTML" not in page  # the code from the link only ever goes in as text
     assert "location.hash" in page  # the code is read in the browser, never sent here
     assert f'href="{config.APP_DOWNLOAD_URL}"' in page
+    # By default that's Sotto's page on GitHub, never the APK itself.
+    assert config.APP_DOWNLOAD_URL == "https://github.com/gergelyvagujhelyi/Sotto"
+    assert ".apk" not in page
     assert "sotto://invite?r=" in page
 
 

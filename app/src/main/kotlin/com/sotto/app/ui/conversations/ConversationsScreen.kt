@@ -1,12 +1,12 @@
 package com.sotto.app.ui.conversations
 
-import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SystemUpdate
-import androidx.compose.ui.platform.LocalUriHandler
 import com.sotto.app.BuildConfig
 import com.sotto.app.ui.components.GradientButton
 import com.sotto.app.update.AppUpdate
+import com.sotto.app.update.SourceDrop
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -228,12 +229,12 @@ fun ConversationsContent(
 
 /**
  * The relay runs a newer Sotto: while its APK isn't out, a heads-up that things may not
- * work; once it is, the way to download it. Nothing when the app is up to date.
+ * work; once it is, a link to SourceDrop, which installs it. Nothing when the app is up to date.
  */
 @Composable
 private fun AppUpdateCard(update: AppUpdate, modifier: Modifier = Modifier) {
     if (update == AppUpdate.None) return
-    val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
     GlassCard(modifier = modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -255,7 +256,7 @@ private fun AppUpdateCard(update: AppUpdate, modifier: Modifier = Modifier) {
         Text(
             text = when (update) {
                 is AppUpdate.Ready ->
-                    "Your relay already runs it. Update the app so everything keeps working."
+                    "Your relay already runs it. Update the app with SourceDrop so everything keeps working."
                 is AppUpdate.OnItsWay ->
                     "Your relay now runs Sotto ${update.version}, newer than this app " +
                         "(${BuildConfig.VERSION_NAME}). Until the app update is out, some things may " +
@@ -268,10 +269,10 @@ private fun AppUpdateCard(update: AppUpdate, modifier: Modifier = Modifier) {
         if (update is AppUpdate.Ready) {
             Spacer(Modifier.height(14.dp))
             GradientButton(
-                text = "Download update",
-                icon = Icons.Rounded.Download,
+                text = "Open SourceDrop",
+                icon = Icons.AutoMirrored.Rounded.OpenInNew,
                 compact = true,
-                onClick = { uriHandler.openUri(update.url) },
+                onClick = { SourceDrop.open(context) },
             )
         }
     }

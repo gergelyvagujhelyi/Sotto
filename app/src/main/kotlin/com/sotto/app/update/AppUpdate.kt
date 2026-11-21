@@ -12,22 +12,21 @@ sealed interface AppUpdate {
     /** The relay runs [version], newer than this app, but its APK isn't out yet. */
     data class OnItsWay(val version: String) : AppUpdate
 
-    /** The APK of [version], the relay's, can be downloaded from [url]. */
-    data class Ready(val version: String, val url: String) : AppUpdate
+    /** The app of [version], the relay's, is out: it can be installed with [SourceDrop]. */
+    data class Ready(val version: String) : AppUpdate
 
     companion object {
         /**
-         * The relay only says *whether* the app is out: the address is always the official
-         * release of that version, so a hostile relay can't send people to some other APK.
+         * The relay only says *whether* the app is out, never where to get it: the notice
+         * always points to SourceDrop, so a hostile relay can't send people to some other APK.
          */
         fun of(appVersion: String, relayVersion: String, appReady: Boolean): AppUpdate = when {
             !PLAIN_VERSION.matches(relayVersion) -> None
             compareVersions(relayVersion, appVersion) <= 0 -> None
             !appReady -> OnItsWay(relayVersion)
-            else -> Ready(relayVersion, "$OFFICIAL_RELEASES/v$relayVersion/app-release.apk")
+            else -> Ready(relayVersion)
         }
 
-        private const val OFFICIAL_RELEASES = "https://github.com/gergelyvagujhelyi/Sotto/releases/download"
         private val PLAIN_VERSION = Regex("[0-9]+(\\.[0-9]+){1,3}")
     }
 }
