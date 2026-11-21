@@ -1,5 +1,16 @@
 package com.sotto.app.ui.chat
 
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,7 +59,9 @@ import com.sotto.app.ui.theme.Aurora
  *
  * Never takes focus: a focused popup (or a bottom sheet) takes it from the text box, the
  * keyboard closes, and the whole chat jumps. So the keyboard stays as it was, and Back is
- * handled by the chat (it closes this).
+ * handled by the chat (it closes this). A popup that doesn't take focus lets taps outside
+ * it through to the chat, though, so this one covers the whole window: a tap anywhere but
+ * the picker only closes it, instead of also opening a link or retrying a message.
  */
 @Composable
 internal fun ReactionPicker(
@@ -59,51 +72,71 @@ internal fun ReactionPicker(
     onMore: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val gap = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.roundToPx() }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val gap = with(density) { 6.dp.roundToPx() }
+    // The popup covers the status bar too; the picker stays below it.
+    val statusBar = WindowInsets.statusBars.getTop(density)
+    // Where the held message is, in window coordinates (the popup itself fills the window).
+    var anchor by remember { mutableStateOf<IntRect?>(null) }
+    val wholeWindow = remember { WholeWindow { anchor = it } }
     Popup(
-        popupPositionProvider = AboveOrBelow(alignEnd, gap),
+        popupPositionProvider = wholeWindow,
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = false),
+        // Not clipped: the window starts under the status bar, where the anchor coordinates start too.
+        properties = PopupProperties(focusable = false, dismissOnClickOutside = false, clippingEnabled = false),
     ) {
-        if (expanded) {
-            MoreReactions(current, onPick)
-            return@Popup
+        Box(Modifier.fillMaxSize()) {
+            // Behind the picker: a tap anywhere else only closes it.
+            Spacer(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onDismiss() } })
+            val bounds = anchor ?: return@Box
+            Layout(content = {
+                if (expanded) MoreReactions(current, onPick) else QuickReactions(current, onPick, onMore)
+            }) { measurables, constraints ->
+                val window = IntSize(constraints.maxWidth, constraints.maxHeight)
+                val picker = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
+                val at = aboveOrBelow(bounds, window, layoutDirection, IntSize(picker.width, picker.height), alignEnd, gap, statusBar)
+                layout(window.width, window.height) { picker.place(at) }
+            }
         }
-        val shape = RoundedCornerShape(28.dp)
-        Row(
-            modifier = Modifier
-                .padding(4.dp)
-                .shadow(6.dp, shape)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .border(1.dp, Aurora.colors.glassBorder, shape)
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+    }
+}
+
+@Composable
+private fun QuickReactions(current: String?, onPick: (String) -> Unit, onMore: () -> Unit) {
+    val shape = RoundedCornerShape(28.dp)
+    Row(
+        modifier = Modifier
+            .padding(4.dp)
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, Aurora.colors.glassBorder, shape)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        ReactionPayload.QUICK.forEach { emoji ->
+            EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) })
+        }
+        // A reaction from "+" that isn't a quick one shows ringed in the "+" place.
+        val other = current?.takeIf { it !in ReactionPayload.QUICK }
+        if (other != null) {
+            EmojiChoice(other, selected = true, onClick = { onPick(other) })
+        }
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                .clickable(onClickLabel = "More reactions", role = Role.Button, onClick = onMore),
+            contentAlignment = Alignment.Center,
         ) {
-            ReactionPayload.QUICK.forEach { emoji ->
-                EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) })
-            }
-            // A reaction from "+" that isn't a quick one shows ringed in the "+" place.
-            val other = current?.takeIf { it !in ReactionPayload.QUICK }
-            if (other != null) {
-                EmojiChoice(other, selected = true, onClick = { onPick(other) })
-            }
-            Box(
-                Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                    .clickable(onClickLabel = "More reactions", role = Role.Button, onClick = onMore),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Rounded.Add,
-                    contentDescription = "More reactions",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+            Icon(
+                Icons.Rounded.Add,
+                contentDescription = "More reactions",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp),
+            )
         }
     }
 }
@@ -151,21 +184,36 @@ private fun MoreReactions(current: String?, onPick: (String) -> Unit) {
     }
 }
 
-/** Above the anchor, lined up with its [alignEnd] side; below it when there's no room above. */
-private class AboveOrBelow(private val alignEnd: Boolean, private val gap: Int) : PopupPositionProvider {
+/** Fills the window, and tells where its anchor (the held message) is. */
+private class WholeWindow(private val onAnchor: (IntRect) -> Unit) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
         windowSize: IntSize,
         layoutDirection: LayoutDirection,
         popupContentSize: IntSize,
     ): IntOffset {
-        val end = alignEnd != (layoutDirection == LayoutDirection.Rtl)
-        val x = if (end) anchorBounds.right - popupContentSize.width else anchorBounds.left
-        val above = anchorBounds.top - popupContentSize.height - gap
-        val y = if (above >= 0) above else anchorBounds.bottom + gap
-        return IntOffset(
-            x.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width)),
-            y.coerceIn(0, maxOf(0, windowSize.height - popupContentSize.height)),
-        )
+        onAnchor(anchorBounds)
+        return IntOffset.Zero
     }
+}
+
+/** Above the anchor, lined up with its [alignEnd] side; below it when there's no room above. */
+private fun aboveOrBelow(
+    anchorBounds: IntRect,
+    windowSize: IntSize,
+    layoutDirection: LayoutDirection,
+    popupContentSize: IntSize,
+    alignEnd: Boolean,
+    gap: Int,
+    /** Nothing above this (the status bar). */
+    top: Int,
+): IntOffset {
+    val end = alignEnd != (layoutDirection == LayoutDirection.Rtl)
+    val x = if (end) anchorBounds.right - popupContentSize.width else anchorBounds.left
+    val above = anchorBounds.top - popupContentSize.height - gap
+    val y = if (above >= top) above else anchorBounds.bottom + gap
+    return IntOffset(
+        x.coerceIn(0, maxOf(0, windowSize.width - popupContentSize.width)),
+        y.coerceIn(top, maxOf(top, windowSize.height - popupContentSize.height)),
+    )
 }
