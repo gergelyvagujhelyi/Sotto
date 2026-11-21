@@ -5,7 +5,7 @@ An invite link is this relay's own address with the code after a ``#``:
 after ``#``, so the code never reaches this server or its logs; the page reads it in the
 browser. With Sotto installed, Android opens such links in the app instead (App Links,
 verified through ``/.well-known/assetlinks.json``), so the page is for everyone else: it
-offers the download, then opens the invite in Sotto through the app's own link form,
+links to Sotto on GitHub, then opens the invite in Sotto through the app's own link form,
 ``sotto://invite?r=<relay>&c=<code>&s=<share code>``.
 """
 
@@ -124,8 +124,8 @@ def _invite_page() -> str:
   <ol id="steps">
     <li>
       <span class="step">Step 1</span>
-      <a class="button" href="{download}">Download Sotto</a>
-      <p class="small">Android asks once to allow installing apps from your browser.
+      <a class="button" href="{download}">Get Sotto on GitHub</a>
+      <p class="small">Install Sotto from its page, then come back here.
       Already have Sotto? Go on to step 2.</p>
     </li>
     <li>

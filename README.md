@@ -23,7 +23,7 @@ The app follows the system light or dark theme. These are the sample-data previe
 There's no sign-up form. Someone who already uses Sotto invites you:
 
 1. They open **Settings > Invite someone**, which shows the invite as a QR code and as one link, like `https://relay.example.com/invite#c=K7QX-M2PA-9TRB&s=…`: the relay's address with a one-time code. It works once, within 7 days.
-2. You tap the link they sent, or scan the QR code with your camera. Without Sotto, the relay's page offers the download from [Releases](https://github.com/gergelyvagujhelyi/Sotto/releases/latest) and then opens the invite in the app. With Sotto installed, the link opens the app directly.
+2. You tap the link they sent, or scan the QR code with your camera. Without Sotto, the relay's page links to this repository to get the app, and then opens the invite in the app. With Sotto installed, the link opens the app directly.
 3. Setup shows which relay the invite is for and asks before joining it. Pasting the link (or the whole message) into setup works too. The link holds both the relay and the code, so there's nothing to type separately.
 
 The person who invited you becomes your first contact. Each member can have 5 invites open at a time and create 10 a day. The code sits after the link's `#`, which browsers never send, so it doesn't reach the relay's web server or its logs.

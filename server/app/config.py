@@ -65,10 +65,11 @@ APP_LINK_CERT_FINGERPRINTS: list = [
     ])).split(",")
     if f.strip()
 ]
-# Where the invite page sends people who don't have the app yet.
+# Where the invite page sends people who don't have the app yet: Sotto's page on GitHub,
+# not the APK itself (the name is kept so existing .env files still work).
 APP_DOWNLOAD_URL: str = (
     os.getenv("APP_DOWNLOAD_URL")
-    or "https://github.com/gergelyvagujhelyi/Sotto/releases/latest/download/app-release.apk"
+    or "https://github.com/gergelyvagujhelyi/Sotto"
 )
 # Where the APK of the app release that goes with this relay appears ({version} is
 # RELAY_VERSION). Until it exists, phones on older apps say an update is on its way; then

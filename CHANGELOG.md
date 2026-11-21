@@ -5,6 +5,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 ## Unreleased
 
 - **Updates through SourceDrop** — When a new Sotto is out, the notice in the chat list no longer downloads the APK: its "Open SourceDrop" button, and a tap on the update notification, open SourceDrop, which installs apps straight from their source. Without SourceDrop on the phone, they open its page instead.
+- **Relay: the invite page links to Sotto on GitHub** — For people who don't have Sotto yet, step 1 of the invite page was "Download Sotto", straight to the APK. It's now "Get Sotto on GitHub", linking to the repository's main page. `APP_DOWNLOAD_URL` still changes where it points.
 
 ## 0.7.4 — 2026-11-21
 
