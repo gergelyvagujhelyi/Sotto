@@ -4,6 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **The call screen fits smaller screens** — On a Galaxy S25 with a larger display or font size, the "Direct" line ran into the call buttons. The caller's picture now shrinks to make room, so there's always space above the buttons. Taller phones look the same as before.
 - **Relay: one-use sign-in tokens can be turned on** — 0.7.3 added `AUTH_SINGLE_USE_TOKENS`, but `docker-compose.yml` didn't pass it from `.env` to the relay, so setting it did nothing. It does now (still off unless `.env` says `true`).
 
 ## 0.7.3 — 2026-11-21

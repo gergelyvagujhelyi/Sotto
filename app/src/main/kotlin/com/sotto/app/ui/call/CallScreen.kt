@@ -1,5 +1,7 @@
 package com.sotto.app.ui.call
 
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.SubcomposeLayout
 import android.Manifest
 import android.app.KeyguardManager
 import android.content.pm.PackageManager
@@ -310,84 +312,41 @@ fun CallContent(
                     contentAlignment = Alignment.Center,
                 ) {
                     val compact = maxHeight < 360.dp
-                    val avatarSize = (maxHeight - 150.dp).coerceIn(64.dp, 240.dp)
-                    Column(
-                        modifier = Modifier
+                    val available = maxHeight
+                    val avatarGap = if (compact) 12.dp else 24.dp
+                    // The name, the time, the path and any warning are measured first, at the
+                    // phone's own font size; the avatar gets what's left, so it's the avatar
+                    // that shrinks on a shorter screen, not the space above the controls.
+                    // (A fixed allowance for them let the path pill reach the controls on an
+                    // S25 with a larger display or font size.)
+                    SubcomposeLayout(
+                        Modifier
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                             .padding(vertical = 12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        CallAvatar(
-                            name = name,
-                            seed = callState?.peerId ?: name,
-                            pulsing = status == CallStatus.RINGING || status == CallStatus.CONNECTING,
-                            size = avatarSize,
-                        )
-                        Spacer(Modifier.height(if (compact) 12.dp else 24.dp))
-                        Text(
-                            text = name,
-                            style = if (compact) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displaySmall,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (callState?.isNewContact == true) {
-                            Spacer(Modifier.height(10.dp))
-                            InfoPill(text = "Unknown contact", icon = Icons.Rounded.PersonSearch, tint = colors.error)
-                        }
-                        Spacer(Modifier.height(10.dp))
-                        if (status == CallStatus.CONNECTED) {
-                            val fallback = remember { System.currentTimeMillis() }
-                            CallDurationTimer(connectedAt = callState?.connectedAt ?: fallback)
-                        } else {
-                            Text(
-                                text = statusText(
-                                    status, callState?.direction, callState?.peerDisplayName,
-                                    wasConnected = callState?.connectedAt != null,
-                                ),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = colors.onSurfaceVariant,
-                                textAlign = TextAlign.Center,
+                    ) { constraints ->
+                        val loose = constraints.copy(minWidth = 0, minHeight = 0, maxHeight = Constraints.Infinity)
+                        val details = subcompose("details") {
+                            CallDetails(callState = callState, name = name, compact = compact)
+                        }.map { it.measure(loose) }
+                        val detailsHeight = details.sumOf { it.height }
+                        val room = available.roundToPx() - (24.dp + avatarGap + MIN_CONTROLS_GAP * 2).roundToPx() - detailsHeight
+                        val size = room.toDp().coerceIn(64.dp, 240.dp)
+                        val avatar = subcompose("avatar") {
+                            CallAvatar(
+                                name = name,
+                                seed = callState?.peerId ?: name,
+                                pulsing = status == CallStatus.RINGING || status == CallStatus.CONNECTING,
+                                size = size,
                             )
-                        }
-
-                        val reconnecting = status == CallStatus.CONNECTED && callState?.reconnecting == true
-                        // Nothing arriving from the other phone: said even while ICE claims to be
-                        // connected, and until their audio is back.
-                        val peerUnreachable = status == CallStatus.CONNECTED && callState?.peerUnreachable == true
-                        val justReconnected = rememberJustReconnected(reconnecting || peerUnreachable)
-                        if (peerUnreachable) {
-                            Spacer(Modifier.height(14.dp))
-                            ReconnectingIndicator(
-                                title = "Can't reach ${callState?.peerDisplayName ?: "the other phone"}",
-                                detail = "Nothing is coming from their phone. The call ends after a minute if it doesn't come back.",
-                            )
-                        } else if (reconnecting) {
-                            Spacer(Modifier.height(14.dp))
-                            ReconnectingIndicator()
-                        } else if (status == CallStatus.CONNECTED && justReconnected) {
-                            Spacer(Modifier.height(14.dp))
-                            InfoPill(text = "Reconnected", icon = Icons.Rounded.CheckCircle, tint = Aurora.colors.success)
-                        } else if (status == CallStatus.CONNECTED && callState?.path != null) {
-                            Spacer(Modifier.height(14.dp))
-                            val hd = if (callState.highQuality) " \u00b7 HD" else ""
-                            if (callState.path == CallPath.DIRECT) {
-                                InfoPill(text = "Direct$hd", icon = Icons.Rounded.SwapCalls)
-                            } else {
-                                InfoPill(text = "Via relay$hd", icon = Icons.Rounded.Dns, tint = colors.onSurfaceVariant)
-                            }
-                        }
-
-                        // Relay unavailable warning
-                        if (callState?.relayUnavailable == true && status != CallStatus.NO_RELAY) {
-                            Spacer(Modifier.height(14.dp))
-                            InfoPill(
-                                text = "Relay unavailable — call may not connect",
-                                icon = Icons.Rounded.WarningAmber,
-                                tint = Aurora.colors.warning,
-                                maxLines = 3,
-                            )
+                        }.map { it.measure(loose) }
+                        val width = constraints.maxWidth
+                        val height = avatar.sumOf { it.height } + avatarGap.roundToPx() + detailsHeight
+                        layout(width, height) {
+                            var y = 0
+                            avatar.forEach { it.placeRelative((width - it.width) / 2, y); y += it.height }
+                            y += avatarGap.roundToPx()
+                            details.forEach { it.placeRelative((width - it.width) / 2, y); y += it.height }
                         }
                     }
                 }
@@ -407,6 +366,82 @@ fun CallContent(
         }
     }
 }
+
+/** The caller's name, the call's time or status, and its path or trouble, under the avatar. */
+@Composable
+private fun CallDetails(callState: CallState?, name: String, compact: Boolean) {
+    val status = callState?.status
+    val colors = MaterialTheme.colorScheme
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = name,
+            style = if (compact) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.displaySmall,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (callState?.isNewContact == true) {
+            Spacer(Modifier.height(10.dp))
+            InfoPill(text = "Unknown contact", icon = Icons.Rounded.PersonSearch, tint = colors.error)
+        }
+        Spacer(Modifier.height(10.dp))
+        if (status == CallStatus.CONNECTED) {
+            val fallback = remember { System.currentTimeMillis() }
+            CallDurationTimer(connectedAt = callState?.connectedAt ?: fallback)
+        } else {
+            Text(
+                text = statusText(
+                    status, callState?.direction, callState?.peerDisplayName,
+                    wasConnected = callState?.connectedAt != null,
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                color = colors.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        val reconnecting = status == CallStatus.CONNECTED && callState?.reconnecting == true
+        // Nothing arriving from the other phone: said even while ICE claims to be
+        // connected, and until their audio is back.
+        val peerUnreachable = status == CallStatus.CONNECTED && callState?.peerUnreachable == true
+        val justReconnected = rememberJustReconnected(reconnecting || peerUnreachable)
+        if (peerUnreachable) {
+            Spacer(Modifier.height(14.dp))
+            ReconnectingIndicator(
+                title = "Can't reach ${callState?.peerDisplayName ?: "the other phone"}",
+                detail = "Nothing is coming from their phone. The call ends after a minute if it doesn't come back.",
+            )
+        } else if (reconnecting) {
+            Spacer(Modifier.height(14.dp))
+            ReconnectingIndicator()
+        } else if (status == CallStatus.CONNECTED && justReconnected) {
+            Spacer(Modifier.height(14.dp))
+            InfoPill(text = "Reconnected", icon = Icons.Rounded.CheckCircle, tint = Aurora.colors.success)
+        } else if (status == CallStatus.CONNECTED && callState?.path != null) {
+            Spacer(Modifier.height(14.dp))
+            val hd = if (callState.highQuality) " \u00b7 HD" else ""
+            if (callState.path == CallPath.DIRECT) {
+                InfoPill(text = "Direct$hd", icon = Icons.Rounded.SwapCalls)
+            } else {
+                InfoPill(text = "Via relay$hd", icon = Icons.Rounded.Dns, tint = colors.onSurfaceVariant)
+            }
+        }
+
+        // Relay unavailable warning
+        if (callState?.relayUnavailable == true && status != CallStatus.NO_RELAY) {
+            Spacer(Modifier.height(14.dp))
+            InfoPill(
+                text = "Relay unavailable — call may not connect",
+                icon = Icons.Rounded.WarningAmber,
+                tint = Aurora.colors.warning,
+                maxLines = 3,
+            )
+        }
+    }
+}
+
+/** At least this much space above and below the caller's details (before the area scrolls). */
+private val MIN_CONTROLS_GAP = 16.dp
 
 @Composable
 private fun CallControls(
