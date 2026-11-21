@@ -1,7 +1,6 @@
 package com.sotto.app.crypto.ratchet
 
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
+import com.sotto.app.crypto.hmacSha256
 
 /**
  * A symmetric ratchet chain key as used in the Double Ratchet algorithm.
@@ -10,7 +9,8 @@ import javax.crypto.spec.SecretKeySpec
  * - A message key (used once to encrypt a single message, then discarded)
  * - A next chain key (advances the chain, providing forward secrecy)
  *
- * After deriving the message key, the old chain key is deleted.
+ * After deriving the message key, the old chain key is deleted: the caller wipes [key] once
+ * it has moved on to [next] ([DoubleRatchet]). [hmacSha256] leaves no copy of it behind.
  */
 data class ChainKey(
     val key: ByteArray,
@@ -41,11 +41,5 @@ data class ChainKey(
     companion object {
         private val MESSAGE_KEY_SEED = byteArrayOf(0x01)
         private val CHAIN_KEY_SEED = byteArrayOf(0x02)
-
-        private fun hmacSha256(key: ByteArray, input: ByteArray): ByteArray {
-            val mac = Mac.getInstance("HmacSHA256")
-            mac.init(SecretKeySpec(key, "HmacSHA256"))
-            return mac.doFinal(input)
-        }
     }
 }

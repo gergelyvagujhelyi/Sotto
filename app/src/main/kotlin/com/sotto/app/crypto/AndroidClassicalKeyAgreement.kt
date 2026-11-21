@@ -27,11 +27,10 @@ class AndroidClassicalKeyAgreement @Inject constructor() : ClassicalKeyAgreement
         return kp.public.encoded to kp.private.encoded
     }
 
-    override fun generateKeyAgreementKeyPair(): Pair<ByteArray, ByteArray> {
-        val kpg = KeyPairGenerator.getInstance("X25519", provider)
-        val kp = kpg.generateKeyPair()
-        return kp.public.encoded to kp.private.encoded
-    }
+    private val random = java.security.SecureRandom()
+
+    /** Straight into our arrays: the JCA path leaves a key object holding the private key (RawKeyCrypto.kt). */
+    override fun generateKeyAgreementKeyPair(): Pair<ByteArray, ByteArray> = rawX25519KeyPair(random)
 
     override fun agree(privateKey: ByteArray, remotePublicKey: ByteArray): ByteArray {
         // Straight on the key bytes, leaving no copies of the private key (RawKeyCrypto.kt).

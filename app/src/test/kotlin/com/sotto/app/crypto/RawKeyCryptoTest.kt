@@ -111,4 +111,20 @@ class RawKeyCryptoTest {
         val damaged = a.second.copyOf().also { it[48] = 0x00 } // the public key's tag
         assertTrue(rawX25519Agree(damaged, b.first) == null)
     }
+
+    @Test
+    fun `generated X25519 keys are what BouncyCastle would encode, and work through JCA`() {
+        repeat(20) {
+            val (public, private) = rawX25519KeyPair(java.security.SecureRandom())
+            val kf = KeyFactory.getInstance("X25519", "BC")
+            // BouncyCastle reads both and writes them back byte for byte the same.
+            assertArrayEquals(private, kf.generatePrivate(PKCS8EncodedKeySpec(private)).encoded)
+            assertArrayEquals(public, kf.generatePublic(X509EncodedKeySpec(public)).encoded)
+            // And they agree with a JCA-made key pair, both ways and on both paths.
+            val other = java.security.KeyPairGenerator.getInstance("X25519", "BC").generateKeyPair()
+            val secret = jcaAgree(private, other.public.encoded)
+            assertArrayEquals(secret, jcaAgree(other.private.encoded, public))
+            assertArrayEquals(secret, rawX25519Agree(private, other.public.encoded)!!)
+        }
+    }
 }

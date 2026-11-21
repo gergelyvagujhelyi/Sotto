@@ -55,3 +55,21 @@ private fun ByteArray.isPkcs8(v1: ByteArray, v2: ByteArray): Boolean = when (siz
 private fun ByteArray.isX509(header: ByteArray): Boolean = size == header.size + 32 && startsWith(header)
 
 private fun byteArrayOfHex(hex: String) = ByteArray(hex.length / 2) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
+
+/**
+ * A new X25519 key pair as (X.509 public key, PKCS#8 v2 private key), exactly as BouncyCastle
+ * encodes them. Generated into our arrays: BouncyCastle's KeyPairGenerator leaves a key
+ * object holding the private key, which can't be wiped (measured on the Note 9).
+ */
+internal fun rawX25519KeyPair(random: java.security.SecureRandom): Pair<ByteArray, ByteArray> {
+    val private = ByteArray(X25519.SCALAR_SIZE)
+    val public = ByteArray(X25519.POINT_SIZE)
+    try {
+        X25519.generatePrivateKey(random, private)
+        X25519.generatePublicKey(private, 0, public, 0)
+        return (X25519_X509_HEADER + public) to (X25519_PKCS8_V2 + private + PKCS8_V2_PUBLIC_KEY_TAG + public)
+    } finally {
+        private.fill(0)
+    }
+}
+

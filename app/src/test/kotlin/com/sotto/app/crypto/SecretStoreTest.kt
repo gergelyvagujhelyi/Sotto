@@ -16,15 +16,19 @@ import java.io.File
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 
-/** The private key files, and moving keys into them from the old storage. */
-class PrivateKeyStoreTest {
+/** The secret files, and moving private keys into them from the old storage. */
+class SecretStoreTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
     /** A software AES key in place of the Android Keystore one. */
     private val aesKey: SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
     private val dir: File get() = File(tmp.root, "private_keys")
-    private fun store(key: SecretKey = aesKey) = PrivateKeyStore(dir) { key }
+    private val rawKey = ByteArray(32).also { java.security.SecureRandom().nextBytes(it) }
+    /** As the app stores secrets: under the raw file key. */
+    private fun store() = SecretStore(dir, RawKeyFileCipher { rawKey })
+    /** As the app stores the file key: through a JCA key (the Keystore's in the app). */
+    private fun jcaStore(key: SecretKey = aesKey) = SecretStore(dir, JcaFileCipher { key })
 
     private val signing = ByteArray(48) { (it * 7 + 1).toByte() }
     private val identity = ByteArray(32) { (it * 3 + 5).toByte() }
@@ -62,10 +66,10 @@ class PrivateKeyStoreTest {
 
     @Test
     fun `another key can't read the files`() {
-        store().write("priv_sign", signing)
+        jcaStore().write("priv_sign", signing)
         val other = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
         try {
-            store(other).read("priv_sign")
+            jcaStore(other).read("priv_sign")
             fail("a different key must not decrypt it")
         } catch (_: Exception) {
         }
@@ -163,7 +167,7 @@ class PrivateKeyStoreTest {
     @Test
     fun `if the store can't be written, the old storage is left as it was`() {
         val old = oldStorage()
-        val broken = PrivateKeyStore(dir) { throw IllegalStateException("keystore unavailable") }
+        val broken = SecretStore(dir, RawKeyFileCipher { throw IllegalStateException("keystore unavailable") })
         try {
             migratePrivateKeys(old.prefs, broken, names)
             fail("expected the move to fail")
@@ -191,6 +195,28 @@ class PrivateKeyStoreTest {
                 decodeHex(bad)
                 fail("'$bad' must be refused")
             } catch (_: IllegalStateException) {
+            }
+        }
+    }
+
+    @Test
+    fun `files written through JCA AES-GCM read the same through the raw-key cipher`() {
+        // The Note 9 has key files from the first version of this change (JCA AES-GCM under the
+        // file key); they must still open now that the raw key does it.
+        val fileKey = javax.crypto.spec.SecretKeySpec(rawKey, "AES")
+        SecretStore(dir, JcaFileCipher { fileKey }).write("priv_sign", signing)
+        assertArrayEquals(signing, store().read("priv_sign"))
+        store().write("priv_id", identity)
+        assertArrayEquals(identity, SecretStore(dir, JcaFileCipher { fileKey }).read("priv_id"))
+    }
+
+    @Test
+    fun `a name that isn't a plain file name is refused`() {
+        for (bad in listOf("../priv_sign", "a/b", "", "x.tmp")) {
+            try {
+                store().write(bad, signing)
+                fail("'$bad' must be refused")
+            } catch (_: IllegalArgumentException) {
             }
         }
     }

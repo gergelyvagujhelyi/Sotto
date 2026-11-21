@@ -32,7 +32,9 @@ class RatchetKeyHygieneTest {
         val identity: KeyPair
         val kemPublic: ByteArray
         private val kemPrivate: ByteArray
-        val storage = mutableMapOf<String, String>()
+        /** Session states as KeyManager stores them (bytes), and as stored up to 0.7.3 (JSON text). */
+        val storage = mutableMapOf<String, ByteArray>()
+        val legacy = mutableMapOf<String, String>()
         /** Every key pair the engine was handed, to check it wiped them. */
         val handedOut = mutableListOf<KeyPair>()
         val keyManager: KeyManager = mockk(relaxed = true)
@@ -52,9 +54,11 @@ class RatchetKeyHygieneTest {
                 ).also { handedOut += it }
             }
             every { keyManager.getPqcDecapsulationKey() } answers { kemPrivate.copyOf() }
-            every { keyManager.saveRatchetState(any(), any()) } answers { storage[firstArg()] = secondArg(); true }
-            every { keyManager.loadRatchetState(any()) } answers { storage[firstArg()] }
-            every { keyManager.removeRatchetState(any()) } answers { storage.remove(firstArg<String>()); Unit }
+            every { keyManager.saveSessionState(any(), any()) } answers { storage[firstArg()] = secondArg<ByteArray>().copyOf(); true }
+            every { keyManager.loadSessionState(any()) } answers { storage[firstArg()]?.copyOf() }
+            every { keyManager.removeSessionState(any()) } answers { storage.remove(firstArg<String>()); legacy.remove(firstArg<String>()); Unit }
+            every { keyManager.loadLegacySessionState(any()) } answers { legacy[firstArg()] }
+            every { keyManager.removeLegacySessionState(any()) } answers { legacy.remove(firstArg<String>()); Unit }
             engine = RatchetSessionManager(classical, pqc, keyManager)
         }
 
