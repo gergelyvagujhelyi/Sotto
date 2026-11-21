@@ -133,6 +133,19 @@ jobs:
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/release/*.aab
 
+      # Phones on an older app hear from their relay when this version's app is out: the
+      # relay tells them as soon as this signed call says so (otherwise it notices within
+      # 5 minutes). The relay holds the public half of CI_RELEASE_KEY; RELAY_URL is a secret
+      # only to keep the host out of the public logs. Never fails the release.
+      - name: Tell the relay the app is out
+        env:
+          RELAY_URL: ${{ secrets.RELAY_URL }}
+          CI_RELEASE_KEY: ${{ secrets.CI_RELEASE_KEY }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          bash .github/scripts/notify_relay.sh "${TAG#v}" \
+            || echo "::warning::Relay not reached; it will notice the release within 5 minutes."
+
       - name: Upload to Google Play
         if: ${{ env.GOOGLE_PLAY_JSON != '' }}
         env:

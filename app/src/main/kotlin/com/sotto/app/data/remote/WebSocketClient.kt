@@ -27,6 +27,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -52,6 +55,7 @@ class WebSocketClient @Inject constructor(
     private val pqcProvider: PqcProvider,
     private val messageRepository: dagger.Lazy<MessageRepository>,
     private val receiptManager: dagger.Lazy<com.sotto.app.data.repository.ReceiptManager>,
+    private val appUpdates: com.sotto.app.update.AppUpdates,
 ) {
     private companion object {
         private const val TAG = "WebSocketClient"
@@ -200,6 +204,7 @@ class WebSocketClient @Inject constructor(
                 return@webSocket
             }
 
+            relayReport(authMsg)?.let { (version, ready) -> appUpdates.report(version, ready) }
             if (BuildConfig.DEBUG) Log.d(TAG, "WebSocket connected and authenticated")
             reconnectDelay = INITIAL_RECONNECT_DELAY
             lastFrameAt = SystemClock.elapsedRealtime()
@@ -269,6 +274,8 @@ class WebSocketClient @Inject constructor(
                     }
                 }
                 "pong" -> { /* Expected keepalive response */ }
+                // The app of the relay's version is out (it was on its way).
+                "app_release" -> relayReport(msg)?.let { (version, ready) -> appUpdates.report(version, ready) }
 
                 "call_offer", "call_answer", "call_ice_candidate",
                 "call_hangup", "call_busy", "call_reject", "call_ringing", "call_ice_restart" -> {
@@ -293,6 +300,19 @@ class WebSocketClient @Inject constructor(
     }
 
 }
+
+/**
+ * What a relay socket message says about the relay: its version, and whether that version's
+ * app is out. The sign-in reply says both (`relay_version`, `app_ready`); an `app_release`
+ * message names the version that came out. Null for a relay that says nothing (before 0.7.3).
+ */
+internal fun relayReport(msg: JsonObject): Pair<String, Boolean>? =
+    when (msg["type"]?.jsonPrimitive?.contentOrNull) {
+        "auth_ok" -> msg["relay_version"]?.jsonPrimitive?.contentOrNull
+            ?.let { it to (msg["app_ready"]?.jsonPrimitive?.booleanOrNull == true) }
+        "app_release" -> msg["version"]?.jsonPrimitive?.contentOrNull?.let { it to true }
+        else -> null
+    }
 
 /** Where the relay socket is: waiting to retry (or never started), connecting, or open. */
 internal enum class SocketState { IDLE, CONNECTING, OPEN }

@@ -12,10 +12,11 @@ import time
 import pytest
 
 from tests.auth_helpers import generate_ed25519_keypair
+from tests.auth_helpers import fresh_ts_ms
 
 
 def _make_token(private_key, user_id: str) -> str:
-    ts = str(int(time.time() * 1000))
+    ts = str(fresh_ts_ms())
     payload = f"{user_id}.{ts}"
     sig = private_key.sign(payload.encode("utf-8"))
     sig_b64 = base64.b64encode(sig).decode()
@@ -111,3 +112,16 @@ def test_ws_auth_wrong_key():
             ws.send_text(json.dumps({"type": "auth", "token": token}))
             resp = json.loads(ws.receive_text())
             assert resp["type"] == "error"
+
+
+def test_ws_auth_ok_names_the_relay_version_and_whether_its_app_is_out():
+    from starlette.testclient import TestClient
+    from app import config
+    from app.main import app
+
+    with TestClient(app) as tc:
+        user = _bootstrap_user_sync(tc, "ws_version")
+        with tc.websocket_connect("/v1/ws") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": _make_token(user["private_key"], user["user_id"])}))
+            resp = json.loads(ws.receive_text())
+    assert resp == {"type": "auth_ok", "relay_version": config.RELAY_VERSION, "app_ready": False}

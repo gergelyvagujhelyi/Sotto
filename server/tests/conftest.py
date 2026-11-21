@@ -13,6 +13,8 @@ os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///" + os.path.join(
 # Tests create accounts freely; the invite tests switch invite-only on themselves.
 # Set here so a developer's server/.env can't change it either.
 os.environ["INVITE_ONLY"] = "false"
+# Never look for app releases on GitHub from the tests (TestClient runs the lifespan).
+os.environ["APP_RELEASE_APK_URL"] = ""
 
 import pytest
 import pytest_asyncio

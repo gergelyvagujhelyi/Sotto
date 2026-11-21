@@ -128,6 +128,25 @@ class KeyManager @Inject constructor(
         return encryptedPrefs.getString(KEY_PQC_DECAPSULATION, null)?.hexToBytes()
     }
 
+    /**
+     * Runs [block] with our identity key pair and wipes its private keys afterwards, also
+     * when [block] throws; null without an identity. [block] must not keep the private
+     * keys (copy what must outlive it). Public keys stay readable on a returned pair.
+     */
+    inline fun <T> withIdentityKeyPair(block: (KeyPair) -> T): T? {
+        val keyPair = loadIdentityKeyPair() ?: return null
+        try {
+            return block(keyPair)
+        } finally {
+            keyPair.privateIdentityKey.fill(0)
+            keyPair.privateSigningKey.fill(0)
+        }
+    }
+
+    /**
+     * The raw pair, private keys included: the caller must wipe them. Use
+     * [withIdentityKeyPair] instead; a unit test keeps other code off this.
+     */
     fun loadIdentityKeyPair(): KeyPair? {
         val pubSign = encryptedPrefs.getString(KEY_PUBLIC_SIGNING, null)?.hexToBytes() ?: return null
         val privSign = encryptedPrefs.getString(KEY_PRIVATE_SIGNING, null)?.hexToBytes() ?: return null
@@ -229,23 +248,24 @@ class KeyManager @Inject constructor(
      */
     fun generateAuthToken(pqcProvider: PqcProvider): String {
         val uid = getUserId() ?: throw IllegalStateException("No identity — bootstrap first")
-        val ts = System.currentTimeMillis().toString()
+        // Every token gets its own timestamp, so no two are alike and the relay can
+        // refuse one it has already seen (a replay). Two in the same millisecond take
+        // the next one.
+        val ts = lastTokenMs.updateAndGet { last -> maxOf(System.currentTimeMillis(), last + 1) }.toString()
         val payload = "$uid.$ts"
         val payloadBytes = payload.toByteArray(Charsets.UTF_8)
         val signature = sign(payloadBytes)
         val sigB64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
-        // Append ML-DSA-65 signature if PQC keys are available
-        val pqcSig = try {
-            val mlDsaPrivKey = getMlDsaPrivateKey()
-            if (mlDsaPrivKey != null) {
-                try {
-                    "." + android.util.Base64.encodeToString(
-                        pqcProvider.sign(payloadBytes, mlDsaPrivKey), android.util.Base64.NO_WRAP)
-                } finally {
-                    mlDsaPrivKey.fill(0)
-                }
-            } else ""
-        } catch (_: Exception) { "" }
+        // With ML-DSA keys the relay requires the ML-DSA signature too: a failure
+        // throws here rather than sending a token it would only refuse.
+        val pqcSig = getMlDsaPrivateKey()?.let { mlDsaPrivKey ->
+            try {
+                "." + android.util.Base64.encodeToString(
+                    pqcProvider.sign(payloadBytes, mlDsaPrivKey), android.util.Base64.NO_WRAP)
+            } finally {
+                mlDsaPrivKey.fill(0)
+            }
+        } ?: ""
         return "$payload.$sigB64$pqcSig"
     }
 
@@ -415,6 +435,9 @@ class KeyManager @Inject constructor(
     }
 
     companion object {
+        /** The newest auth-token timestamp given out (see [generateAuthToken]). */
+        private val lastTokenMs = java.util.concurrent.atomic.AtomicLong(0)
+
         private const val PREFS_FILE = "sotto_keys"
         private const val KEY_DB_PASSPHRASE = "db_passphrase"
         private const val KEY_PUBLIC_SIGNING = "pub_sign"

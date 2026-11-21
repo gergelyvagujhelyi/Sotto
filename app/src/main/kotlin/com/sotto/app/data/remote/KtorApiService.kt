@@ -19,10 +19,13 @@ import com.sotto.app.data.remote.dto.RelayHealthDto
 import com.sotto.app.data.remote.dto.ResolveShareCodeResponse
 import com.sotto.app.data.remote.dto.SendMessageRequest
 import com.sotto.app.data.remote.dto.SendMessageResponse
+import com.sotto.app.update.AppUpdates
 import io.ktor.client.HttpClient
 import android.util.Base64
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
@@ -36,6 +39,8 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
@@ -63,6 +68,7 @@ class KtorApiService @Inject constructor(
     private val keyManager: KeyManager,
     private val pqcProvider: PqcProvider,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
+    private val appUpdates: com.sotto.app.update.AppUpdates,
 ) : ApiService, java.io.Closeable {
 
     private val client = HttpClient(OkHttp) {
@@ -80,6 +86,35 @@ class KtorApiService @Inject constructor(
                 namingStrategy = JsonNamingStrategy.SnakeCase
             })
         }
+        // A blip (the relay restarting, a dropped mobile connection) shouldn't fail a
+        // send: requests that are safe to repeat are tried up to twice more.
+        install(HttpRequestRetry) {
+            retryIf(MAX_RETRIES) { request, response ->
+                response.status.value in RETRY_STATUSES && safeToRepeat(request.method, request.url.encodedPath)
+            }
+            // Not after a timeout: the relay may be slow, and three waits would hold a send for 30 s.
+            retryOnExceptionIf(MAX_RETRIES) { request, cause ->
+                cause is java.io.IOException && cause !is java.net.SocketTimeoutException &&
+                    safeToRepeat(request.method, request.url.build().encodedPath)
+            }
+            exponentialDelay(base = 2.0, baseDelayMs = 500, maxDelayMs = 2_000, randomizationMs = 250)
+            // A retry needs a new token: the relay refuses one it has already seen.
+            modifyRequest { request ->
+                if (request.headers.contains(HttpHeaders.Authorization)) {
+                    request.headers[HttpHeaders.Authorization] = "Bearer ${authToken()}"
+                }
+            }
+        }
+        // Every answer from our relay names its version and whether that app is out.
+        // Only our relay's: a relay checked during setup isn't the one we use.
+        install(createClientPlugin("RelayVersion") {
+            onResponse { response ->
+                val version = response.headers[AppUpdates.RELAY_VERSION_HEADER] ?: return@onResponse
+                val relay = relayConfig.baseUrl?.trimEnd('/') ?: return@onResponse
+                if (!response.call.request.url.toString().startsWith("$relay/")) return@onResponse
+                appUpdates.report(version, response.headers[AppUpdates.APP_READY_HEADER] == "true")
+            }
+        })
         install(Logging) {
             // Use INFO (method + URL only) instead of HEADERS to avoid
             // leaking Authorization tokens to logcat in debug builds.
@@ -94,6 +129,29 @@ class KtorApiService @Inject constructor(
 
     override fun close() {
         client.close()
+    }
+
+    private companion object {
+        const val MAX_RETRIES = 2
+        /** Relay errors that pass: a crash, or a restart behind the proxy. Not 507 (queue full). */
+        val RETRY_STATUSES = setOf(500, 502, 503, 504)
+        /**
+         * Requests that do no harm when the relay gets them twice: reads, acks, the push
+         * token, and messages (the relay keeps one copy per client message id, and a
+         * control message sent twice repeats its timestamp, which the receiver refuses).
+         * Not sign-up (it uses up an invite), invites, key rotation, deleting the
+         * account, receipts or call signals.
+         */
+        fun safeToRepeat(method: HttpMethod, path: String): Boolean =
+            method == HttpMethod.Get || REPEATABLE_PATHS.any { path.endsWith(it) }
+
+        val REPEATABLE_PATHS = listOf(
+            "/v1/messages/send",
+            "/v1/messages/ack",
+            "/v1/receipts/ack",
+            "/v1/receipts/delivered/ack",
+            "/v1/push/register",
+        )
     }
 
     private fun userId(): String =

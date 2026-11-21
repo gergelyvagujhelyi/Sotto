@@ -17,9 +17,10 @@ The server NEVER:
 
 import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
@@ -27,9 +28,10 @@ from app.config import CORS_ORIGINS, DEBUG, MAX_REQUEST_BODY_BYTES, METRICS_TOKE
 from sqlalchemy import delete, text
 
 from app.database import async_session, engine, get_db
-from app.models.schemas import HealthResponse
+from app.models.schemas import AppReleaseCall, HealthResponse
 from app import config
 from app.routers import calling, identity, invites, messages, push, receipts, web, websocket
+from app.services import app_release as app_release_service
 from app.services.invites import relay_founded
 from app.services.metrics import MetricsMiddleware, metrics_endpoint
 from app.services.websocket_manager import ws_manager
@@ -170,13 +172,27 @@ async def lifespan(app: FastAPI):
 
     purge_task = asyncio.create_task(_purge_expired_messages())
 
+    async def tell_phones() -> None:
+        async with async_session() as db:
+            await app_release_service.announce_to_phones(db, app_release_service.app_release.version)
+
+    async def on_app_ready() -> None:
+        # In the background: pushes to every phone shouldn't hold up the workflow's call.
+        ws_manager.spawn(tell_phones())
+
+    app_release_service.app_release.on_ready = on_app_ready
+    release_task = asyncio.create_task(
+        app_release_service.app_release.watch(config.APP_RELEASE_CHECK_SECONDS)
+    )
+
     yield
 
-    purge_task.cancel()
-    try:
-        await purge_task
-    except asyncio.CancelledError:
-        pass
+    for task in (purge_task, release_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     await ws_manager.shutdown()
     await engine.dispose()
 
@@ -281,6 +297,33 @@ if DEBUG or METRICS_TOKEN:
     app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], tags=["ops"], include_in_schema=False)
 
 
+@app.middleware("http")
+async def relay_version_headers(request: Request, call_next):
+    """Every answer says which Sotto this relay runs and whether that app is out, so a phone
+    on an older app knows at once (services/app_release.py)."""
+    response = await call_next(request)
+    release = app_release_service.app_release
+    response.headers["Sotto-Relay-Version"] = release.version
+    response.headers["Sotto-App-Ready"] = "true" if release.ready else "false"
+    return response
+
+
+@app.post("/v1/app-release", status_code=202, tags=["health"])
+async def app_release_published(call: AppReleaseCall) -> dict:
+    """The release workflow says the app of this relay's version is published. Only a call
+    signed with the workflow's key counts (CI_RELEASE_PUBLIC_KEY)."""
+    try:
+        app_release_service.verify_ci_call(call.version, call.ts, call.signature, int(time.time() * 1000))
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Not signed by the release workflow")
+    release = app_release_service.app_release
+    if call.version != release.version:
+        # Released before this relay was deployed (or after a newer one): it finds out by itself.
+        raise HTTPException(status_code=409, detail=f"This relay runs {release.version}")
+    await release.released_by_ci()
+    return {"ready": True}
+
+
 @app.get("/health", response_model=HealthResponse, tags=["health"])
 async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     try:
@@ -291,4 +334,8 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
             status_code=503,
             content={"status": "unhealthy", "version": app.version, "detail": "Database unreachable"},
         )
-    return HealthResponse(version=app.version, invite_required=config.INVITE_ONLY and founded)
+    return HealthResponse(
+        version=app.version,
+        invite_required=config.INVITE_ONLY and founded,
+        app_download_url=app_release_service.app_release.download_url,
+    )
