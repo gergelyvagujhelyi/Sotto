@@ -44,6 +44,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -74,10 +77,14 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
+import androidx.compose.ui.unit.sp
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.ui.theme.Aurora
 import com.sotto.app.ui.theme.LocalReduceMotion
+import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.cos
 import kotlinx.coroutines.launch
 
 /**
@@ -482,8 +489,8 @@ private fun TextWithTrailingMeta(
     val linked = rememberLinked(text, color, links)
     val shown = if (scrambleMs == null) linked else unsettledHidden(text, scrambleMs)
     val measurer = rememberTextMeasurer()
-    val glyphLayouts = remember(style) { HashMap<Char, TextLayoutResult>() }
-    val glyphColor = color.copy(alpha = 0.9f)
+    val glyphLayouts = remember(style) { HashMap<String, TextLayoutResult>() }
+    val layoutOf = { glyph: String -> glyphLayouts.getOrPut(glyph) { measurer.measure(glyph, style) } }
     Layout(
         content = {
             Text(
@@ -497,22 +504,19 @@ private fun TextWithTrailingMeta(
                     Modifier.drawWithContent {
                         drawContent()
                         val layout = textLayout[0] ?: return@drawWithContent
+                        // Capitals are about 0.7 of the font size.
+                        val halfCap = 0.35f * (if (style.fontSize.isSp) style.fontSize else 16.sp).toPx()
                         for (i in text.indices) {
                             val ch = text[i]
                             if (ch.isWhitespace() || Character.isLowSurrogate(ch)) continue
-                            if (scrambleMs >= Scramble.settleAt(i, text.length)) continue
                             if (i >= layout.layoutInput.text.length) break
-                            val box = layout.getBoundingBox(i)
-                            val glyph = Scramble.glyphAt(ch, i, scrambleMs)
-                            val g = glyphLayouts.getOrPut(glyph) { measurer.measure(glyph.toString(), style) }
-                            drawText(
-                                textLayoutResult = g,
-                                color = glyphColor,
-                                topLeft = Offset(
-                                    box.left + (box.width - g.size.width) / 2f,
-                                    box.top + (box.height - g.size.height) / 2f,
-                                ),
-                            )
+                            val real = if (Character.isHighSurrogate(ch) && i + 1 < text.length) {
+                                text.substring(i, i + 2)
+                            } else {
+                                ch.toString()
+                            }
+                            val flap = Scramble.flapAt(real, i, text.length, scrambleMs) ?: continue
+                            drawFlap(flap, layout.getBoundingBox(i), layoutOf, color, halfCap)
                         }
                     }
                 },
@@ -605,6 +609,68 @@ private fun rememberLinked(text: String, color: Color, enabled: Boolean): Annota
             }
         }
     }
+}
+
+/**
+ * One split-flap flip in [box], the character's place in the text. The top half
+ * already shows [Scramble.Flap.to] and the bottom half still [Scramble.Flap.from],
+ * while the flap folds over the middle line: first `from`'s top half falls until
+ * it is edge-on, then `to`'s bottom half comes down over `from`'s.
+ */
+private fun DrawScope.drawFlap(
+    flap: Scramble.Flap,
+    box: Rect,
+    layoutOf: (String) -> TextLayoutResult,
+    color: Color,
+    /** Half the capitals' height: the flaps fold at their middle, as a board's do. */
+    halfCap: Float,
+) {
+    val from = layoutOf(flap.from)
+    val to = layoutOf(flap.to)
+    val cx = box.center.x
+    val cy = box.center.y
+    val mid = cy - to.size.height / 2f + to.firstBaseline - halfCap
+    val left = box.left - 1f
+    val right = box.right + 1f
+    val top = minOf(box.top, cy - to.size.height / 2f, cy - from.size.height / 2f) - 1f
+    val bottom = maxOf(box.bottom, cy + to.size.height / 2f, cy + from.size.height / 2f) + 1f
+
+    fun glyph(g: TextLayoutResult, alpha: Float, squash: Float = 1f) {
+        // Like a board's tiles, every letter fits its character's width, so a wide one
+        // (W standing in for i) doesn't run into its neighbours.
+        val fit = if (g.size.width > 0) minOf(1f, box.width / g.size.width) else 1f
+        scale(scaleX = fit, scaleY = squash, pivot = Offset(cx, mid)) {
+            drawText(
+                textLayoutResult = g,
+                color = color.copy(alpha = color.alpha * alpha),
+                topLeft = Offset(cx - g.size.width / 2f, cy - g.size.height / 2f),
+            )
+        }
+    }
+
+    // How far the moving flap reaches from the fold, 1 = a whole half.
+    val p = flap.progress
+    val falling = p < 0.5f
+    val reach = abs(cos(p * PI)).toFloat()
+    // A flap seen edge-on catches less light.
+    val shade = 0.55f + 0.4f * reach
+
+    // The still halves, each only where the moving flap doesn't cover it.
+    clipRect(left, top, right, if (falling) mid - reach * (mid - top) else mid) { glyph(to, 0.9f) }
+    clipRect(left, if (falling) mid else mid + reach * (bottom - mid), right, bottom) { glyph(from, 0.9f) }
+    // The moving flap, squashed towards the fold.
+    if (reach > 0.01f) {
+        clipRect(left, if (falling) top else mid, right, if (falling) mid else bottom) {
+            glyph(if (falling) from else to, shade, squash = reach)
+        }
+    }
+    // The split between the halves.
+    drawLine(
+        color = color.copy(alpha = color.alpha * 0.2f),
+        start = Offset(box.left + 1f, mid),
+        end = Offset(box.right - 1f, mid),
+        strokeWidth = 1f,
+    )
 }
 
 /** [text] with the characters that haven't settled yet (at [elapsedMs]) transparent. */

@@ -70,8 +70,12 @@ class MessageRepositoryImpl @Inject constructor(
     /** Track skipped syncs for control messages missing a PQC signature. */
     private val ctrlPqcSigMissCounts = ConcurrentHashMap<String, Int>()
 
-    /** Track peers already notified with session_reset to avoid duplicate signals. */
-    private val sessionResetSentTo: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /**
+     * Peers we sent a session_reset (and when), so one broken session gets one reset,
+     * not one per undecryptable message. A peer leaves it as soon as one of their
+     * messages decrypts again: if their session breaks later, they get a new reset.
+     */
+    private val sessionResetSentTo = ConcurrentHashMap<String, Long>()
 
     /** The conversation currently open on screen — skip unread increment for it. */
     @Volatile
@@ -151,7 +155,13 @@ class MessageRepositoryImpl @Inject constructor(
             keysToEvict.forEach { ctrlPqcSigMissCounts.remove(it) }
         }
         if (sessionResetSentTo.size > PRUNE_THRESHOLD) {
-            sessionResetSentTo.clear()
+            // Forget the oldest resets only: clearing all would re-send to every peer
+            // whose session is still broken.
+            val evictCount = sessionResetSentTo.size - PRUNE_THRESHOLD
+            sessionResetSentTo.entries.toList()
+                .sortedBy { it.value }
+                .take(evictCount)
+                .forEach { sessionResetSentTo.remove(it.key) }
         }
     }
 
@@ -216,14 +226,14 @@ class MessageRepositoryImpl @Inject constructor(
         // Update the stored message with the encrypted payload
         messageDao.updateEncryptedBody(messageId, envelope.ciphertext, envelope.nonce)
 
-        // Sign the envelope for recipient verification
-        val sigPayload = buildMessageSigPayload(senderId, recipientId, envelope.nonce, envelope.ciphertext)
-        val signature = keyManager.sign(sigPayload)
-        val signatureB64 = Base64.encodeToString(signature, Base64.NO_WRAP)
-        val pqcSignatureB64 = signWithMlDsa(sigPayload)
-
-        // Send to server
         try {
+            // Sign the envelope for recipient verification. A signing failure fails
+            // the message (retryable) like a network failure does.
+            val sigPayload = buildMessageSigPayload(senderId, recipientId, envelope.nonce, envelope.ciphertext)
+            val signature = keyManager.sign(sigPayload)
+            val signatureB64 = Base64.encodeToString(signature, Base64.NO_WRAP)
+            val pqcSignatureB64 = signWithMlDsa(sigPayload)
+
             val response = apiService.sendMessage(
                 SendMessageRequest(
                     recipientId = recipientId,
@@ -647,6 +657,8 @@ class MessageRepositoryImpl @Inject constructor(
         }
         decryptFailCounts.remove(dto.messageId)
         pqcSigMissCounts.remove(dto.messageId)
+        // Their session works again: should it break later, it needs a new reset.
+        sessionResetSentTo.remove(dto.senderId)
 
         if (newSenderKeys != null) {
             // First contact from this sender, signature and decryption both OK.
@@ -868,10 +880,10 @@ class MessageRepositoryImpl @Inject constructor(
             // The message was correctly signed by the peer but no session can
             // decrypt it: the peer's session is out of sync. Ask them to start a
             // new one.
-            if (senderId !in sessionResetSentTo) {
+            if (!sessionResetSentTo.containsKey(senderId)) {
                 try {
                     sessionResetSender.send(senderId)
-                    sessionResetSentTo.add(senderId)
+                    sessionResetSentTo[senderId] = System.currentTimeMillis()
                 } catch (e: Exception) {
                     if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo",
                         "Failed to send session_reset to ${senderId.take(8)}: ${e.message}")
@@ -1059,18 +1071,17 @@ class MessageRepositoryImpl @Inject constructor(
         sessionResetSentTo.remove(contactId)
     }
 
-    /** Sign data with ML-DSA-65 if keys are available, returning base64 or empty string. */
+    /**
+     * The ML-DSA-65 signature over [data] (base64), or "" for an account without ML-DSA keys.
+     * Throws if signing fails: the receiver rejects a PQC account's message without it,
+     * so sending it anyway would only lose the message while it showed as sent.
+     */
     private fun signWithMlDsa(data: ByteArray): String {
-        return try {
-            val mlDsaPrivKey = keyManager.getMlDsaPrivateKey() ?: return ""
-            try {
-                Base64.encodeToString(pqcProvider.sign(data, mlDsaPrivKey), Base64.NO_WRAP)
-            } finally {
-                mlDsaPrivKey.fill(0)
-            }
-        } catch (e: Exception) {
-            if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "ML-DSA signing failed: ${e.message}")
-            ""
+        val mlDsaPrivKey = keyManager.getMlDsaPrivateKey() ?: return ""
+        try {
+            return Base64.encodeToString(pqcProvider.sign(data, mlDsaPrivKey), Base64.NO_WRAP)
+        } finally {
+            mlDsaPrivKey.fill(0)
         }
     }
 

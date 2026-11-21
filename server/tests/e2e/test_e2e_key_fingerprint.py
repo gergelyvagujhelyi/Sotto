@@ -10,6 +10,7 @@ from httpx import AsyncClient
 
 from app.routers.identity import compute_fingerprint, rotation_payload, share_code_from_fingerprint
 from tests.e2e.conftest import User, bootstrap_user
+from tests.auth_helpers import fresh_ts_ms
 
 
 def _b64(data: bytes) -> str:
@@ -137,7 +138,7 @@ async def test_bundle_publishes_verifiable_endorsement(client: AsyncClient, alic
 @pytest.mark.asyncio
 async def test_auth_rejects_invalid_mldsa_signature(client: AsyncClient, alice_pqc: User):
     """Regression: an invalid ML-DSA token signature must not be accepted."""
-    ts = str(int(time.time() * 1000))
+    ts = str(fresh_ts_ms())
     payload = f"{alice_pqc.user_id}.{ts}"
     ed_sig = _b64(alice_pqc.ed25519_private.sign(payload.encode("utf-8")))
     bogus_pqc = _b64(b"\x00" * 3309)
