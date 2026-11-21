@@ -239,3 +239,25 @@ async def test_flush_does_not_requeue_expired_signals(monkeypatch):
     assert broken.sent == []
     assert "bob" not in mgr._pending_call_signals
     assert mgr._pending_signal_bytes == 0
+
+
+async def test_a_full_requeue_drops_ice_candidates_not_a_hangup_buffered_meanwhile():
+    mgr = WebSocketManager()
+    cap = wsm._MAX_PENDING_SIGNALS_PER_USER
+    first = await _buffer(mgr, "bob", ["call_offer"] + ["call_ice_candidate"] * (cap - 1))
+    hangup = '{"type": "call_hangup"}'
+
+    class BuffersHangupThenBreaks(BreaksAfter):
+        async def send_text(self, payload: str) -> None:
+            await mgr._store_pending_signal("bob", hangup, "call_hangup", "carol")
+            raise ConnectionError("socket broke")
+
+    broken = BuffersHangupThenBreaks(ok=0)
+    await mgr.register("bob", broken)
+    await mgr.flush_pending_signals("bob", broken)
+    queued = [p for _, p in mgr._pending_call_signals["bob"]]
+    assert len(queued) == cap
+    assert queued[0] == first[0]  # the offer stays
+    assert queued[-1] == hangup  # and so does the hangup
+    assert first[1] not in queued  # the oldest ICE candidate gave way
+    assert mgr._pending_signal_bytes == sum(len(p) for p in queued)

@@ -254,10 +254,17 @@ class WebSocketManager:
 
     async def _requeue_signals(self, user_id: str, signals: list[tuple[float, str]]) -> None:
         """Put signals a flush couldn't deliver back in front of any buffered since,
-        keeping their timestamps so the TTL still counts from when they were sent."""
+        keeping their timestamps so the TTL still counts from when they were sent.
+
+        Over the per-user cap, ICE candidates give way first, the oldest first, as in
+        _store_pending_signal; then the oldest signals. A hangup buffered meanwhile
+        is never the one dropped."""
         async with self._lock:
             newer = self._pending_call_signals.get(user_id, [])
-            merged = (signals + newer)[:_MAX_PENDING_SIGNALS_PER_USER]
+            merged = signals + newer
+            while len(merged) > _MAX_PENDING_SIGNALS_PER_USER:
+                ice = next((i for i, (_, p) in enumerate(merged) if _signal_type_of(p) == _ICE_SIGNAL), 0)
+                del merged[ice]
             self._pending_signal_bytes += sum(len(p) for _, p in merged) - sum(len(p) for _, p in newer)
             self._pending_call_signals[user_id] = merged
 
