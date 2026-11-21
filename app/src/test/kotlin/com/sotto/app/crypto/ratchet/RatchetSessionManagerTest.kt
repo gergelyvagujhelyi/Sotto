@@ -38,7 +38,9 @@ class RatchetSessionManagerTest {
         val identity: KeyPair
         val kemPublic: ByteArray
         private val kemPrivate: ByteArray?
-        val storage = mutableMapOf<String, String>()
+        /** Session states as KeyManager stores them (bytes), and as stored up to 0.7.3 (JSON text). */
+        val storage = mutableMapOf<String, ByteArray>()
+        val legacy = mutableMapOf<String, String>()
         val keyManager: KeyManager = mockk(relaxed = true)
         var engine: RatchetSessionManager
 
@@ -61,10 +63,12 @@ class RatchetSessionManagerTest {
                 )
             }
             every { keyManager.getPqcDecapsulationKey() } answers { kemPrivate?.copyOf() }
-            every { keyManager.saveRatchetState(any(), any()) } answers { storage[firstArg()] = secondArg(); true }
-            every { keyManager.loadRatchetState(any()) } answers { storage[firstArg()] }
-            every { keyManager.removeRatchetState(any()) } answers { storage.remove(firstArg<String>()); Unit }
-            every { keyManager.removeAllRatchetStates() } answers { storage.clear() }
+            every { keyManager.saveSessionState(any(), any()) } answers { storage[firstArg()] = secondArg<ByteArray>().copyOf(); true }
+            every { keyManager.loadSessionState(any()) } answers { storage[firstArg()]?.copyOf() }
+            every { keyManager.removeSessionState(any()) } answers { storage.remove(firstArg<String>()); legacy.remove(firstArg<String>()); Unit }
+            every { keyManager.loadLegacySessionState(any()) } answers { legacy[firstArg()] }
+            every { keyManager.removeLegacySessionState(any()) } answers { legacy.remove(firstArg<String>()); Unit }
+            every { keyManager.removeAllSessionStates() } answers { storage.clear(); legacy.clear() }
             engine = RatchetSessionManager(classical, pqc, keyManager)
         }
 
@@ -352,8 +356,8 @@ class RatchetSessionManagerTest {
         // Bob's next save fails once: the send must fail, and the recovery save
         // must keep the session tags so the old init can't be replayed.
         var failNext = true
-        every { bob.keyManager.saveRatchetState(any(), any()) } answers {
-            if (failNext) { failNext = false; false } else { bob.storage[firstArg()] = secondArg(); true }
+        every { bob.keyManager.saveSessionState(any(), any()) } answers {
+            if (failNext) { failNext = false; false } else { bob.storage[firstArg()] = secondArg<ByteArray>().copyOf(); true }
         }
         try { bob.send(alice, "lost"); fail("send must fail when the state can't be saved") } catch (_: IllegalStateException) {}
         assertFalse(bob.engine.hasSendableSession(alice.keys()))
@@ -380,5 +384,84 @@ class RatchetSessionManagerTest {
 
         bob.receive(alice, a1)
         assertTrue(bob.engine.hasSendableSession(alice.keys()))
+    }
+
+    // ── Session states stored as JSON text up to 0.7.3 ─────────────────────
+
+    /** Puts [peer]'s state with [other] back into the old storage, as 0.7.3 left it. */
+    private suspend fun moveToOldStorage(peer: Peer, other: Peer) {
+        val key = "v2_${other.userId}"
+        peer.legacy[key] = peer.engine.legacyJsonFor(other.userId)!!
+        peer.storage.remove(key)
+    }
+
+    @Test
+    fun `a state stored as JSON text by 0_7_3 is moved over, and the conversation goes on both ways`() = runTest {
+        val alice = Peer("alice")
+        val bob = Peer("bob")
+        bob.receive(alice, alice.send(bob, "1"))
+        alice.receive(bob, bob.send(alice, "2"))
+        val inFlight = alice.send(bob, "3") // sent before bob updates
+
+        moveToOldStorage(bob, alice)
+        bob.restart()
+
+        assertEquals("3", bob.receive(alice, inFlight))
+        assertTrue("moved to the new storage", bob.storage.containsKey("v2_alice"))
+        assertFalse("the text is gone", bob.legacy.containsKey("v2_alice"))
+        assertEquals("4", alice.receive(bob, bob.send(alice, "4")))
+        bob.restart()
+        assertEquals("5", bob.receive(alice, alice.send(bob, "5")))
+    }
+
+    @Test
+    fun `text left over from an interrupted move is removed, and the new state is used`() = runTest {
+        val alice = Peer("alice")
+        val bob = Peer("bob")
+        bob.receive(alice, alice.send(bob, "1"))
+        bob.legacy["v2_alice"] = bob.engine.legacyJsonFor("alice")!! // stored, not yet removed
+        bob.receive(alice, alice.send(bob, "2"))                     // the new state moves on
+
+        bob.restart()
+        assertEquals("3", bob.receive(alice, alice.send(bob, "3")))
+        assertFalse(bob.legacy.containsKey("v2_alice"))
+    }
+
+    @Test
+    fun `nothing of a key is in the stored bytes as base64 or hex text`() = runTest {
+        val alice = Peer("alice")
+        val bob = Peer("bob")
+        bob.receive(alice, alice.send(bob, "1"))
+        alice.receive(bob, bob.send(alice, "2"))
+        val stored = String(bob.storage["v2_alice"]!!, Charsets.ISO_8859_1)
+        val json = bob.engine.legacyJsonFor("alice")!!
+        // Every key the JSON form had as base64 is in the new form as raw bytes only.
+        val keys = Regex(""""(dhPrivateKey|rootKey|sendingChainKey|receivingChainKey)":"([^"]+)"""")
+            .findAll(json).map { it.groupValues[2] }.toList()
+        assertTrue(keys.size >= 3)
+        for (b64 in keys) {
+            val raw = Base64.getDecoder().decode(b64)
+            assertFalse(stored.contains(b64))
+            assertFalse(stored.contains(raw.joinToString("") { "%02x".format(it) }))
+            assertTrue(stored.contains(String(raw, Charsets.ISO_8859_1)))
+        }
+    }
+
+    @Test
+    fun `a damaged stored state is dropped, and the next message starts a new session`() = runTest {
+        val alice = Peer("alice")
+        val bob = Peer("bob")
+        bob.receive(alice, alice.send(bob, "1"))
+        val stored = bob.storage["v2_alice"]!!
+        bob.storage["v2_alice"] = stored.copyOf(stored.size - 3) // truncated
+        io.mockk.mockkStatic(android.util.Log::class) // debug builds log the dropped state
+        every { android.util.Log.w(any(), any<String>()) } returns 0
+        try {
+            bob.restart()
+            assertNull(bob.engine.sessionInfo("alice"))
+            assertFalse(bob.storage.containsKey("v2_alice"))
+        } finally {
+            io.mockk.unmockkStatic(android.util.Log::class)
+        }
     }
 }

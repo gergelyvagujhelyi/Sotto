@@ -100,7 +100,7 @@ class RatchetSessionManager @Inject constructor(
             try {
                 persist(peer.userId, record)
             } catch (_: Exception) {
-                keyManager.removeRatchetState(storageKey(peer.userId))
+                keyManager.removeSessionState(storageKey(peer.userId))
             }
             throw e
         }
@@ -209,7 +209,7 @@ class RatchetSessionManager @Inject constructor(
     override suspend fun clearAllSessions() = mutex.withLock {
         records.values.forEach { r -> r.all().forEach { it.wipe() } }
         records.clear()
-        keyManager.removeAllRatchetStates()
+        keyManager.removeAllSessionStates()
     }
 
     override suspend fun sessionInfo(peerUserId: String): SessionInfo? = mutex.withLock {
@@ -414,12 +414,30 @@ class RatchetSessionManager @Inject constructor(
 
     private fun loadRecord(peerUserId: String): SessionRecord? {
         records[peerUserId]?.let { return it }
-        val serialized = keyManager.loadRatchetState(storageKey(peerUserId)) ?: return null
+        val key = storageKey(peerUserId)
         val record = try {
-            json.decodeFromString<SerializableRecord>(serialized).toRecord()
+            val stored = keyManager.loadSessionState(key)
+            if (stored != null) {
+                try {
+                    decodeRecord(stored)
+                } finally {
+                    stored.fill(0)
+                }.also {
+                    // Left over if a move from the old storage stopped before removing it.
+                    keyManager.removeLegacySessionState(key)
+                }
+            } else {
+                // Up to 0.7.3 states were JSON text: decode it once, store it the new way, and
+                // only then remove the text (a stop in between just repeats this next time).
+                val legacy = keyManager.loadLegacySessionState(key) ?: return null
+                json.decodeFromString<SerializableRecord>(legacy).toRecord().also {
+                    persist(peerUserId, it)
+                    keyManager.removeLegacySessionState(key)
+                }
+            }
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.w("RatchetSession", "Failed to load persisted session record")
-            keyManager.removeRatchetState(storageKey(peerUserId))
+            keyManager.removeSessionState(key)
             return null
         }
         records[peerUserId] = record
@@ -427,8 +445,118 @@ class RatchetSessionManager @Inject constructor(
     }
 
     private fun persist(peerUserId: String, record: SessionRecord) {
-        val ok = keyManager.saveRatchetState(storageKey(peerUserId), json.encodeToString(record.toSerializable()))
+        val encoded = encodeRecord(record)
+        val ok = try {
+            keyManager.saveSessionState(storageKey(peerUserId), encoded)
+        } finally {
+            encoded.fill(0)
+        }
         if (!ok) throw IllegalStateException("Failed to persist session state")
+    }
+
+    /**
+     * The record as JSON text, as stored up to 0.7.3: for tests of moving such a state over.
+     * Never stored: text can't be wiped.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal suspend fun legacyJsonFor(peerUserId: String): String? = mutex.withLock {
+        loadRecord(peerUserId)?.let { json.encodeToString(it.toSerializable()) }
+    }
+
+    // ── Binary encoding (format 1) ────────────────────────────────────
+    // Written into a SecretBytesWriter, which leaves no copies of the keys; read back into
+    // fresh arrays the RatchetStates own. Every key is in here: never in a String.
+
+    private fun encodeRecord(record: SessionRecord): ByteArray {
+        val w = SecretBytesWriter()
+        w.byte(RECORD_FORMAT.toInt())
+        w.bytes(record.remoteIdentityKey)
+        w.strings(record.seenTags)
+        w.strings(record.retiredRemoteKeys)
+        w.bool(record.current != null)
+        record.current?.let { encodeState(w, it) }
+        w.int(record.previous.size)
+        record.previous.forEach { encodeState(w, it) }
+        return w.toByteArray()
+    }
+
+    private fun encodeState(w: SecretBytesWriter, state: RatchetState) {
+        w.bytes(state.dhKeyPair.publicKey)
+        w.bytes(state.dhKeyPair.privateKey)
+        w.bytes(state.remoteDhPublicKey)
+        w.bytes(state.rootKey)
+        w.bytes(state.sendingChainKey?.key)
+        w.int(state.sendingChainKey?.index ?: 0)
+        w.bytes(state.receivingChainKey?.key)
+        w.int(state.receivingChainKey?.index ?: 0)
+        w.int(state.previousSendingChainLength)
+        w.int(state.skippedMessageKeys.size)
+        for ((k, v) in state.skippedMessageKeys) {
+            w.string(k.first)
+            w.int(k.second)
+            w.bytes(v)
+            w.long(state.skippedKeyTimestamps[k] ?: System.currentTimeMillis())
+        }
+        w.strings(state.previousRemoteKeys)
+        w.bytes(state.pendingKemCiphertext)
+        w.bool(state.pqcEstablished)
+        w.string(state.sessionTag)
+        w.bool(state.isInitiator)
+        w.bool(state.confirmed)
+    }
+
+    private fun decodeRecord(bytes: ByteArray): SessionRecord {
+        val r = SecretBytesReader(bytes)
+        require(r.byte() == RECORD_FORMAT.toInt()) { "Unknown session state format" }
+        val record = SessionRecord(
+            remoteIdentityKey = r.bytes(),
+            seenTags = r.strings(),
+            retiredRemoteKeys = r.strings(),
+        )
+        try {
+            if (r.bool()) record.current = decodeState(r)
+            repeat(r.int().also { require(it in 0..MAX_PREVIOUS_SESSIONS) { "Bad session count" } }) {
+                record.previous.add(decodeState(r))
+            }
+            r.end()
+        } catch (e: Exception) {
+            record.all().forEach { it.wipe() }
+            throw e
+        }
+        return record
+    }
+
+    private fun decodeState(r: SecretBytesReader): RatchetState {
+        val dhPublic = r.bytes()
+        val dhPrivate = r.bytes()
+        val remote = r.bytesOrNull()
+        val root = r.bytes()
+        val sending = r.bytesOrNull()?.let { ChainKey(it, r.int()) } ?: run { r.int(); null }
+        val receiving = r.bytesOrNull()?.let { ChainKey(it, r.int()) } ?: run { r.int(); null }
+        val previousSendingChainLength = r.int()
+        val skipped = mutableMapOf<Pair<String, Int>, ByteArray>()
+        val timestamps = mutableMapOf<Pair<String, Int>, Long>()
+        repeat(r.int().also { require(it in 0..MAX_SKIPPED_KEYS) { "Bad skipped key count" } }) {
+            val k = r.string() to r.int()
+            skipped[k] = r.bytes()
+            timestamps[k] = r.long()
+        }
+        return RatchetState(
+            dhKeyPair = DhKeyPair(dhPublic, dhPrivate),
+            remoteDhPublicKey = remote,
+            rootKey = root,
+            sendingChainKey = sending,
+            receivingChainKey = receiving,
+            previousSendingChainLength = previousSendingChainLength,
+            skippedMessageKeys = skipped,
+            skippedKeyTimestamps = timestamps,
+            previousRemoteKeys = r.strings(),
+            pendingKemCiphertext = r.bytesOrNull(),
+            pqcEstablished = r.bool(),
+            sessionTag = r.string(),
+            isInitiator = r.bool(),
+            confirmed = r.bool(),
+        )
     }
 
     private fun storageKey(peerUserId: String) = "v2_$peerUserId"
@@ -542,6 +670,9 @@ class RatchetSessionManager @Inject constructor(
     )
 
     companion object {
+        private const val RECORD_FORMAT: Byte = 1
+        /** Sanity bound when decoding: a chain holds at most MAX_SKIP, kept for a week. */
+        private const val MAX_SKIPPED_KEYS = 100_000
         private const val SESSION_TAG_BYTES = 16
         private const val MAX_PREVIOUS_SESSIONS = 4
         private const val MAX_SEEN_TAGS = 128
