@@ -19,11 +19,13 @@ import com.sotto.app.data.remote.dto.RelayHealthDto
 import com.sotto.app.data.remote.dto.ResolveShareCodeResponse
 import com.sotto.app.data.remote.dto.SendMessageRequest
 import com.sotto.app.data.remote.dto.SendMessageResponse
+import com.sotto.app.update.AppUpdates
 import io.ktor.client.HttpClient
 import android.util.Base64
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.HttpRequestRetry
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
@@ -66,6 +68,7 @@ class KtorApiService @Inject constructor(
     private val keyManager: KeyManager,
     private val pqcProvider: PqcProvider,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
+    private val appUpdates: com.sotto.app.update.AppUpdates,
 ) : ApiService, java.io.Closeable {
 
     private val client = HttpClient(OkHttp) {
@@ -102,6 +105,16 @@ class KtorApiService @Inject constructor(
                 }
             }
         }
+        // Every answer from our relay names its version and whether that app is out.
+        // Only our relay's: a relay checked during setup isn't the one we use.
+        install(createClientPlugin("RelayVersion") {
+            onResponse { response ->
+                val version = response.headers[AppUpdates.RELAY_VERSION_HEADER] ?: return@onResponse
+                val relay = relayConfig.baseUrl?.trimEnd('/') ?: return@onResponse
+                if (!response.call.request.url.toString().startsWith("$relay/")) return@onResponse
+                appUpdates.report(version, response.headers[AppUpdates.APP_READY_HEADER] == "true")
+            }
+        })
         install(Logging) {
             // Use INFO (method + URL only) instead of HEADERS to avoid
             // leaking Authorization tokens to logcat in debug builds.

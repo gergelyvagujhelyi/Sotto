@@ -132,6 +132,13 @@ class ErrorResponse(BaseModel):
     message: str
 
 
+class AppReleaseCall(BaseModel):
+    """The release workflow's "the app is out" call (services/app_release.py)."""
+    version: str = Field(..., max_length=32)
+    ts: int
+    signature: str = Field(..., max_length=200)
+
+
 class HealthResponse(BaseModel):
     status: str = "ok"
     version: str  # config.RELAY_VERSION
@@ -139,6 +146,9 @@ class HealthResponse(BaseModel):
     service: str = "sotto-relay"
     # ...and whether a new account here needs an invite.
     invite_required: bool = False
+    # The APK of the app release that goes with this relay (same version), once it can be
+    # downloaded; null before. A phone on an older app offers it as an update.
+    app_download_url: Optional[str] = None
 
 
 class InviteResponse(BaseModel):

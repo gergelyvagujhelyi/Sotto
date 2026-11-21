@@ -86,6 +86,7 @@ async def send_push_notification(
     sender_id: Optional[str] = None,
     fid: Optional[str] = None,
     for_call: bool = False,
+    signal: str = "new_message",
 ) -> bool:
     """Send a wake-up push to a device.
 
@@ -101,6 +102,9 @@ async def send_push_notification(
 
     ``for_call``: a call offer's push, which lasts a minute (``CALL_PUSH_TTL``); a message's
     lasts as long as Firebase allows (``MESSAGE_PUSH_TTL``). Neither collapses.
+
+    ``signal``: the push's ``type``. Apps treat every push as "wake up and fetch";
+    ``app_release`` says why (the app release that goes with this relay is out).
     """
     if fid:
         target, column, value = {"fid": fid}, "fcm_fid", fid
@@ -117,7 +121,7 @@ async def send_push_notification(
         # Wake-up signal only. The sender id is deliberately NOT included: the
         # client doesn't need it (it fetches from /pending) and it would hand
         # Google the who-talks-to-whom graph.
-        data = {"type": "new_message"}
+        data = {"type": signal}
 
         with warnings.catch_warnings():
             # Message.token is deprecated in favour of fid; tokens stay for apps up to 0.5.4.

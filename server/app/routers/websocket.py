@@ -6,7 +6,8 @@ only a signal to fetch from the REST API.
 
 Protocol:
 - Client sends: {"type": "auth", "token": "<user_id>.<ts_ms>.<sig_b64>"}
-- Server sends: {"type": "auth_ok"} on success
+- Server sends: {"type": "auth_ok", "relay_version": "...", "app_ready": bool} on success
+- Server sends: {"type": "app_release", "version": "..."} when the app of its version is out
 - Server sends: {"type": "new_message", "sender_id": "..."}
 - Client sends: {"type": "ping"} periodically
 - Server sends: {"type": "pong"}
@@ -26,6 +27,7 @@ from app.config import WS_IDLE_TIMEOUT_SECONDS
 from app.database import get_db
 from app.models.db import Identity
 from app.services.call_rate_limiter import allow_call_offer, allow_call_signal
+from app.services import app_release as app_release_service
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(tags=["websocket"])
@@ -136,8 +138,11 @@ async def websocket_endpoint(
             return
         logger.info("WebSocket authenticated: %s", user_id[:8])
 
+        # Which Sotto the relay runs, and whether that app is out: a phone on an older app
+        # says so (services/app_release.py). Older apps ignore the extra fields.
+        release = app_release_service.app_release
         await websocket.send_text(
-            json.dumps({"type": "auth_ok"})
+            json.dumps({"type": "auth_ok", "relay_version": release.version, "app_ready": release.ready})
         )
 
         # Flush pending call signals AFTER auth_ok so the client doesn't
