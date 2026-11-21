@@ -1,6 +1,7 @@
 """Regression tests: a stalled socket must not block delivery for anyone else."""
 
 import asyncio
+import json
 import time
 
 import pytest
@@ -34,6 +35,12 @@ def short_timeout(monkeypatch):
     monkeypatch.setattr(wsm, "_SEND_TIMEOUT", 0.05)
 
 
+async def logged_in(mgr: WebSocketManager, user_id: str, ws) -> None:
+    """Register a socket that already got auth_ok and had its flush (of nothing)."""
+    await mgr.register(user_id, ws)
+    mgr._connections[user_id][ws] = True
+
+
 async def test_eviction_of_stalled_socket_does_not_block_other_users():
     mgr = WebSocketManager()
     stalled = FakeSocket(hang=True)
@@ -42,7 +49,7 @@ async def test_eviction_of_stalled_socket_does_not_block_other_users():
         await mgr.register("mallory", FakeSocket())
 
     victim = FakeSocket()
-    await mgr.register("victim", victim)
+    await logged_in(mgr, "victim", victim)
 
     async def evict():
         # 6th connection evicts the stalled one.
@@ -58,8 +65,8 @@ async def test_send_to_stalled_socket_times_out_and_drops_it():
     mgr = WebSocketManager()
     stalled = FakeSocket(hang=True)
     healthy = FakeSocket()
-    await mgr.register("bob", stalled)
-    await mgr.register("bob", healthy)
+    await logged_in(mgr, "bob", stalled)
+    await logged_in(mgr, "bob", healthy)
 
     delivered = await asyncio.wait_for(mgr.notify_new_message("bob", "alice"), timeout=2)
     assert delivered
@@ -219,7 +226,7 @@ async def test_a_broken_flush_hands_its_signals_to_the_users_other_socket():
     payloads = await _buffer(mgr, "bob", ["call_offer", "call_ice_candidate"])
     broken, other = BreaksAfter(ok=0), FakeSocket()
     await mgr.register("bob", broken)
-    await mgr.register("bob", other)  # connected after; its own flush found nothing
+    await logged_in(mgr, "bob", other)  # connected after; its own flush found nothing
 
     await mgr.flush_pending_signals("bob", broken)
     assert other.sent == payloads
@@ -261,3 +268,23 @@ async def test_a_full_requeue_drops_ice_candidates_not_a_hangup_buffered_meanwhi
     assert queued[-1] == hangup  # and so does the hangup
     assert first[1] not in queued  # the oldest ICE candidate gave way
     assert mgr._pending_signal_bytes == sum(len(p) for p in queued)
+
+
+async def test_a_socket_gets_nothing_until_its_flush():
+    """Until the endpoint sent auth_ok and called flush_pending_signals, a socket is
+    not offered to sends: the app takes any other first frame for a failed login."""
+    mgr = WebSocketManager()
+    ws = FakeSocket()
+    await mgr.register("bob", ws)
+
+    assert not mgr.is_online("bob")
+    assert not await mgr.notify("bob", "receipts")
+    assert await mgr.broadcast('{"type": "app_release"}') == 0
+    assert not await mgr.relay_call_signal("alice", "bob", "call_offer", "c1", "enc")
+    assert ws.sent == []
+    assert mgr.connection_count() == 1  # still counted, and closed by disconnect_user
+
+    await mgr.flush_pending_signals("bob", ws)
+    assert [json.loads(p)["type"] for p in ws.sent] == ["call_offer"]
+    assert mgr.is_online("bob")
+    assert await mgr.notify("bob", "receipts")

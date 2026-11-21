@@ -125,3 +125,32 @@ def test_ws_auth_ok_names_the_relay_version_and_whether_its_app_is_out():
             ws.send_text(json.dumps({"type": "auth", "token": _make_token(user["private_key"], user["user_id"])}))
             resp = json.loads(ws.receive_text())
     assert resp == {"type": "auth_ok", "relay_version": config.RELAY_VERSION, "app_ready": False}
+
+
+def test_signals_sent_while_the_socket_is_still_logging_in_come_after_auth_ok(monkeypatch):
+    """The socket is registered before the key re-check, so a frame sent meanwhile
+    went out before auth_ok, and the app took it for a failed login and dropped the
+    connection. Now it gets nothing until auth_ok: call signals are buffered and
+    delivered right after it."""
+    from starlette.testclient import TestClient
+    from app.main import app
+    from app.services.websocket_manager import ws_manager
+
+    real_register = ws_manager.register
+    sent_meanwhile = []
+
+    async def register_then_signal(user_id, websocket):
+        await real_register(user_id, websocket)
+        # What other requests can do during the re-check query:
+        sent_meanwhile.append(await ws_manager.notify(user_id, "receipts"))
+        sent_meanwhile.append(await ws_manager.relay_call_signal("caller", user_id, "call_hangup", "c1", "enc"))
+
+    monkeypatch.setattr(ws_manager, "register", register_then_signal)
+    with TestClient(app) as tc:
+        user = _bootstrap_user_sync(tc, "logging_in")
+        with tc.websocket_connect("/v1/ws") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": _make_token(user["private_key"], user["user_id"])}))
+            assert json.loads(ws.receive_text())["type"] == "auth_ok"
+            hangup = json.loads(ws.receive_text())
+    assert hangup["type"] == "call_hangup" and hangup["call_id"] == "c1"
+    assert sent_meanwhile == [False, False]  # not delivered: a message would get its push
