@@ -28,12 +28,14 @@ class AppUpdates @Inject constructor(
     @Synchronized
     fun report(relayVersion: String, appReady: Boolean) {
         val update = AppUpdate.of(appVersion, relayVersion, appReady)
-        if (heard && update == _state.value) return
+        val changed = !heard || update != _state.value
         heard = true
-        _state.value = update
+        if (changed) _state.value = update
         when (update) {
+            // Every answer, not only on a change: an announcement that couldn't be posted
+            // (notifications not allowed yet) goes out once they are.
             is AppUpdate.Ready -> if (notifier.lastAnnouncedVersion() != update.version) notifier.announce(update)
-            AppUpdate.None -> notifier.withdraw()
+            AppUpdate.None -> if (changed) notifier.withdraw()
             is AppUpdate.OnItsWay -> Unit
         }
     }

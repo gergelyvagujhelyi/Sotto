@@ -87,4 +87,19 @@ class AppUpdateTest {
         updates.report("0.7.2", appReady = true)
         verify(exactly = 1) { notifier.withdraw() }
     }
+
+    @Test
+    fun `a notification that couldn't be posted is tried again on the next answer`() {
+        // Notifications not allowed yet: announce posts nothing and records nothing.
+        every { notifier.announce(any()) } returns false
+        updates.report("0.7.3", appReady = true)
+        updates.report("0.7.3", appReady = true)
+        verify(exactly = 2) { notifier.announce(any()) }
+
+        // Allowed now: the next answer announces it, and that's the last time.
+        every { notifier.announce(any()) } answers { announced = firstArg<AppUpdate.Ready>().version; true }
+        updates.report("0.7.3", appReady = true)
+        updates.report("0.7.3", appReady = true)
+        verify(exactly = 3) { notifier.announce(any()) }
+    }
 }
