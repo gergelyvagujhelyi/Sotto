@@ -756,6 +756,8 @@ class MessageRepositoryImpl @Inject constructor(
         // "mine" is the sender's: their own message, stored here under the relay's id.
         val targetId = if (reaction.mine) reaction.to else findOwnByRelayId(conversation.id, me, reaction.to) ?: return
         val target = messageDao.getById(targetId) ?: return
+        // Only the contact's reactions arrive here (the user's own are stored when sent).
+        // "mine" is theirs, so the target is the user's message exactly when it's false.
         if (target.conversationId != conversation.id || target.isOutgoing == reaction.mine) return
         if (!reaction.mine && target.recipientId != senderId) return
         if (reaction.mine && target.senderId != senderId) return

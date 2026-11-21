@@ -38,12 +38,12 @@ class ReactionPayloadTest {
 
     @Test
     fun `skin tones, families, flags and keycaps are emoji`() {
-        listOf("👍🏽", "👨‍👩‍👧", "🇸🇪", "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "1️⃣", "#️⃣", "♥").forEach { assertTrue(it, ReactionPayload.isEmoji(it)) }
+        listOf("👍🏽", "👨‍👩‍👧", "🇸🇪", "🏴󠁧󠁢󠁳󠁣󠁴󠁿", "1️⃣", "1\u20E3", "#️⃣", "♥").forEach { assertTrue(it, ReactionPayload.isEmoji(it)) }
     }
 
     @Test
     fun `text is not a reaction`() {
-        listOf("", "a", "ok", "1", "❤️ ❤️", "❤️\n", "\u0000", "😀".repeat(20)).forEach {
+        listOf("", "a", "ok", "1", "1\uFE0F", "12", "❤️ ❤️", "❤️\n", "\u0000", "😀".repeat(20)).forEach {
             assertFalse(it, ReactionPayload.isEmoji(it))
             assertNull(it, ReactionPayload.decode(ReactionPayload.encode("id", it, false).takeIf { _ -> it.isNotEmpty() } ?: "x"))
         }
