@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -17,12 +16,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,14 +41,20 @@ import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.ui.theme.Aurora
 
 /**
- * The quick reactions over a held message, as on WhatsApp: six emoji and "+" for more.
- * The user's current reaction is ringed; picking it again takes it back. Shown above
- * the message, or below it when the message is at the top of the screen.
+ * The quick reactions over a held message, as on WhatsApp: six emoji and "+" for more,
+ * which turns the bar into a grid of every reaction ([expanded]). The user's current
+ * reaction is ringed; picking it again takes it back. Shown above the message, or below
+ * it when the message is at the top of the screen.
+ *
+ * Never takes focus: a focused popup (or a bottom sheet) takes it from the text box, the
+ * keyboard closes, and the whole chat jumps. So the keyboard stays as it was, and Back is
+ * handled by the chat (it closes this).
  */
 @Composable
 internal fun ReactionPicker(
     current: String?,
     alignEnd: Boolean,
+    expanded: Boolean,
     onPick: (String) -> Unit,
     onMore: () -> Unit,
     onDismiss: () -> Unit,
@@ -61,8 +63,12 @@ internal fun ReactionPicker(
     Popup(
         popupPositionProvider = AboveOrBelow(alignEnd, gap),
         onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+        properties = PopupProperties(focusable = false),
     ) {
+        if (expanded) {
+            MoreReactions(current, onPick)
+            return@Popup
+        }
         val shape = RoundedCornerShape(28.dp)
         Row(
             modifier = Modifier
@@ -122,23 +128,24 @@ private fun EmojiChoice(emoji: String, selected: Boolean, onClick: () -> Unit, s
     }
 }
 
-/** All the reactions behind "+", in a sheet. */
-@OptIn(ExperimentalMaterial3Api::class)
+/** All the reactions behind "+": a scrolling grid in the picker's place. */
 @Composable
-internal fun MoreReactionsSheet(current: String?, onPick: (String) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+private fun MoreReactions(current: String?, onPick: (String) -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(6),
+        contentPadding = PaddingValues(6.dp),
+        modifier = Modifier
+            .padding(4.dp)
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, Aurora.colors.glassBorder, shape)
+            .size(width = 300.dp, height = 248.dp),
     ) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(52.dp),
-            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 16.dp),
-            modifier = Modifier.navigationBarsPadding(),
-        ) {
-            items(ReactionPayload.MORE.distinct()) { emoji ->
-                Box(Modifier.padding(4.dp), contentAlignment = Alignment.Center) {
-                    EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) }, size = 44)
-                }
+        items(ReactionPayload.MORE.distinct()) { emoji ->
+            Box(Modifier.padding(2.dp), contentAlignment = Alignment.Center) {
+                EmojiChoice(emoji, selected = emoji == current, onClick = { onPick(emoji) }, size = 44)
             }
         }
     }
