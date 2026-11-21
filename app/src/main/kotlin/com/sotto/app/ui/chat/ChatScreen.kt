@@ -1,5 +1,6 @@
 package com.sotto.app.ui.chat
 
+import androidx.activity.compose.BackHandler
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -973,8 +974,10 @@ private fun ChatRowItem(
                     pickingMore = false
                     onReact(message, emoji)
                 }
-                if (pickingMore) {
-                    MoreReactionsSheet(current = message.myReaction, onPick = react, onDismiss = { pickingMore = false })
+                // The picker never takes focus (so the keyboard stays): Back closes it here.
+                BackHandler(enabled = picking) {
+                    picking = false
+                    pickingMore = false
                 }
                 SwipeToReply(
                     enabled = message.canReply,
@@ -1022,12 +1025,13 @@ private fun ChatRowItem(
                                 ReactionPicker(
                                     current = message.myReaction,
                                     alignEnd = message.isOutgoing,
+                                    expanded = pickingMore,
                                     onPick = react,
-                                    onMore = {
+                                    onMore = { pickingMore = true },
+                                    onDismiss = {
                                         picking = false
-                                        pickingMore = true
+                                        pickingMore = false
                                     },
-                                    onDismiss = { picking = false },
                                 )
                             }
                         } else {

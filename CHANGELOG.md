@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Reacting leaves the chat as it is** — Holding a message to react closed the keyboard, so the whole chat jumped down, and **+** opened a sheet that did the same. Now the keyboard stays open and nothing moves: the reactions open over the message, and **+** turns them into a grid of every reaction in the same place. Tap outside or press Back to close them.
 
 ## 0.7.2 — 2026-11-21
 
