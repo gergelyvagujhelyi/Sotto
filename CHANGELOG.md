@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Updates through SourceDrop** — When a new Sotto is out, the notice in the chat list no longer downloads the APK: its "Open SourceDrop" button, and a tap on the update notification, open SourceDrop, which installs apps straight from their source. Without SourceDrop on the phone, they open its page instead.
 
 ## 0.7.4 — 2026-11-21
 

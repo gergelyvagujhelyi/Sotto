@@ -8,7 +8,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppUpdateTest {
-    private val official = "https://github.com/gergelyvagujhelyi/Sotto/releases/download/v0.7.3/app-release.apk"
 
     @Test
     fun `versions compare number by number`() {
@@ -34,12 +33,12 @@ class AppUpdateTest {
     }
 
     @Test
-    fun `once its app is out the update is ready, from the official releases`() {
-        assertEquals(AppUpdate.Ready("0.7.3", official), AppUpdate.of("0.7.2", "0.7.3", true))
+    fun `once its app is out the update is ready`() {
+        assertEquals(AppUpdate.Ready("0.7.3"), AppUpdate.of("0.7.2", "0.7.3", true))
     }
 
     @Test
-    fun `a relay version that isn't a plain version is never put into the address`() {
+    fun `a relay version that isn't a plain version is ignored`() {
         assertEquals(AppUpdate.None, AppUpdate.of("0.7.2", "9.9.9/../../evil", true))
     }
 
@@ -64,8 +63,8 @@ class AppUpdateTest {
         updates.report("0.7.3", appReady = false)
         repeat(5) { updates.report("0.7.3", appReady = true) }
 
-        assertEquals(AppUpdate.Ready("0.7.3", official), updates.state.value)
-        verify(exactly = 1) { notifier.announce(AppUpdate.Ready("0.7.3", official)) }
+        assertEquals(AppUpdate.Ready("0.7.3"), updates.state.value)
+        verify(exactly = 1) { notifier.announce(AppUpdate.Ready("0.7.3")) }
 
         updates.report("0.7.4", appReady = true)
         verify(exactly = 1) { notifier.announce(match { it.version == "0.7.4" }) }
@@ -76,7 +75,7 @@ class AppUpdateTest {
         announced = "0.7.3"
         updates.report("0.7.3", appReady = true)
         verify(exactly = 0) { notifier.announce(any()) }
-        assertEquals(AppUpdate.Ready("0.7.3", official), updates.state.value)
+        assertEquals(AppUpdate.Ready("0.7.3"), updates.state.value)
     }
 
     @Test

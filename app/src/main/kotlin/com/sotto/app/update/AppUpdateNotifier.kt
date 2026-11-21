@@ -5,20 +5,18 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import androidx.core.net.toUri
 import com.sotto.app.R
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** The "update ready" notification: tapping it downloads the APK in the browser. */
+/** The "update ready" notification: tapping it opens [SourceDrop] (or its page). */
 @Singleton
 class AppUpdateNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -34,20 +32,20 @@ class AppUpdateNotifier @Inject constructor(
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "When a new version of Sotto is ready to download"
+                description = "When a new version of Sotto is out"
             }
         )
-        val download = PendingIntent.getActivity(
+        val open = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,
-            Intent(Intent.ACTION_VIEW, update.url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            SourceDrop.intent(context),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Sotto ${update.version} is ready")
-            .setContentText("Your relay already runs it. Tap to download the update.")
-            .setContentIntent(download)
+            .setContentText("Your relay already runs it. Tap to update with SourceDrop.")
+            .setContentIntent(open)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .build()

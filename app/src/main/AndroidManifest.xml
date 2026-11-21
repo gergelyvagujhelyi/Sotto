@@ -33,6 +33,11 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- The update notice opens SourceDrop when it is installed (update/SourceDrop.kt). -->
+    <queries>
+        <package android:name="dev.sourcedrop.app" />
+    </queries>
+
     <application
         android:name=".SottoApp"
         android:allowBackup="false"
