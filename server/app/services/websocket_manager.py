@@ -236,12 +236,30 @@ class WebSocketManager:
         async with self._lock:
             signals = self._pending_call_signals.pop(user_id, [])
             self._pending_signal_bytes -= sum(len(p) for _, p in signals)
-        for ts, payload in signals:
-            if now - ts > _PENDING_SIGNAL_TTL:
-                continue  # expired
+        signals = [(ts, p) for ts, p in signals if now - ts <= _PENDING_SIGNAL_TTL]
+        for i, (_, payload) in enumerate(signals):
             if not await self._send(user_id, websocket, payload):
-                break
+                # The socket died mid-flush: keep the undelivered signals (the failed
+                # one too, it may not have arrived) for the app's next connection. The
+                # app ignores a signal it already has.
+                await self._requeue_signals(user_id, signals[i:])
+                # Another socket of the user that connected meanwhile already had its
+                # flush (of nothing): hand the signals to it.
+                async with self._lock:
+                    others = [ws for ws in self._connections.get(user_id, {}) if ws is not websocket]
+                if others:
+                    await self.flush_pending_signals(user_id, others[-1])
+                return
             logger.info("Delivered pending call signal to %s", user_id[:8])
+
+    async def _requeue_signals(self, user_id: str, signals: list[tuple[float, str]]) -> None:
+        """Put signals a flush couldn't deliver back in front of any buffered since,
+        keeping their timestamps so the TTL still counts from when they were sent."""
+        async with self._lock:
+            newer = self._pending_call_signals.get(user_id, [])
+            merged = (signals + newer)[:_MAX_PENDING_SIGNALS_PER_USER]
+            self._pending_signal_bytes += sum(len(p) for _, p in merged) - sum(len(p) for _, p in newer)
+            self._pending_call_signals[user_id] = merged
 
     def _prune_expired_signals(self, now: float) -> None:
         """Drop expired buffered signals for all recipients. Caller holds the lock."""
