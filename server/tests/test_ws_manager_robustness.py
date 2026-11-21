@@ -150,3 +150,114 @@ async def test_full_signal_buffer_still_takes_an_ice_restart():
     assert len(types) == wsm._MAX_PENDING_SIGNALS_PER_USER
     assert types[0] == "call_offer"
     assert types[-1] == "call_ice_restart"
+
+
+class BreaksAfter:
+    """Socket that takes [ok] messages, then fails every send."""
+
+    def __init__(self, ok: int):
+        self.ok = ok
+        self.sent: list[str] = []
+
+    async def send_text(self, payload: str) -> None:
+        if len(self.sent) >= self.ok:
+            raise ConnectionError("socket broke")
+        self.sent.append(payload)
+
+    async def close(self, code: int = 1000, reason: str = "") -> None:
+        pass
+
+
+async def _buffer(mgr: WebSocketManager, user: str, types: list[str]) -> list[str]:
+    payloads = [f'{{"type": "{t}", "n": {i}}}' for i, t in enumerate(types)]
+    for p, t in zip(payloads, types):
+        await mgr._store_pending_signal(user, p, t, "alice")
+    return payloads
+
+
+async def test_signals_a_broken_flush_missed_wait_for_the_next_connection():
+    mgr = WebSocketManager()
+    payloads = await _buffer(mgr, "bob", ["call_offer", "call_ice_candidate", "call_ice_candidate", "call_hangup"])
+    total = sum(len(p) for p in payloads)
+
+    broken = BreaksAfter(ok=1)
+    await mgr.register("bob", broken)
+    await mgr.flush_pending_signals("bob", broken)
+    assert broken.sent == payloads[:1]
+    assert mgr.connection_count() == 0  # the broken socket was dropped
+    # The rest, the one whose send failed included, stays buffered and counted.
+    assert [p for _, p in mgr._pending_call_signals["bob"]] == payloads[1:]
+    assert mgr._pending_signal_bytes == total - len(payloads[0])
+
+    fresh = FakeSocket()
+    await mgr.register("bob", fresh)
+    await mgr.flush_pending_signals("bob", fresh)
+    assert fresh.sent == payloads[1:]
+    assert "bob" not in mgr._pending_call_signals
+    assert mgr._pending_signal_bytes == 0
+
+
+async def test_requeued_signals_go_before_ones_buffered_during_the_flush():
+    mgr = WebSocketManager()
+    first = await _buffer(mgr, "bob", ["call_offer", "call_ice_candidate"])
+
+    class BuffersMoreThenBreaks(BreaksAfter):
+        async def send_text(self, payload: str) -> None:
+            await mgr._store_pending_signal("bob", '{"type": "call_hangup"}', "call_hangup", "alice")
+            raise ConnectionError("socket broke")
+
+    broken = BuffersMoreThenBreaks(ok=0)
+    await mgr.register("bob", broken)
+    await mgr.flush_pending_signals("bob", broken)
+    queued = [p for _, p in mgr._pending_call_signals["bob"]]
+    assert queued == first + ['{"type": "call_hangup"}']
+    assert mgr._pending_signal_bytes == sum(len(p) for p in queued)
+
+
+async def test_a_broken_flush_hands_its_signals_to_the_users_other_socket():
+    mgr = WebSocketManager()
+    payloads = await _buffer(mgr, "bob", ["call_offer", "call_ice_candidate"])
+    broken, other = BreaksAfter(ok=0), FakeSocket()
+    await mgr.register("bob", broken)
+    await mgr.register("bob", other)  # connected after; its own flush found nothing
+
+    await mgr.flush_pending_signals("bob", broken)
+    assert other.sent == payloads
+    assert "bob" not in mgr._pending_call_signals
+    assert mgr._pending_signal_bytes == 0
+
+
+async def test_flush_does_not_requeue_expired_signals(monkeypatch):
+    mgr = WebSocketManager()
+    await _buffer(mgr, "bob", ["call_offer"])
+    later = time.monotonic() + wsm._PENDING_SIGNAL_TTL + 1
+    monkeypatch.setattr(wsm.time, "monotonic", lambda: later)
+
+    broken = BreaksAfter(ok=0)
+    await mgr.register("bob", broken)
+    await mgr.flush_pending_signals("bob", broken)
+    assert broken.sent == []
+    assert "bob" not in mgr._pending_call_signals
+    assert mgr._pending_signal_bytes == 0
+
+
+async def test_a_full_requeue_drops_ice_candidates_not_a_hangup_buffered_meanwhile():
+    mgr = WebSocketManager()
+    cap = wsm._MAX_PENDING_SIGNALS_PER_USER
+    first = await _buffer(mgr, "bob", ["call_offer"] + ["call_ice_candidate"] * (cap - 1))
+    hangup = '{"type": "call_hangup"}'
+
+    class BuffersHangupThenBreaks(BreaksAfter):
+        async def send_text(self, payload: str) -> None:
+            await mgr._store_pending_signal("bob", hangup, "call_hangup", "carol")
+            raise ConnectionError("socket broke")
+
+    broken = BuffersHangupThenBreaks(ok=0)
+    await mgr.register("bob", broken)
+    await mgr.flush_pending_signals("bob", broken)
+    queued = [p for _, p in mgr._pending_call_signals["bob"]]
+    assert len(queued) == cap
+    assert queued[0] == first[0]  # the offer stays
+    assert queued[-1] == hangup  # and so does the hangup
+    assert first[1] not in queued  # the oldest ICE candidate gave way
+    assert mgr._pending_signal_bytes == sum(len(p) for p in queued)
