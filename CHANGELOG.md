@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Relay: one-use sign-in tokens can be turned on** — 0.7.3 added `AUTH_SINGLE_USE_TOKENS`, but `docker-compose.yml` didn't pass it from `.env` to the relay, so setting it did nothing. It does now (still off unless `.env` says `true`).
 
 ## 0.7.3 — 2026-11-21
 
