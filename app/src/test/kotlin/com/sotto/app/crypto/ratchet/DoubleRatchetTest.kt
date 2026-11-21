@@ -3,6 +3,8 @@ package com.sotto.app.crypto.ratchet
 import com.sotto.app.crypto.ClassicalKeyAgreement
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotEquals
 import org.junit.Before
 import org.junit.Test
@@ -122,6 +124,62 @@ class DoubleRatchetTest {
         assertArrayEquals(chain1.messageKey(), chain2.messageKey())
         assertArrayEquals(chain1.next().key, chain2.next().key)
     }
+
+    // ── Forward secrecy in memory: used keys are wiped, not just dropped ──
+
+    private fun ByteArray.wiped() = all { it == 0.toByte() }
+
+    private fun session(): Pair<RatchetState, RatchetState> {
+        val bob = ka.generateKeyAgreementKeyPair().let { DhKeyPair(it.first, it.second) }
+        return ratchet.initAlice(sharedSecret.copyOf(), bob.publicKey) to ratchet.initBob(sharedSecret.copyOf(), bob)
+    }
+
+    @Test
+    fun `sending wipes the chain key it moved past`() {
+        val (alice, _) = session()
+        val before = alice.sendingChainKey!!.key
+        ratchet.encrypt(alice, "1".toByteArray())
+        assertTrue(before.wiped())
+        assertFalse(alice.sendingChainKey!!.key.wiped())
+    }
+
+    @Test
+    fun `receiving wipes the chain key it moved past`() {
+        val (alice, bob) = session()
+        val (h1, c1) = ratchet.encrypt(alice, "1".toByteArray())
+        val (h2, c2) = ratchet.encrypt(alice, "2".toByteArray())
+        ratchet.decrypt(bob, h1, c1)
+        val before = bob.receivingChainKey!!.key
+        ratchet.decrypt(bob, h2, c2)
+        assertTrue(before.wiped())
+    }
+
+    @Test
+    fun `a DH step wipes both chains of the turn that ended`() {
+        val (alice, bob) = session()
+        val (h1, c1) = ratchet.encrypt(alice, "1".toByteArray())
+        ratchet.decrypt(bob, h1, c1)
+        val (h2, c2) = ratchet.encrypt(bob, "2".toByteArray())
+        val aliceSending = alice.sendingChainKey!!.key
+        val aliceRoot = alice.rootKey
+        ratchet.decrypt(alice, h2, c2) // Bob's new ratchet key: Alice steps
+        assertTrue("old sending chain", aliceSending.wiped())
+        assertTrue("old root key", aliceRoot.wiped())
+    }
+
+    @Test
+    fun `skipping ahead wipes the chain keys it passes, keeping only the skipped message keys`() {
+        val (alice, bob) = session()
+        val sent = (1..4).map { ratchet.encrypt(alice, "$it".toByteArray()) }
+        ratchet.decrypt(bob, sent[0].first, sent[0].second)
+        val before = bob.receivingChainKey!!.key
+        ratchet.decrypt(bob, sent[3].first, sent[3].second) // 2 and 3 skipped
+        assertTrue(before.wiped())
+        assertEquals(2, bob.skippedMessageKeys.size)
+        assertEquals("2", String(ratchet.decrypt(bob, sent[1].first, sent[1].second)))
+        assertEquals("3", String(ratchet.decrypt(bob, sent[2].first, sent[2].second)))
+    }
+
 }
 
 /**

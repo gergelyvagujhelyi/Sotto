@@ -5,7 +5,22 @@ import org.bouncycastle.jcajce.spec.KEMExtractSpec
 import org.bouncycastle.jcajce.spec.KEMGenerateSpec
 import org.bouncycastle.jcajce.spec.MLDSAParameterSpec
 import org.bouncycastle.jcajce.spec.MLKEMParameterSpec
+import org.bouncycastle.asn1.nist.NISTObjectIdentifiers
+import org.bouncycastle.asn1.x509.AlgorithmIdentifier
+import org.bouncycastle.asn1.x9.X9ObjectIdentifiers
+import org.bouncycastle.crypto.params.ParametersWithRandom
+import org.bouncycastle.jcajce.spec.KEMKDFSpec
+import org.bouncycastle.pqc.jcajce.provider.util.KdfUtil
 import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAParameters
+import org.bouncycastle.pqc.crypto.mldsa.MLDSAPrivateKeyParameters
+import org.bouncycastle.pqc.crypto.mldsa.MLDSASigner
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMExtractor
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMGenerator
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMParameters
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMPrivateKeyParameters
+import org.bouncycastle.pqc.crypto.mlkem.MLKEMPublicKeyParameters
+import org.bouncycastle.pqc.crypto.util.PublicKeyFactory
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.SecureRandom
@@ -26,6 +41,13 @@ import javax.inject.Singleton
  * Since BC 1.78 the PQC algorithms are bundled in the main bcprov jar.
  * The full [BouncyCastleProvider] (replacing Android's stripped version)
  * includes both classical and PQC algorithms.
+ *
+ * Signing, decapsulation and encapsulation go through BouncyCastle's low-level classes, not
+ * the JCA: a JCA key object holds a copy of the private key (or the shared secret) that
+ * can't be wiped. The private key's seed is read straight from our stored key, and after
+ * use [wipeByteArrayFields] wipes the key material in BouncyCastle's parameter object,
+ * which has no wipe of its own (PqcWipingTest guards that across BouncyCastle updates).
+ * A key in any other form than BouncyCastle's seed-only PKCS#8 takes the JCA path.
  */
 @Singleton
 class BouncyCastlePqcProvider @Inject constructor() : PqcProvider {
@@ -48,7 +70,24 @@ class BouncyCastlePqcProvider @Inject constructor() : PqcProvider {
         )
     }
 
+    private val random = SecureRandom()
+
     override fun encapsulate(encapsulationKey: ByteArray): KemEncapsulation {
+        val public = try {
+            PublicKeyFactory.createKey(encapsulationKey) as? MLKEMPublicKeyParameters
+        } catch (_: Exception) {
+            null
+        }
+        if (public != null && public.parameters == MLKEMParameters.ml_kem_768) {
+            val result = MLKEMGenerator(random).generateEncapsulated(public)
+            val raw = result.secret
+            try {
+                return KemEncapsulation(ciphertext = result.encapsulation, sharedSecret = jcaKemKey(raw))
+            } finally {
+                raw.fill(0)
+                result.destroy() // wipes its copy of the shared secret
+            }
+        }
         val kf = KeyFactory.getInstance(ALGORITHM, PROVIDER)
         val publicKey = kf.generatePublic(X509EncodedKeySpec(encapsulationKey))
 
@@ -67,6 +106,18 @@ class BouncyCastlePqcProvider @Inject constructor() : PqcProvider {
     }
 
     override fun decapsulate(ciphertext: ByteArray, decapsulationKey: ByteArray): ByteArray {
+        seedOf(decapsulationKey, ML_KEM_768_PKCS8_HEADER, 64)?.let { seed ->
+            val key = MLKEMPrivateKeyParameters(MLKEMParameters.ml_kem_768, seed)
+            var raw: ByteArray? = null
+            try {
+                raw = MLKEMExtractor(key).extractSecret(ciphertext)
+                return jcaKemKey(raw)
+            } finally {
+                raw?.fill(0)
+                seed.fill(0)
+                wipeByteArrayFields(key)
+            }
+        }
         val kf = KeyFactory.getInstance(ALGORITHM, PROVIDER)
         val privateKey = kf.generatePrivate(PKCS8EncodedKeySpec(decapsulationKey))
 
@@ -92,6 +143,18 @@ class BouncyCastlePqcProvider @Inject constructor() : PqcProvider {
     }
 
     override fun sign(data: ByteArray, privateKey: ByteArray): ByteArray {
+        seedOf(privateKey, ML_DSA_65_PKCS8_HEADER, 32)?.let { seed ->
+            val key = MLDSAPrivateKeyParameters(MLDSAParameters.ml_dsa_65, seed)
+            try {
+                val signer = MLDSASigner()
+                signer.init(true, ParametersWithRandom(key, random))
+                signer.update(data, 0, data.size)
+                return signer.generateSignature()
+            } finally {
+                seed.fill(0)
+                wipeByteArrayFields(key)
+            }
+        }
         val kf = KeyFactory.getInstance(DSA_ALGORITHM, PROVIDER)
         val privKey = kf.generatePrivate(PKCS8EncodedKeySpec(privateKey))
         try {
@@ -123,7 +186,33 @@ class BouncyCastlePqcProvider @Inject constructor() : PqcProvider {
         }
     }
 
+    /**
+     * The shared secret as the JCA path always gave it (sessions with older versions depend
+     * on it): not ML-KEM's raw secret, but KDF3/SHA-256 of it, 256 bits, as BouncyCastle's
+     * KEMGenerateSpec/KEMExtractSpec do by default. BouncyCastle's own KdfUtil derives it.
+     */
+    private fun jcaKemKey(raw: ByteArray): ByteArray = KdfUtil.makeKeyBytes(JcaDefaultKemKdf, raw.copyOf())
+
+    /** KEMKDFSpec's constructor is protected: this is the JCA default, for [jcaKemKey]. */
+    private object JcaDefaultKemKdf : KEMKDFSpec(
+        AlgorithmIdentifier(X9ObjectIdentifiers.id_kdf_kdf3, AlgorithmIdentifier(NISTObjectIdentifiers.id_sha256)),
+        ByteArray(0),
+        "AES",
+        256,
+    )
+
+    /** The seed in a seed-only PKCS#8 key with this [header]; null for any other form. */
+    private fun seedOf(key: ByteArray, header: ByteArray, seedSize: Int): ByteArray? {
+        if (key.size != header.size + seedSize || header.indices.any { key[it] != header[it] }) return null
+        return key.copyOfRange(header.size, key.size)
+    }
+
     companion object {
+        /** BouncyCastle's seed-only PKCS#8 headers (OID 2.16.840.1.101.3.4.3.18 / .4.4.2). */
+        private val ML_DSA_65_PKCS8_HEADER = hexToBytes("3034020100300b060960864801650304031204220420")
+        private val ML_KEM_768_PKCS8_HEADER = hexToBytes("3054020100300b060960864801650304040204420440")
+        private fun hexToBytes(hex: String) = ByteArray(hex.length / 2) { hex.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
+
         private const val ALGORITHM = "ML-KEM"
         private const val DSA_ALGORITHM = "ML-DSA"
         private const val PROVIDER = "BC"
