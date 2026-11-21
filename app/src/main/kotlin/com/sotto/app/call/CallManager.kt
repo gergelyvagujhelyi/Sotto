@@ -2078,20 +2078,16 @@ class CallManager @Inject constructor(
             }
             val remotePubIdKey = verified.publicIdentityKey
 
-            val localKeyPair = keyManager.loadIdentityKeyPair()
-                ?: throw IllegalStateException("No local identity key pair")
-
-            // X25519 shared secret
-            val classicalSecret = classicalKeyAgreement.agree(
-                privateKey = localKeyPair.privateIdentityKey,
-                remotePublicKey = remotePubIdKey,
-            )
-
-            // Deterministic initiator role: same comparison as RatchetSessionManager
-            val isInitiator = localKeyPair.publicIdentityKey.toCallHex() < remotePubIdKey.toCallHex()
-            // Private keys are only needed for the agreement above.
-            localKeyPair.privateIdentityKey.fill(0)
-            localKeyPair.privateSigningKey.fill(0)
+            // Private keys are only needed for the X25519 agreement (wiped right after,
+            // also if it throws).
+            val (classicalSecret, isInitiator) = keyManager.withIdentityKeyPair { local ->
+                classicalKeyAgreement.agree(
+                    privateKey = local.privateIdentityKey,
+                    remotePublicKey = remotePubIdKey,
+                ) to
+                    // Deterministic initiator role: same comparison as RatchetSessionManager
+                    (local.publicIdentityKey.toCallHex() < remotePubIdKey.toCallHex())
+            } ?: throw IllegalStateException("No local identity key pair")
 
             // PQC KEM handshake (initiator encapsulates, responder decapsulates)
             var pqcSecret = ByteArray(0)

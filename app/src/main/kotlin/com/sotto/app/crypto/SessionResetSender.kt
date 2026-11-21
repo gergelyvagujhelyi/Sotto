@@ -47,19 +47,16 @@ class SessionResetSender @Inject constructor(
 
         val sigPayload = buildMessageSigPayload(senderId, recipientId, nonceBytes, bodyBytes)
         val signature = keyManager.sign(sigPayload)
-        val pqcSigB64 = try {
-            val mlDsaPrivKey = keyManager.getMlDsaPrivateKey()
-            if (mlDsaPrivKey != null) {
-                try {
-                    Base64.encodeToString(pqcProvider.sign(sigPayload, mlDsaPrivKey), Base64.NO_WRAP)
-                } finally {
-                    mlDsaPrivKey.fill(0)
-                }
-            } else ""
-        } catch (e: Exception) {
-            android.util.Log.w("SessionResetSender", "ML-DSA signing failed for $ctrl: ${e.message}")
-            ""
-        }
+        // A signing failure throws rather than sending without ML-DSA: the receiver
+        // drops a PQC account's control message without it, so it would be lost while
+        // the caller thought it was sent (and wouldn't try again).
+        val pqcSigB64 = keyManager.getMlDsaPrivateKey()?.let { mlDsaPrivKey ->
+            try {
+                Base64.encodeToString(pqcProvider.sign(sigPayload, mlDsaPrivKey), Base64.NO_WRAP)
+            } finally {
+                mlDsaPrivKey.fill(0)
+            }
+        } ?: ""
 
         val request = SendMessageRequest(
             recipientId = recipientId,

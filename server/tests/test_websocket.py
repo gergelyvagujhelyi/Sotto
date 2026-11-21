@@ -12,10 +12,11 @@ import time
 import pytest
 
 from tests.auth_helpers import generate_ed25519_keypair
+from tests.auth_helpers import fresh_ts_ms
 
 
 def _make_token(private_key, user_id: str) -> str:
-    ts = str(int(time.time() * 1000))
+    ts = str(fresh_ts_ms())
     payload = f"{user_id}.{ts}"
     sig = private_key.sign(payload.encode("utf-8"))
     sig_b64 = base64.b64encode(sig).decode()

@@ -106,10 +106,8 @@ class IdentityRepositoryImpl @Inject constructor(
     private suspend fun promoteConfirmedRotation() {
         keyManager.promoteStagedKeys()
         keyManager.getUserId()?.let {
-            keyManager.loadIdentityKeyPair()?.let { kp ->
+            keyManager.withIdentityKeyPair { kp ->
                 keyManager.storeShareCode(localShareCode(kp.publicIdentityKey, kp.publicSigningKey))
-                kp.privateIdentityKey.fill(0)
-                kp.privateSigningKey.fill(0)
             }
         }
         keyManager.clearAllPeerSessionFlags()
@@ -123,7 +121,8 @@ class IdentityRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getIdentity(): Identity? {
-        val keyPair = keyManager.loadIdentityKeyPair() ?: return null
+        // Public keys only: the pair comes back with its private keys wiped.
+        val keyPair = keyManager.withIdentityKeyPair { it } ?: return null
         val userId = keyManager.getUserId() ?: return null
         // Always derived locally from our own keys: the share code is a fingerprint
         // of the full key bundle, and must never depend on what the server says.
@@ -160,7 +159,7 @@ class IdentityRepositoryImpl @Inject constructor(
         val keyPair = run {
             val kp = cryptoEngine.generateIdentity()
             keyManager.storeIdentityKeyPair(kp)
-            kp
+            kp.wipePrivateKeys()
         }
 
         // Generate PQC keys only if the user chose hybrid post-quantum.
@@ -195,7 +194,8 @@ class IdentityRepositoryImpl @Inject constructor(
      * (post-quantum keys present exactly when post-quantum was chosen); null otherwise.
      */
     private fun reusableKeys(keyType: KeyType): Triple<KeyPair, ByteArray, ByteArray>? {
-        val keyPair = keyManager.loadIdentityKeyPair() ?: return null
+        // Registering needs the public keys only: the pair comes back with its private keys wiped.
+        val keyPair = keyManager.withIdentityKeyPair { it } ?: return null
         val pqcEk = keyManager.getPqcEncapsulationKey()
         val pqcSigningKey = keyManager.getMlDsaPublicKey()
         return when {
@@ -406,16 +406,14 @@ class IdentityRepositoryImpl @Inject constructor(
 
         // Endorse the new key set with the CURRENT keys. Contacts only accept new
         // keys for us if this endorsement verifies against the keys they trust.
-        val currentKeys = keyManager.loadIdentityKeyPair()
-            ?: throw IllegalStateException("No local identity")
-        val previousFingerprint = KeyFingerprint.compute(
-            currentKeys.publicIdentityKey,
-            currentKeys.publicSigningKey,
-            currentPqcEk ?: ByteArray(0),
-            currentMlDsa ?: ByteArray(0),
-        )
-        currentKeys.privateIdentityKey.fill(0)
-        currentKeys.privateSigningKey.fill(0)
+        val previousFingerprint = keyManager.withIdentityKeyPair { currentKeys ->
+            KeyFingerprint.compute(
+                currentKeys.publicIdentityKey,
+                currentKeys.publicSigningKey,
+                currentPqcEk ?: ByteArray(0),
+                currentMlDsa ?: ByteArray(0),
+            )
+        } ?: throw IllegalStateException("No local identity")
         val newFingerprint = KeyFingerprint.compute(
             newKeyPair.publicIdentityKey,
             newKeyPair.publicSigningKey,
@@ -471,11 +469,9 @@ class IdentityRepositoryImpl @Inject constructor(
                 resolvePendingRotationLocked()
             } catch (_: Exception) {
             }
-            val active = keyManager.loadIdentityKeyPair()
-            val rotated = active != null &&
+            val rotated = keyManager.withIdentityKeyPair { active ->
                 Base64.encodeToString(active.publicSigningKey, Base64.NO_WRAP) == request.publicSigningKey
-            active?.privateIdentityKey?.fill(0)
-            active?.privateSigningKey?.fill(0)
+            } == true
             if (rotated) return // the server had taken it; already promoted and contacts notified
             throw e
         }
@@ -548,6 +544,12 @@ class IdentityRepositoryImpl @Inject constructor(
             expiresAt = null,
             isOutgoing = false,
         ))
+    }
+
+    /** Zeroes the private keys in place (for a new pair once it is stored); returns the pair. */
+    private fun KeyPair.wipePrivateKeys(): KeyPair = apply {
+        privateIdentityKey.fill(0)
+        privateSigningKey.fill(0)
     }
 
     private fun localShareCode(publicIdentityKey: ByteArray, publicSigningKey: ByteArray): String {
