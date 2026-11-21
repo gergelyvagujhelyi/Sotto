@@ -9,6 +9,7 @@ import pytest_asyncio
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 from httpx import AsyncClient
+from tests.auth_helpers import fresh_ts_ms
 
 
 @dataclass
@@ -27,7 +28,7 @@ class User:
 
     def auth_header(self) -> dict:
         """Build Authorization header with dual-signed token."""
-        ts = str(int(time.time() * 1000))
+        ts = str(fresh_ts_ms())
         payload = f"{self.user_id}.{ts}"
         payload_bytes = payload.encode("utf-8")
 

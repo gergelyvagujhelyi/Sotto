@@ -23,6 +23,7 @@ from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import config
 from app.database import get_db
 from app.models.db import Identity
 
@@ -30,6 +31,27 @@ logger = logging.getLogger(__name__)
 
 # Tokens older than 5 minutes are rejected.
 TOKEN_MAX_AGE_MS = 5 * 60 * 1000
+
+# Tokens already accepted, by (user_id, timestamp_ms) -> when they expire (epoch ms).
+# Each token is good for one request: a copied one can't be used again while it is
+# fresh. The app gives every token its own timestamp. The key is not the token text:
+# base64 decoding skips stray characters, so a copy with junk added would look new.
+# In memory: the relay runs as one process (Dockerfile), and a restart only forgets
+# tokens that are at most 5 minutes old.
+_used_tokens: dict[tuple[str, int], int] = {}
+# Clear out expired entries once the table is this big (cheap at relay traffic).
+_USED_TOKENS_SWEEP_AT = 10_000
+
+
+def _use_once(user_id: str, timestamp_ms: int, now_ms: int) -> None:
+    """Record a verified token; raise ``ValueError`` if it was used before."""
+    if len(_used_tokens) >= _USED_TOKENS_SWEEP_AT:
+        for key in [k for k, expiry in _used_tokens.items() if expiry < now_ms]:
+            del _used_tokens[key]
+    key = (user_id, timestamp_ms)
+    if key in _used_tokens:
+        raise ValueError("Token already used")
+    _used_tokens[key] = timestamp_ms + TOKEN_MAX_AGE_MS
 
 # ML-DSA-65 raw public key is 1952 bytes.
 _MLDSA65_RAW_PK_LEN = 1952
@@ -142,6 +164,9 @@ def verify_token(
         if not _verify_mldsa_signature(raw_pk, signed_payload, pqc_sig):
             raise ValueError("Invalid ML-DSA-65 signature")
 
+    # Only once the signatures verify: forged tokens must not fill the table.
+    if config.AUTH_SINGLE_USE_TOKENS:
+        _use_once(user_id, timestamp_ms, now_ms)
     return user_id
 
 

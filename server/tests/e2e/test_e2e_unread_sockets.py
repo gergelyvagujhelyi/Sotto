@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import pytest
 
 from tests.e2e.conftest import Ed25519PrivateKey, serialization
+from tests.auth_helpers import fresh_ts_ms
 
 
 @dataclass
@@ -17,7 +18,7 @@ class Phone:
     key: Ed25519PrivateKey
 
     def token(self) -> str:
-        payload = f"{self.user_id}.{int(time.time() * 1000)}"
+        payload = f"{self.user_id}.{fresh_ts_ms()}"
         return f"{payload}.{base64.b64encode(self.key.sign(payload.encode())).decode()}"
 
     def auth(self) -> dict:

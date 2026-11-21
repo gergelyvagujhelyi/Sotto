@@ -36,6 +36,10 @@ NEW_ACCOUNTS_PENDING_TOTAL: int = int(os.getenv("NEW_ACCOUNTS_PENDING_TOTAL", "1
 MAX_REQUEST_BODY_BYTES: int = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))  # 2 MB
 CORS_ORIGINS: list = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 WS_IDLE_TIMEOUT_SECONDS: int = int(os.getenv("WS_IDLE_TIMEOUT_SECONDS", "300"))  # 5 min
+# Accept each auth token once (refuse replays). Off until every phone runs 0.7.3 or later:
+# older apps sometimes sign two requests in the same millisecond, giving identical tokens.
+# A merge to develop deploys the relay at once, so this is turned on in .env, not here.
+AUTH_SINGLE_USE_TOKENS: bool = os.getenv("AUTH_SINGLE_USE_TOKENS", "false").lower() == "true"
 METRICS_TOKEN: str = os.getenv("METRICS_TOKEN", "")
 # Auto-detected from GCP metadata if unset. Override for non-GCP deployments.
 TURN_RELAY_IP: str = os.getenv("TURN_RELAY_IP", "")

@@ -822,6 +822,7 @@ class CallManager @Inject constructor(
 
     @Volatile
     private var _pendingOfferPayload: String? = null
+    private val callKeys = CallKeyDerivation(keyManager, classicalKeyAgreement, pqcProvider)
     /** KEM ciphertext received in an incoming call_offer — used by responder to decapsulate. */
     @Volatile
     private var _pendingInboundKemCiphertext: ByteArray? = null
@@ -2076,89 +2077,19 @@ class CallManager @Inject constructor(
                 is com.sotto.app.crypto.KeyCheck.Unknown -> check.keys
                 else -> throw IllegalStateException("No trusted keys for ${peerId.take(8)}: $check")
             }
-            val remotePubIdKey = verified.publicIdentityKey
-
-            val localKeyPair = keyManager.loadIdentityKeyPair()
-                ?: throw IllegalStateException("No local identity key pair")
-
-            // X25519 shared secret
-            val classicalSecret = classicalKeyAgreement.agree(
-                privateKey = localKeyPair.privateIdentityKey,
-                remotePublicKey = remotePubIdKey,
-            )
-
-            // Deterministic initiator role: same comparison as RatchetSessionManager
-            val isInitiator = localKeyPair.publicIdentityKey.toCallHex() < remotePubIdKey.toCallHex()
-            // Private keys are only needed for the agreement above.
-            localKeyPair.privateIdentityKey.fill(0)
-            localKeyPair.privateSigningKey.fill(0)
-
-            // PQC KEM handshake (initiator encapsulates, responder decapsulates)
-            var pqcSecret = ByteArray(0)
             val inboundKem = _pendingInboundKemCiphertext
             _pendingInboundKemCiphertext = null
-
-            if (inboundKem != null) {
-                // Responder: decapsulate the KEM ciphertext from the call_offer
-                val decapsulationKey = keyManager.getPqcDecapsulationKey()
-                    ?: throw IllegalStateException("Received KEM ciphertext but no local decapsulation key")
-                try {
-                    pqcSecret = pqcProvider.decapsulate(inboundKem, decapsulationKey)
-                } finally {
-                    decapsulationKey.fill(0)
-                }
-            } else if (_callState.value?.direction == com.sotto.app.domain.model.CallDirection.INCOMING) {
-                // Callee and the offer carried no KEM ciphertext. Only the caller may
-                // encapsulate: if we did it here the two sides would derive different
-                // keys (e.g. a hybrid caller calling a classical-only callee).
-                val ownEk = keyManager.getPqcEncapsulationKey()
-                if (ownEk != null && ownEk.isNotEmpty()) {
-                    // We publish an ML-KEM key, so an honest caller encapsulates to it.
-                    throw SecurityException("PQC downgrade refused: offer without KEM ciphertext")
-                }
-            } else if (verified.pqcEncapsulationKey.isNotEmpty()) {
-                // Caller: encapsulate against peer's ML-KEM public key
-                val remotePqcKey = verified.pqcEncapsulationKey
-                val encapsulation = pqcProvider.encapsulate(remotePqcKey)
-                pqcSecret = encapsulation.sharedSecret
-                _pendingOutboundKemCiphertext = Base64.encodeToString(encapsulation.ciphertext, Base64.NO_WRAP)
+            val derived = callKeys.derive(
+                peerId = peerId,
+                verified = verified,
+                inboundKem = inboundKem,
+                incoming = _callState.value?.direction == com.sotto.app.domain.model.CallDirection.INCOMING,
+            )
+            derived.outboundKemCiphertext?.let {
+                _pendingOutboundKemCiphertext = Base64.encodeToString(it, Base64.NO_WRAP)
             }
-
-            val isPqcEstablished = pqcSecret.isNotEmpty()
-
-            // Combine classical + PQC secrets via KMACXOF256 KDF, then zeroize inputs
-            val ikm = if (isPqcEstablished) classicalSecret + pqcSecret else classicalSecret.copyOf()
-            classicalSecret.fill(0)
-            pqcSecret.fill(0)
-
-            val sharedSecret = shake256Kdf(
-                ikm = ikm,
-                salt = "ChatControll-v1-call-init".toByteArray(Charsets.UTF_8),
-                info = "hybrid-key-establishment".toByteArray(Charsets.UTF_8),
-                length = 32,
-            )
-            ikm.fill(0)
-
-            // Derive bidirectional chain keys
-            val chainMaterial = shake256Kdf(
-                ikm = sharedSecret,
-                salt = "ChatControll-v1-call-chains".toByteArray(Charsets.UTF_8),
-                info = "bidirectional-chains".toByteArray(Charsets.UTF_8),
-                length = 64,
-            )
-            sharedSecret.fill(0)
-
-            val chainA = chainMaterial.copyOfRange(0, 32)
-            val chainB = chainMaterial.copyOfRange(32, 64)
-            chainMaterial.fill(0)
-
-            val sessionKeys = SessionKeys(
-                sendKey = if (isInitiator) chainA else chainB,
-                receiveKey = if (isInitiator) chainB else chainA,
-                sessionId = "call-$peerId",
-                pqcEstablished = isPqcEstablished,
-            )
-            if (isPqcEstablished) {
+            val sessionKeys = derived.keys
+            if (sessionKeys.pqcEstablished) {
                 logDebug("PQC hybrid key agreement established for call with ${peerId.take(8)}")
             }
 
@@ -2176,10 +2107,10 @@ class CallManager @Inject constructor(
 
             _callSessionKeys[peerId] = sessionKeys
             // Update CallState so the UI can display the actual crypto stack
-            if (isPqcEstablished) {
+            if (sessionKeys.pqcEstablished) {
                 _callState.update { it?.copy(pqcEstablished = true) }
             }
-            logDebug("Derived call session keys for ${peerId.take(8)} (initiator=$isInitiator)")
+            logDebug("Derived call session keys for ${peerId.take(8)} (initiator=${derived.initiator})")
             sessionKeys
         }
     }
@@ -2406,29 +2337,6 @@ class CallManager @Inject constructor(
     }
 }
 
-/**
- * KMACXOF256-based key derivation for call encryption (NIST SP 800-185).
- *
- * Uses the Keccak sponge construction (SHA-3 family) instead of HMAC-SHA-256
- * so the entire post-quantum call path avoids SHA-2 dependencies.
- * KMACXOF256 provides built-in domain separation and input encoding,
- * eliminating the need for manual length-prefixing.
- *
- * Mapping: KMACXOF256(K=ikm, X=salt, S=info, L=length*8)
- *
- * Note: BC's [KMAC.doFinal(out, off, len)] uses the XOF variant (right_encode(0)),
- * which supports arbitrary output lengths.
- */
-private fun shake256Kdf(ikm: ByteArray, salt: ByteArray, info: ByteArray, length: Int): ByteArray {
-    val kmac = org.bouncycastle.crypto.macs.KMAC(256, info)
-    kmac.init(org.bouncycastle.crypto.params.KeyParameter(ikm))
-    kmac.update(salt, 0, salt.size)
-    val output = ByteArray(length)
-    kmac.doFinal(output, 0, length)
-    return output
-}
-
-private fun ByteArray.toCallHex(): String = joinToString("") { "%02x".format(it) }
 
 /** See [CallManager]: "<uuid>.<millis>" call ids older/newer than [maxSkewMs] are stale. */
 internal fun isStaleCallOffer(callId: String, nowMs: Long, maxSkewMs: Long): Boolean {
