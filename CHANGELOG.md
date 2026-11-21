@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Relay: `/health` no longer names the APK** — It carried `app_download_url`, the release APK's address, once the app was out. No version of the app ever read it, and Sotto doesn't offer APK downloads any more (updates go through SourceDrop). The relay still checks that address itself to know when a release is out; phones hear it from the `Sotto-App-Ready` header as before.
 
 ## 0.7.5 — 2026-11-21
 

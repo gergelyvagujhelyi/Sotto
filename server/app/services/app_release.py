@@ -53,10 +53,6 @@ class AppRelease:
         self.on_ready: Optional[Callable[[], Awaitable[None]]] = None
         self._seen_missing = False
 
-    @property
-    def download_url(self) -> Optional[str]:
-        return self.url if self.ready else None
-
     async def _became_ready(self) -> None:
         self.ready = True
         log.info("App %s is out", self.version)
