@@ -208,6 +208,13 @@ class WebSocketManager:
         results = await asyncio.gather(*(self._send(recipient_id, ws, payload) for ws in sockets))
         return any(results)
 
+    async def broadcast(self, payload: str) -> int:
+        """Send [payload] to every open socket; returns how many took it."""
+        async with self._lock:
+            targets = [(user_id, ws) for user_id, sockets in self._connections.items() for ws in sockets]
+        results = await asyncio.gather(*(self._send(user_id, ws, payload) for user_id, ws in targets))
+        return sum(results)
+
     async def shutdown(self) -> None:
         """Gracefully close all connections (called on server shutdown)."""
         async with self._lock:

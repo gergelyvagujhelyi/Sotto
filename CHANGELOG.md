@@ -4,7 +4,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Hear when an update is ready** — When your relay runs a newer Sotto than your app, the chat list says so. Until that version's app is out, the message says an update is on its way and some things may not work. Once it's out, you get one notification, "Sotto 0.7.x is ready", and the chat list shows a **Download update** button. Either one downloads the update in your browser.
+  - The app finds out at once: every answer from the relay says which version it runs and whether that version's app is out. When the release is published, the relay tells every phone straight away, over the open connection or with a push.
+  - The download always comes from Sotto's official releases. The relay only says *whether* the update is out, so a relay can't send you to some other file. Your phone never contacts GitHub for this.
+  - This version is the first that shows it, so it starts helping from the update after this one.
+- **Relay: says which version it runs, and when its app is out** — Every HTTP answer has `Sotto-Relay-Version` and `Sotto-App-Ready` headers, and the WebSocket's `auth_ok` has `relay_version` and `app_ready`. The release workflow tells the relay when the APK is published with `POST /v1/app-release`, signed with the workflow's own Ed25519 key (GitHub secret `CI_RELEASE_KEY`; the relay checks it against `CI_RELEASE_PUBLIC_KEY`, whose default is the official key). The relay then tells connected phones (`app_release`) and pushes the others. In case that call doesn't come (a restart, or CI couldn't reach the relay), the relay also looks for the APK itself every 5 minutes (`APP_RELEASE_APK_URL`; empty turns it off). `/health` has `app_download_url` once the APK is out.
 
 ## 0.7.2 — 2026-11-21
 

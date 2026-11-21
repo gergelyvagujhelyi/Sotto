@@ -111,3 +111,16 @@ def test_ws_auth_wrong_key():
             ws.send_text(json.dumps({"type": "auth", "token": token}))
             resp = json.loads(ws.receive_text())
             assert resp["type"] == "error"
+
+
+def test_ws_auth_ok_names_the_relay_version_and_whether_its_app_is_out():
+    from starlette.testclient import TestClient
+    from app import config
+    from app.main import app
+
+    with TestClient(app) as tc:
+        user = _bootstrap_user_sync(tc, "ws_version")
+        with tc.websocket_connect("/v1/ws") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": _make_token(user["private_key"], user["user_id"])}))
+            resp = json.loads(ws.receive_text())
+    assert resp == {"type": "auth_ok", "relay_version": config.RELAY_VERSION, "app_ready": False}

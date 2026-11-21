@@ -66,6 +66,19 @@ APP_DOWNLOAD_URL: str = (
     os.getenv("APP_DOWNLOAD_URL")
     or "https://github.com/gergelyvagujhelyi/Sotto/releases/latest/download/app-release.apk"
 )
+# Where the APK of the app release that goes with this relay appears ({version} is
+# RELAY_VERSION). Until it exists, phones on older apps say an update is on its way; then
+# that it's ready. Empty: never check (phones then only hear that the relay is newer).
+APP_RELEASE_APK_URL: str = os.getenv(
+    "APP_RELEASE_APK_URL",
+    "https://github.com/gergelyvagujhelyi/Sotto/releases/download/v{version}/app-release.apk",
+)
+# How often to look for it, until it's there (or the release workflow says so).
+APP_RELEASE_CHECK_SECONDS: int = int(os.getenv("APP_RELEASE_CHECK_SECONDS", "300"))
+# The release workflow's Ed25519 public key (base64, 32 bytes): its "the app is out" call
+# must be signed with the private half (GitHub secret CI_RELEASE_KEY). Public, so the
+# official one is the default; empty turns the call off (the relay then only looks itself).
+CI_RELEASE_PUBLIC_KEY: str = os.getenv("CI_RELEASE_PUBLIC_KEY", "ihHC+n7ETJ/4NZzZETD4bfU4FbLCYS7NsexLVOhbHDE=")
 # Comma-separated list of trusted proxy IPs that may set X-Forwarded-For
 # Entries may be single IPs or CIDR ranges (e.g. the Docker network nginx
 # connects from: in compose, nginx is NOT 127.0.0.1).
