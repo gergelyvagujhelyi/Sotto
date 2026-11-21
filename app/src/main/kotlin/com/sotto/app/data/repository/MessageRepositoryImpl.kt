@@ -131,7 +131,8 @@ class MessageRepositoryImpl @Inject constructor(
             // Evict entries with the lowest retry counts first to ensure that
             // messages nearing the MAX_DECRYPT_RETRIES limit are correctly tombstoned.
             // Snapshot keys to avoid ConcurrentModificationException.
-            val evictCount = decryptFailCounts.size - PRUNE_THRESHOLD
+            // At least 0: entries can go between the size check and here (other threads).
+            val evictCount = (decryptFailCounts.size - PRUNE_THRESHOLD).coerceAtLeast(0)
             val keysToEvict = decryptFailCounts.entries.toList()
                 .sortedBy { it.value }
                 .take(evictCount)
@@ -139,7 +140,8 @@ class MessageRepositoryImpl @Inject constructor(
             keysToEvict.forEach { decryptFailCounts.remove(it) }
         }
         if (pqcSigMissCounts.size > PRUNE_THRESHOLD) {
-            val evictCount = pqcSigMissCounts.size - PRUNE_THRESHOLD
+            // At least 0: entries can go between the size check and here (other threads).
+            val evictCount = (pqcSigMissCounts.size - PRUNE_THRESHOLD).coerceAtLeast(0)
             val keysToEvict = pqcSigMissCounts.entries.toList()
                 .sortedBy { it.value }
                 .take(evictCount)
@@ -147,7 +149,8 @@ class MessageRepositoryImpl @Inject constructor(
             keysToEvict.forEach { pqcSigMissCounts.remove(it) }
         }
         if (ctrlPqcSigMissCounts.size > PRUNE_THRESHOLD) {
-            val evictCount = ctrlPqcSigMissCounts.size - PRUNE_THRESHOLD
+            // At least 0: entries can go between the size check and here (other threads).
+            val evictCount = (ctrlPqcSigMissCounts.size - PRUNE_THRESHOLD).coerceAtLeast(0)
             val keysToEvict = ctrlPqcSigMissCounts.entries.toList()
                 .sortedBy { it.value }
                 .take(evictCount)
@@ -157,7 +160,8 @@ class MessageRepositoryImpl @Inject constructor(
         if (sessionResetSentTo.size > PRUNE_THRESHOLD) {
             // Forget the oldest resets only: clearing all would re-send to every peer
             // whose session is still broken.
-            val evictCount = sessionResetSentTo.size - PRUNE_THRESHOLD
+            // At least 0: entries can go between the size check and here (other threads).
+            val evictCount = (sessionResetSentTo.size - PRUNE_THRESHOLD).coerceAtLeast(0)
             sessionResetSentTo.entries.toList()
                 .sortedBy { it.value }
                 .take(evictCount)
