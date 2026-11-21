@@ -4,6 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Private keys no longer linger in memory** — Your private keys were stored as text, and each time Sotto used one it made a text copy that couldn't be wiped from memory. Measured on a phone, the signing key was there 6 times as text and 2 times as bytes after a single use. Now they're stored in their own encrypted files and read straight into memory that is wiped after use. Signing and key agreement no longer make copies either. After an update, nothing of the signing or identity key is left in memory; the two post-quantum keys still have 2 copies inside the BouncyCastle library, as before. Your keys move to the new storage by themselves at the first start after updating, and stay the same keys: contacts see no key change.
 - **Relay: one-use sign-in tokens can be turned on** — 0.7.3 added `AUTH_SINGLE_USE_TOKENS`, but `docker-compose.yml` didn't pass it from `.env` to the relay, so setting it did nothing. It does now (still off unless `.env` says `true`).
 
 ## 0.7.3 — 2026-11-21

@@ -34,6 +34,8 @@ class AndroidClassicalKeyAgreement @Inject constructor() : ClassicalKeyAgreement
     }
 
     override fun agree(privateKey: ByteArray, remotePublicKey: ByteArray): ByteArray {
+        // Straight on the key bytes, leaving no copies of the private key (RawKeyCrypto.kt).
+        rawX25519Agree(privateKey, remotePublicKey)?.let { return it }
         val kf = KeyFactory.getInstance("X25519", provider)
         val privKey = kf.generatePrivate(PKCS8EncodedKeySpec(privateKey))
         val pubKey = kf.generatePublic(X509EncodedKeySpec(remotePublicKey))
