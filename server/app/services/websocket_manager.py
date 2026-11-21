@@ -71,9 +71,11 @@ class WebSocketManager:
     """Manages active WebSocket connections per user."""
 
     def __init__(self) -> None:
-        # user_id → insertion-ordered dict of active WebSocket connections
+        # user_id → insertion-ordered dict of active WebSocket connections → whether the
+        # socket is ready: it got auth_ok (see flush_pending_signals). Sends skip a socket
+        # that isn't: the app takes any other first frame for a failed login and drops it.
         # Using OrderedDict (instead of set) so eviction removes the oldest.
-        self._connections: Dict[str, OrderedDict[WebSocket, None]] = defaultdict(OrderedDict)
+        self._connections: Dict[str, OrderedDict[WebSocket, bool]] = defaultdict(OrderedDict)
         self._lock = asyncio.Lock()
         # Pending call signals for users who are not currently connected.
         # user_id → list of (timestamp, payload_json) tuples.
@@ -122,16 +124,17 @@ class WebSocketManager:
     async def register(self, user_id: str, websocket: WebSocket) -> None:
         """Register an already-accepted WebSocket, enforcing per-user cap.
 
-        NOTE: Does NOT flush pending signals — the caller must send auth_ok
-        first, then call flush_pending_signals(). Otherwise the client
-        receives a call signal where it expects auth_ok and disconnects.
+        The socket counts against the cap, and disconnect_user() closes it, at once,
+        but it gets nothing until the caller has sent auth_ok and then called
+        flush_pending_signals(). Otherwise the client receives a signal where it
+        expects auth_ok and disconnects. Call signals sent meanwhile are buffered.
         """
         evicted = None
         async with self._lock:
             if len(self._connections[user_id]) >= MAX_WS_CONNECTIONS_PER_USER:
                 # Evict the oldest (first-inserted) connection
                 evicted, _ = self._connections[user_id].popitem(last=False)
-            self._connections[user_id][websocket] = None
+            self._connections[user_id][websocket] = False
         # Close OUTSIDE the lock: closing a socket whose peer stopped reading can
         # block indefinitely, which would stall every user's delivery.
         if evicted is not None:
@@ -183,9 +186,14 @@ class WebSocketManager:
             await self._close(ws, code=1011, reason="Send failed")
             return False
 
+    def _ready_sockets(self, user_id: str) -> list:
+        """The user's sockets that got auth_ok, the ones a send may use."""
+        # get() with explicit default to avoid defaultdict creating empty entries
+        return [ws for ws, ready in self._connections.get(user_id, {}).items() if ready]
+
     def is_online(self, user_id: str) -> bool:
-        # Use get() with explicit default to avoid defaultdict creating empty entries
-        return bool(self._connections.get(user_id, None))
+        """True if a send to the user would reach a socket (one that got auth_ok)."""
+        return bool(self._ready_sockets(user_id))
 
     async def notify_new_message(
         self,
@@ -201,7 +209,7 @@ class WebSocketManager:
     async def notify(self, recipient_id: str, signal_type: str) -> bool:
         """Push a content-free ``{"type": signal_type}`` signal to a connected user."""
         async with self._lock:
-            sockets = list(self._connections.get(recipient_id, {}))
+            sockets = self._ready_sockets(recipient_id)
         if not sockets:
             return False
         payload = json.dumps({"type": signal_type})
@@ -211,7 +219,12 @@ class WebSocketManager:
     async def broadcast(self, payload: str) -> int:
         """Send [payload] to every open socket; returns how many took it."""
         async with self._lock:
-            targets = [(user_id, ws) for user_id, sockets in self._connections.items() for ws in sockets]
+            targets = [
+                (user_id, ws)
+                for user_id, sockets in self._connections.items()
+                for ws, ready in sockets.items()
+                if ready
+            ]
         results = await asyncio.gather(*(self._send(user_id, ws, payload) for user_id, ws in targets))
         return sum(results)
 
@@ -231,9 +244,16 @@ class WebSocketManager:
         logger.info("All WebSocket connections closed for shutdown")
 
     async def flush_pending_signals(self, user_id: str, websocket: WebSocket) -> None:
-        """Deliver pending call signals to a newly connected user."""
+        """Mark a socket ready (the caller sent it auth_ok) and deliver the user's
+        pending call signals to it.
+
+        Signals relayed until this point were buffered and are delivered here;
+        later ones go to the socket directly."""
         now = time.monotonic()
         async with self._lock:
+            conns = self._connections.get(user_id)
+            if conns is not None and websocket in conns:
+                conns[websocket] = True
             signals = self._pending_call_signals.pop(user_id, [])
             self._pending_signal_bytes -= sum(len(p) for _, p in signals)
         signals = [(ts, p) for ts, p in signals if now - ts <= _PENDING_SIGNAL_TTL]
@@ -246,7 +266,7 @@ class WebSocketManager:
                 # Another socket of the user that connected meanwhile already had its
                 # flush (of nothing): hand the signals to it.
                 async with self._lock:
-                    others = [ws for ws in self._connections.get(user_id, {}) if ws is not websocket]
+                    others = [ws for ws in self._ready_sockets(user_id) if ws is not websocket]
                 if others:
                     await self.flush_pending_signals(user_id, others[-1])
                 return
@@ -367,7 +387,7 @@ class WebSocketManager:
             self._unconfirmed.pop((recipient_id, call_id), None)
 
         async with self._lock:
-            sockets = list(self._connections.get(recipient_id, {}))
+            sockets = self._ready_sockets(recipient_id)
 
         msg: dict[str, str] = {
             "type": signal_type,

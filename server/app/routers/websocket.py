@@ -146,7 +146,8 @@ async def websocket_endpoint(
         )
 
         # Flush pending call signals AFTER auth_ok so the client doesn't
-        # mistake a buffered signal for a failed auth response.
+        # mistake a buffered signal for a failed auth response. The flush also
+        # opens the socket to sends: until now everything for it was held back.
         await ws_manager.flush_pending_signals(user_id, websocket)
 
         # Keep alive loop — idle connections are closed after timeout
