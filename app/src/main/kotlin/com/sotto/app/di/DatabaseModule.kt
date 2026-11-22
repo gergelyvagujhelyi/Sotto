@@ -188,6 +188,17 @@ object DatabaseModule {
         }
     }
 
+    private val MIGRATION_13_14 = object : Migration(13, 14) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaKind TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaMime TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaKey BLOB")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaDurationMs INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaWidth INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaHeight INTEGER NOT NULL DEFAULT 0")
+        }
+    }
+
     private val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             // Remove any duplicate contactId rows, keeping the one with the latest message.
@@ -223,7 +234,7 @@ object DatabaseModule {
         get() = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13,
+            MIGRATION_12_13, MIGRATION_13_14,
         )
 
     @Provides

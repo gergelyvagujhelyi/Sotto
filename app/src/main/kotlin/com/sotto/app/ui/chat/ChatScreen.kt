@@ -59,6 +59,8 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -323,6 +325,9 @@ fun ChatScreen(
         onReply = viewModel::startReply,
         onCancelReply = viewModel::cancelReply,
         onReact = viewModel::react,
+        onSendVoice = viewModel::sendVoice,
+        onSendPhoto = viewModel::sendPhoto,
+        loadMedia = viewModel::loadMedia,
     )
 }
 
@@ -362,8 +367,86 @@ fun ChatContent(
     onCancelReply: () -> Unit = {},
     /** React to a message with an emoji (its current one takes it back). */
     onReact: (Message, String) -> Unit = { _, _ -> },
+    /** Send a recorded voice message, or the photo picked. */
+    onSendVoice: (com.sotto.app.media.VoiceRecording) -> Unit = {},
+    onSendPhoto: (android.net.Uri) -> Unit = {},
+    /** The decrypted media of a message, for its bubble. */
+    loadMedia: suspend (String) -> ByteArray? = { null },
 ) {
     val listState = rememberLazyListState()
+    val context = LocalContext.current
+    val voicePlayer = remember { com.sotto.app.media.VoicePlayer() }
+    var viewingPhoto by rememberSaveable { mutableStateOf<String?>(null) }
+    val chatMedia = remember(loadMedia) { ChatMedia(loadMedia, voicePlayer, openPhoto = { viewingPhoto = it }) }
+    viewingPhoto?.let { id -> ProvideChatMedia(chatMedia) { PhotoViewer(id, onDismiss = { viewingPhoto = null }) } }
+
+    // Voice messages: hold the mic to record (see MicButton).
+    val recorder = remember { com.sotto.app.media.VoiceRecorder(context.applicationContext) }
+    var recordState by remember { mutableStateOf(RecordState.IDLE) }
+    var recordElapsed by remember { mutableLongStateOf(0L) }
+    var recordLevel by remember { mutableFloatStateOf(0f) }
+    var recordSlide by remember { mutableStateOf(Offset.Zero) }
+    val recordHaptics = LocalHapticFeedback.current
+    val recordScope = rememberCoroutineScope()
+    val micLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val finishRecording: (Boolean) -> Unit = { send ->
+        if (recordState != RecordState.IDLE) {
+            val recording = if (send) recorder.stop() else {
+                recorder.cancel()
+                null
+            }
+            recordState = RecordState.IDLE
+            recordSlide = Offset.Zero
+            if (recording != null) {
+                onSendVoice(recording)
+            } else if (send) {
+                recordScope.launch { snackbarHostState.showSnackbar("Hold to record, let go to send.") }
+            }
+        }
+    }
+    val startRecording: () -> Boolean = start@{
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            micLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            return@start false
+        }
+        voicePlayer.stop()
+        val started = recorder.start(onLimit = { recordScope.launch { finishRecording(true) } })
+        if (started) {
+            recordState = RecordState.HOLDING
+            recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        } else {
+            recordScope.launch { snackbarHostState.showSnackbar("The microphone is busy.") }
+        }
+        started
+    }
+    LaunchedEffect(recordState) {
+        while (recordState != RecordState.IDLE) {
+            recordElapsed = recorder.elapsedMs
+            recordLevel = recorder.level()
+            delay(100)
+        }
+        recordElapsed = 0
+    }
+    // Leaving the chat or the app throws an unfinished recording away and stops playback.
+    val mediaLifecycle = LocalLifecycleOwner.current
+    DisposableEffect(mediaLifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                recorder.cancel()
+                recordState = RecordState.IDLE
+                voicePlayer.stop()
+            }
+        }
+        mediaLifecycle.lifecycle.addObserver(observer)
+        onDispose {
+            mediaLifecycle.lifecycle.removeObserver(observer)
+            recorder.cancel()
+            voicePlayer.stop()
+        }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) onSendPhoto(uri)
+    }
     val quoteName = contactName ?: "Them"
     val scope = rememberCoroutineScope()
     // The message a tapped quote led to, tinted for a moment.
@@ -446,6 +529,7 @@ fun ChatContent(
         if (newestKey != null) listState.animateScrollToItem(0)
     }
 
+    ProvideChatMedia(chatMedia) {
     AuroraBackground(Modifier.fillMaxSize(), style = AuroraStyle.Subtle) {
         Scaffold(
             containerColor = Color.Transparent,
@@ -633,6 +717,27 @@ fun ChatContent(
                             else -> "Message"
                         },
                         onTextPlaced = { composerTextOrigin[0] = it },
+                        recordState = recordState,
+                        recordElapsedMs = recordElapsed,
+                        recordLevel = recordLevel,
+                        recordSlide = recordSlide,
+                        onAttach = {
+                            photoPicker.launch(
+                                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
+                        onRecordPress = startRecording,
+                        onRecordRelease = { finishRecording(true) },
+                        onRecordCancel = {
+                            recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            finishRecording(false)
+                        },
+                        onRecordLock = {
+                            recordHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            recordState = RecordState.LOCKED
+                            recordSlide = Offset.Zero
+                        },
+                        onRecordDrag = { dx, dy -> recordSlide = Offset(dx, dy) },
                     )
                 }
                 flight?.let { f ->
@@ -642,6 +747,7 @@ fun ChatContent(
                 }
             }
         }
+    }
     }
 }
 
@@ -991,9 +1097,11 @@ private fun ChatRowItem(
                         text = when {
                             message.state == MessageState.REJECTED -> "⛔ Message rejected (unsigned or unverifiable)"
                             message.state == MessageState.DECRYPT_FAILED -> "⚠ Could not decrypt this message"
+                            message.media != null -> message.plaintext.trim()
                             message.plaintext.isEmpty() -> "..."
                             else -> message.plaintext
                         },
+                        media = message.media?.let { { color -> BubbleMedia(message, color) } },
                         timestamp = time,
                         isOutgoing = message.isOutgoing,
                         state = message.state,
@@ -1160,25 +1268,62 @@ private fun Composer(
     canSend: Boolean,
     placeholder: String,
     onTextPlaced: (Offset) -> Unit = {},
+    recordState: RecordState = RecordState.IDLE,
+    recordElapsedMs: Long = 0,
+    recordLevel: Float = 0f,
+    recordSlide: Offset = Offset.Zero,
+    onAttach: () -> Unit = {},
+    onRecordPress: () -> Boolean = { false },
+    onRecordRelease: () -> Unit = {},
+    onRecordCancel: () -> Unit = {},
+    onRecordLock: () -> Unit = {},
+    onRecordDrag: (Float, Float) -> Unit = { _, _ -> },
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 10.dp),
+            .padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        AuroraTextField(
-            value = text,
-            onValueChange = onTextChange,
-            placeholder = placeholder,
-            modifier = Modifier.weight(1f).then(modifier),
-            enabled = enabled,
-            maxLines = 5,
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-            onTextPlaced = onTextPlaced,
-        )
+        if (recordState == RecordState.IDLE) {
+            AttachButton(enabled = enabled, onClick = onAttach)
+            AuroraTextField(
+                value = text,
+                onValueChange = onTextChange,
+                placeholder = placeholder,
+                modifier = Modifier.weight(1f).then(modifier),
+                enabled = enabled,
+                maxLines = 5,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                onTextPlaced = onTextPlaced,
+            )
+        } else {
+            Spacer(Modifier.width(6.dp))
+            RecordingBar(
+                state = recordState,
+                elapsedMs = recordElapsedMs,
+                level = recordLevel,
+                slideX = recordSlide.x,
+                slideY = recordSlide.y,
+                onDelete = onRecordCancel,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Spacer(Modifier.width(8.dp))
-        SendButton(enabled = canSend, onClick = onSend)
+        when {
+            recordState == RecordState.LOCKED -> SendButton(enabled = true, onClick = onRecordRelease)
+            // Something typed: Send. Otherwise the mic (it keeps its touch while held).
+            text.isNotBlank() && recordState == RecordState.IDLE -> SendButton(enabled = canSend, onClick = onSend)
+            else -> MicButton(
+                enabled = enabled,
+                state = recordState,
+                onPress = onRecordPress,
+                onRelease = onRecordRelease,
+                onCancel = onRecordCancel,
+                onLock = onRecordLock,
+                onDrag = onRecordDrag,
+            )
+        }
     }
 }
 
@@ -1327,7 +1472,7 @@ internal fun newArrivals(messages: List<Message>, seen: MutableSet<String>, flig
     for (message in messages) {
         if (!seen.add(message.id)) continue
         if (message.state.isCallEvent || message.state.isKeyChangeEvent) continue
-        if (flightId == null && flightText != null && message.isOutgoing && message.plaintext == flightText) {
+        if (flightId == null && flightText != null && message.isOutgoing && message.media == null && message.plaintext == flightText) {
             flightId = message.id
         } else {
             animate += message.id

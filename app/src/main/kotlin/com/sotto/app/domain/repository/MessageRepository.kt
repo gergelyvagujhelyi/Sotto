@@ -7,6 +7,16 @@ interface MessageRepository {
     fun getMessages(conversationId: String): Flow<List<Message>>
     /** Send [plaintext]; with [replyTo], as a reply to that message of this chat. */
     suspend fun sendMessage(conversationId: String, recipientId: String, plaintext: String, replyTo: Message? = null): Message
+
+    /** Sends a voice message or photo inline (ADR-29), with an optional [caption]. */
+    suspend fun sendMedia(
+        conversationId: String,
+        recipientId: String,
+        media: com.sotto.app.domain.model.MessageMedia,
+        bytes: ByteArray,
+        caption: String = "",
+        replyTo: Message? = null,
+    ): Message
     /**
      * React to [message] with [emoji] (null takes the reaction back), and tell its chat's
      * contact. Shown at once; undone if it can't be sent.
@@ -21,6 +31,9 @@ interface MessageRepository {
     suspend fun markSeen(messageId: String)
     suspend fun retryFailed(messageId: String)
     suspend fun deleteMessage(messageId: String)
+
+    /** The decrypted media of [messageId] (voice or photo), or null when it has none or it's gone. */
+    suspend fun loadMedia(messageId: String): ByteArray?
     suspend fun deleteMessagesOlderThan(conversationId: String, timestampMillis: Long)
     /** Fetch pending messages; when a fetch is running, make it fetch once more and return at once. */
     suspend fun fetchPendingFromServer()

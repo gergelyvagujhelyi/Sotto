@@ -59,6 +59,7 @@ class ChatDeleteTest {
             sendMessage = mockk(relaxed = true),
             receiptManager = receipts,
             sendMyName = mockk(relaxed = true),
+            appContext = mockk(relaxed = true),
         )
     }
 

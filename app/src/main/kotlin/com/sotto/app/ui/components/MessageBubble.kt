@@ -123,6 +123,8 @@ fun MessageBubble(
     onReactionsClick: (() -> Unit)? = null,
     /** Shown above the bubble while it's held, e.g. the reaction picker. */
     overlay: (@Composable () -> Unit)? = null,
+    /** A voice message or photo, shown above the text (its caption); gets the bubble's text colour. */
+    media: (@Composable (Color) -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     // [rise] goes from 1 (low and small, as if coming up from below) to 0 (in place);
@@ -160,6 +162,7 @@ fun MessageBubble(
             scrambleMs = scrambleMs,
             quote = quote,
             onQuoteClick = onQuoteClick,
+            media = media,
             modifier = Modifier
                 .then(if (onBubblePlaced != null) Modifier.onGloballyPositioned { onBubblePlaced(it.boundsInRoot()) } else Modifier)
                 .graphicsLayer {
@@ -244,6 +247,7 @@ internal fun BubbleSurface(
     look: Float = 1f,
     quote: BubbleQuote? = null,
     onQuoteClick: (() -> Unit)? = null,
+    media: (@Composable (Color) -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val aurora = Aurora.colors
@@ -320,6 +324,9 @@ internal fun BubbleSurface(
                 }
             },
         ) {
+            // Media alone (no caption): its time and ticks sit at the bottom end, as on WhatsApp.
+            Column(horizontalAlignment = if (media != null && text.isEmpty()) Alignment.End else Alignment.Start) {
+            media?.invoke(bubbleTextColor)
             TextWithTrailingMeta(
                 text = text,
                 style = if (unreadable) {
@@ -342,6 +349,7 @@ internal fun BubbleSurface(
                     // Ticks sit dimmer than the time so the bright read tick stands out.
                     if (isOutgoing) MessageStateIcon(state, if (failed) metaColor else aurora.bubbleOutgoingTick)
                 }
+            }
             }
         }
     }

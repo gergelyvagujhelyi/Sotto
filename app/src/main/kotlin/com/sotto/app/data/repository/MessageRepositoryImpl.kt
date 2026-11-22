@@ -15,8 +15,14 @@ import com.sotto.app.data.local.entity.MessageEntity
 import com.sotto.app.data.remote.ApiService
 import com.sotto.app.data.remote.dto.AckRequest
 import com.sotto.app.data.remote.dto.SendMessageRequest
+import com.sotto.app.data.media.MediaStore
+import com.sotto.app.domain.model.MediaKind
+import com.sotto.app.domain.model.MediaPayload
 import com.sotto.app.domain.model.Message
+import com.sotto.app.domain.model.MessageMedia
 import com.sotto.app.domain.model.MessageState
+import com.sotto.app.domain.model.UnknownPayload
+import com.sotto.app.domain.model.previewText
 import com.sotto.app.domain.model.ProfilePayload
 import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.domain.model.ReplyPayload
@@ -54,6 +60,7 @@ class MessageRepositoryImpl @Inject constructor(
     private val settingsRepository: javax.inject.Provider<com.sotto.app.domain.repository.SettingsRepository>,
     private val blockedUserDao: com.sotto.app.data.local.dao.BlockedUserDao,
     private val contactNames: ContactNameStore,
+    private val mediaStore: MediaStore,
 ) : MessageRepository {
 
     private val peerLocks = ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
@@ -115,6 +122,21 @@ class MessageRepositoryImpl @Inject constructor(
         if (deleted > 0) {
             // Don't keep the plaintext of a deleted message in the conversation list.
             conversationDao.clearPreviewsWithoutMessage()
+        }
+        sweepMedia()
+    }
+
+    /**
+     * Removes media files whose message is gone. Messages go in bulk (disappearing,
+     * history limit, a cleared chat, a removed contact), so their files are found here
+     * rather than at each deletion; their keys went with the rows, so they were already
+     * unreadable.
+     */
+    private suspend fun sweepMedia() {
+        try {
+            mediaStore.sweep(messageDao.getMediaMessageIds().toHashSet())
+        } catch (e: Exception) {
+            if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Media sweep failed: ${e.message}")
         }
     }
 
@@ -189,15 +211,32 @@ class MessageRepositoryImpl @Inject constructor(
         sendMessageInternal(conversationId, recipientId, plaintext, replyTo)
     }
 
+    /** Like [sendMessage], with a voice message or photo inline ([MediaPayload]); [caption] may be empty. */
+    override suspend fun sendMedia(
+        conversationId: String,
+        recipientId: String,
+        media: MessageMedia,
+        bytes: ByteArray,
+        caption: String,
+        replyTo: Message?,
+    ): Message = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        require(bytes.isNotEmpty() && bytes.size <= MediaPayload.MAX_BYTES) { "Media too large" }
+        sendMessageInternal(conversationId, recipientId, caption, replyTo, media, bytes)
+    }
+
     private suspend fun sendMessageInternal(
         conversationId: String,
         recipientId: String,
         plaintext: String,
         replyTo: Message? = null,
+        media: MessageMedia? = null,
+        mediaBytes: ByteArray? = null,
     ): Message {
         val messageId = UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val senderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+        // The media is on disk before its row exists, so the row never points at nothing.
+        val mediaKey = if (media != null && mediaBytes != null) mediaStore.save(messageId, mediaBytes) else null
 
         // Store locally as SENDING before encryption so the message is never
         // lost even if session establishment or encryption fails.
@@ -215,10 +254,21 @@ class MessageRepositoryImpl @Inject constructor(
             isOutgoing = true,
             // Only a message of this chat; never a reply to a reply's quote of something else.
             replyToId = replyTo?.takeIf { it.conversationId == conversationId }?.id,
-            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(it.plaintext) },
+            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(it.preview) },
             replyToOwn = replyTo?.takeIf { it.conversationId == conversationId }?.isOutgoing == true,
+            mediaKind = media?.kind?.wire,
+            mediaMime = media?.mime,
+            mediaKey = mediaKey,
+            mediaDurationMs = media?.durationMs ?: 0,
+            mediaWidth = media?.width ?: 0,
+            mediaHeight = media?.height ?: 0,
         )
-        messageDao.insert(entity)
+        try {
+            messageDao.insert(entity)
+        } catch (e: Exception) {
+            if (mediaKey != null) mediaStore.delete(messageId)
+            throw e
+        }
 
         val envelope = try {
             encryptFor(recipientId, wirePayload(entity, senderId).toByteArray(Charsets.UTF_8))
@@ -250,7 +300,7 @@ class MessageRepositoryImpl @Inject constructor(
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
 
-            updateConversationPreview(conversationId, recipientId, plaintext, response.timestamp)
+            updateConversationPreview(conversationId, recipientId, previewText(media?.kind, plaintext), response.timestamp)
 
             return entity.toDomain(senderId).copy(
                 state = MessageState.SENT,
@@ -362,7 +412,10 @@ class MessageRepositoryImpl @Inject constructor(
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
             // The message now sorts as the newest one (relay timestamp): show it in the list.
-            updateConversationPreview(entity.conversationId, entity.recipientId, plaintext, response.timestamp)
+            updateConversationPreview(
+                entity.conversationId, entity.recipientId,
+                previewText(MediaKind.fromWire(entity.mediaKind), plaintext), response.timestamp,
+            )
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             throw e
@@ -375,9 +428,17 @@ class MessageRepositoryImpl @Inject constructor(
      * the original's own id when [me] received it, or derived from our local id when we
      * sent it.
      */
-    private fun wirePayload(entity: MessageEntity, me: String): String {
-        val replyTo = entity.replyToId ?: return entity.plaintext
-        val to = if (entity.replyToOwn) ReceiptManager.relayMessageId(me, replyTo) else replyTo
+    private suspend fun wirePayload(entity: MessageEntity, me: String): String {
+        val replyTo = entity.replyToId
+        val to = replyTo?.let { if (entity.replyToOwn) ReceiptManager.relayMessageId(me, it) else it }
+        val media = entity.media()
+        if (media != null) {
+            val key = entity.mediaKey ?: throw IllegalStateException("Media without a key")
+            val bytes = mediaStore.load(entity.id, key) ?: throw IllegalStateException("Media file missing")
+            val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
+            return MediaPayload.encode(media, bytes, entity.plaintext, reply)
+        }
+        to ?: return entity.plaintext
         return ReplyPayload.encode(entity.plaintext, to, entity.replyQuote.orEmpty(), mine = entity.replyToOwn)
     }
 
@@ -471,8 +532,15 @@ class MessageRepositoryImpl @Inject constructor(
         ))
     }
 
+    override suspend fun loadMedia(messageId: String): ByteArray? {
+        val entity = messageDao.getById(messageId) ?: return null
+        val key = entity.mediaKey ?: return null
+        return mediaStore.load(messageId, key)
+    }
+
     override suspend fun deleteMessage(messageId: String) {
         messageDao.delete(messageId)
+        runCatching { mediaStore.delete(messageId) }
     }
 
     override suspend fun deleteMessagesOlderThan(conversationId: String, timestampMillis: Long) {
@@ -689,11 +757,25 @@ class MessageRepositoryImpl @Inject constructor(
 
         // A reply: keep its text, and point at the original when this phone has it.
         // "mine" is the sender's: the original is theirs, so it has the relay's id here.
-        val reply = ReplyPayload.decode(plaintextStr)
-        val messageText = reply?.text ?: plaintextStr
+        // A voice message or photo carries the same reply fields, and its caption as text.
+        val media = MediaPayload.decode(plaintextStr)
+        val reply = if (media != null) {
+            media.reply?.let { ReplyPayload.Decoded(media.caption, it.to, it.quote, it.mine) }
+        } else {
+            ReplyPayload.decode(plaintextStr)
+        }
+        val messageText = when {
+            media != null -> media.caption
+            reply != null -> reply.text
+            // A newer Sotto's payload, or a malformed one: a note, never the raw payload.
+            UnknownPayload.isUnknown(plaintextStr) -> UnknownPayload.NOTE
+            else -> plaintextStr
+        }
         val replyToId = reply?.let {
             if (it.mine) it.to else findOwnByRelayId(conversationId, localUserId, it.to) ?: it.to
         }
+        // Stored before its row; if storing fails the message isn't ACKed and comes again.
+        val mediaKey = media?.let { mediaStore.save(dto.messageId, it.bytes) }
 
         val entity = MessageEntity(
             id = dto.messageId,
@@ -710,15 +792,22 @@ class MessageRepositoryImpl @Inject constructor(
             replyToId = replyToId,
             replyQuote = reply?.quote,
             replyToOwn = reply != null && !reply.mine,
+            mediaKind = media?.media?.kind?.wire,
+            mediaMime = media?.media?.mime,
+            mediaKey = mediaKey,
+            mediaDurationMs = media?.media?.durationMs ?: 0,
+            mediaWidth = media?.media?.width ?: 0,
+            mediaHeight = media?.media?.height ?: 0,
         )
         messageDao.insert(entity)
         receivedIds.add(dto.messageId)
+        val shownText = previewText(media?.media?.kind, messageText)
 
         val isActive = conversationId == activeConversationId
         updateConversationPreview(
             conversationId,
             dto.senderId,
-            messageText,
+            shownText,
             dto.timestamp,
             incrementUnread = !isActive,
         )
@@ -730,7 +819,7 @@ class MessageRepositoryImpl @Inject constructor(
             notificationManager.showMessageNotification(
                 senderId = dto.senderId,
                 senderName = senderName,
-                messageBody = messageText,
+                messageBody = shownText,
                 conversationId = conversationId,
             )
         }
@@ -784,7 +873,7 @@ class MessageRepositoryImpl @Inject constructor(
         notificationManager.showMessageNotification(
             senderId = senderId,
             senderName = contactDao.getByUserId(senderId)?.displayName ?: senderId.take(8),
-            messageBody = reactionNotificationText(emoji, target.plaintext),
+            messageBody = reactionNotificationText(emoji, previewText(MediaKind.fromWire(target.mediaKind), target.plaintext)),
             conversationId = conversation.id,
             isReaction = true,
         )
@@ -1145,5 +1234,12 @@ private fun MessageEntity.toDomain(localUserId: String): Message {
         replyTo = replyToId?.let { ReplyRef(it, replyQuote.orEmpty(), replyToOwn) },
         myReaction = myReaction,
         theirReaction = theirReaction,
+        media = media(),
     )
+}
+
+/** The media this row carries, or null for a text message (or an unknown kind). */
+internal fun MessageEntity.media(): MessageMedia? {
+    val kind = MediaKind.fromWire(mediaKind) ?: return null
+    return MessageMedia(kind, mediaMime.orEmpty(), mediaDurationMs, mediaWidth, mediaHeight)
 }

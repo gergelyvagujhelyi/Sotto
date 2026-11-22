@@ -33,6 +33,7 @@ class ChatViewModel @Inject constructor(
     private val sendMessage: SendMessageUseCase,
     private val receiptManager: com.sotto.app.data.repository.ReceiptManager,
     private val sendMyName: SendMyNameUseCase,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
 
     val conversationId: String = savedStateHandle["conversationId"] ?: ""
@@ -209,6 +210,97 @@ class ChatViewModel @Inject constructor(
         messageRepository.clearActiveConversation(conversationId)
     }
 
+    /**
+     * Why nothing can be sent in this chat right now, or null when it can. Reads the
+     * conversation now rather than the screen's cached copy: it may still be loading
+     * (null passed every check), or be gone (a rejected request opened from a stale
+     * notification) — sending would then re-add the stranger and message them.
+     */
+    private suspend fun whyNotSendable(): String? {
+        val conv = conversationRepository.getConversation(conversationId).first()
+        return when {
+            conv == null -> "This conversation no longer exists."
+            conversationRepository.observeBlocked(contactId).first() ->
+                "You blocked this contact. Unblock them to send messages."
+            conv.peerDeleted -> "This user has deleted their account."
+            conv.needsSessionReset -> "Peer rotated keys. Tap the banner above to resume sending."
+            !conv.isApproved -> "Accept this message request before replying."
+            else -> null
+        }
+    }
+
+    /** The decrypted voice message or photo of [messageId], for playing or showing it. */
+    suspend fun loadMedia(messageId: String): ByteArray? = messageRepository.loadMedia(messageId)
+
+    /** Sends a recorded voice message, replying to the message being replied to, if any. */
+    fun sendVoice(recording: com.sotto.app.media.VoiceRecording) {
+        val replyTo = replyingTo.value
+        viewModelScope.launch {
+            val bytes = try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { recording.file.readBytes() }
+            } finally {
+                recording.file.delete()
+            }
+            sendMediaNow(
+                com.sotto.app.domain.model.MessageMedia(
+                    com.sotto.app.domain.model.MediaKind.VOICE, recording.mime, durationMs = recording.durationMs,
+                ),
+                bytes, caption = "", replyTo = replyTo,
+            )
+        }
+    }
+
+    /** Shrinks the photo at [uri] and sends it, with the composer's text as its caption. */
+    fun sendPhoto(uri: android.net.Uri) {
+        val replyTo = replyingTo.value
+        val caption = draft.trim()
+        if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
+            _sendError.value = "Caption is too long (max ${SendMessageUseCase.MAX_MESSAGE_LENGTH} characters)."
+            return
+        }
+        viewModelScope.launch {
+            val photo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching { com.sotto.app.media.PhotoShrinker.shrink(appContext, uri) }.getOrNull()
+            }
+            if (photo == null) {
+                _sendError.value = "That picture couldn't be opened."
+                return@launch
+            }
+            val sent = sendMediaNow(
+                com.sotto.app.domain.model.MessageMedia(
+                    com.sotto.app.domain.model.MediaKind.PHOTO, "image/jpeg", width = photo.width, height = photo.height,
+                ),
+                photo.bytes, caption = caption, replyTo = replyTo,
+            )
+            // The caption went with it.
+            if (sent && caption.isNotEmpty() && draft.trim() == caption) draft = ""
+        }
+    }
+
+    private suspend fun sendMediaNow(
+        media: com.sotto.app.domain.model.MessageMedia,
+        bytes: ByteArray,
+        caption: String,
+        replyTo: Message?,
+    ): Boolean {
+        val blocked = whyNotSendable()
+        if (blocked != null) {
+            _sendError.value = blocked
+            return false
+        }
+        if (replyTo != null && replyingTo.value?.id == replyTo.id) cancelReply()
+        _sendError.value = null
+        return try {
+            messageRepository.sendMedia(conversationId, contactId, media, bytes, caption, replyTo)
+            true
+        } catch (e: Exception) {
+            Log.w("ChatViewModel", "Sending media failed: ${e.message}")
+            // The message stays in the chat as "Not delivered · Tap to retry" if it got that far.
+            _sendError.value = "Failed to send ${if (media.kind == com.sotto.app.domain.model.MediaKind.VOICE) "voice message" else "photo"}"
+            false
+        }
+    }
+
     fun updateComposer(text: String) {
         draft = text
     }
@@ -226,20 +318,7 @@ class ChatViewModel @Inject constructor(
         // The reply shown when Send was tapped, not one picked while the checks below run.
         val replyTo = replyingTo.value
         viewModelScope.launch {
-            // Read the conversation now rather than the screen's cached copy: it may
-            // still be loading (null passed every check), or be gone (a rejected
-            // request opened from a stale notification) — sending would then
-            // re-add the stranger and message them.
-            val conv = conversationRepository.getConversation(conversationId).first()
-            val blocked = when {
-                conv == null -> "This conversation no longer exists."
-                conversationRepository.observeBlocked(contactId).first() ->
-                    "You blocked this contact. Unblock them to send messages."
-                conv.peerDeleted -> "This user has deleted their account."
-                conv.needsSessionReset -> "Peer rotated keys. Tap the banner above to resume sending."
-                !conv.isApproved -> "Accept this message request before replying."
-                else -> null
-            }
+            val blocked = whyNotSendable()
             if (blocked != null) {
                 _sendError.value = blocked
                 return@launch

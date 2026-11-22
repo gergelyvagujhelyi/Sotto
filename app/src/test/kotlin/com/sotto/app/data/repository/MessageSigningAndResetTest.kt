@@ -94,6 +94,7 @@ class MessageSigningAndResetTest {
             settingsRepository = javax.inject.Provider { throw IllegalStateException("no settings in this test") },
             blockedUserDao = blockedUserDao,
             contactNames = mockk<ContactNameStore>(relaxed = true),
+            mediaStore = mockk<com.sotto.app.data.media.MediaStore>(relaxed = true),
         )
     }
 
