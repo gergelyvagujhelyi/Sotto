@@ -135,6 +135,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageState
+import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.ui.components.AppSnackbarHost
 import com.sotto.app.ui.components.AuroraTextField
 import com.sotto.app.ui.components.clockTime
@@ -1013,6 +1014,15 @@ private fun ChatRowItem(
                             {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 picking = true
+                            }
+                        } else {
+                            null
+                        },
+                        // As on Instagram: a double tap hearts it, another takes the heart back.
+                        onDoubleClick = if (message.canReact) {
+                            {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                react(ReactionPayload.HEART)
                             }
                         } else {
                             null

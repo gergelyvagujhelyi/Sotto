@@ -115,6 +115,8 @@ fun MessageBubble(
     onBubblePlaced: ((Rect) -> Unit)? = null,
     /** Holding the bubble: react to it. */
     onLongClick: (() -> Unit)? = null,
+    /** Double-tapping the bubble: heart it (or take the heart back). */
+    onDoubleClick: (() -> Unit)? = null,
     /** The emoji reactions on it, shown under its corner; null when none. */
     reactions: BubbleReactions? = null,
     /** Tapping the reactions: change or take back the user's. */
@@ -154,6 +156,7 @@ fun MessageBubble(
             groupedWithPrevious = groupedWithPrevious,
             onClick = onClick,
             onLongClick = onLongClick,
+            onDoubleClick = onDoubleClick,
             scrambleMs = scrambleMs,
             quote = quote,
             onQuoteClick = onQuoteClick,
@@ -237,6 +240,7 @@ internal fun BubbleSurface(
     scrambleMs: Long?,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    onDoubleClick: (() -> Unit)? = null,
     look: Float = 1f,
     quote: BubbleQuote? = null,
     onQuoteClick: (() -> Unit)? = null,
@@ -284,10 +288,11 @@ internal fun BubbleSurface(
             .clip(shape)
             .then(
                 when {
-                    onLongClick != null -> Modifier.combinedClickable(
+                    onLongClick != null || onDoubleClick != null -> Modifier.combinedClickable(
                         onClickLabel = null,
-                        onLongClickLabel = "React",
+                        onLongClickLabel = if (onLongClick != null) "React" else null,
                         onLongClick = onLongClick,
+                        onDoubleClick = onDoubleClick,
                         onClick = onClick ?: {},
                     )
                     onClick != null -> Modifier.clickable(onClick = onClick)
