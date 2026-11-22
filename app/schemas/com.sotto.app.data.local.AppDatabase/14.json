@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 14,
-    "identityHash": "94e56c31888b3fb1bb5de821a3722c85",
+    "identityHash": "81f93e9dfe58f41625785a85afe21a7a",
     "entities": [
       {
         "tableName": "messages",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderId` TEXT NOT NULL, `recipientId` TEXT NOT NULL, `encryptedBody` BLOB NOT NULL, `nonce` BLOB NOT NULL, `plaintext` TEXT NOT NULL, `state` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `expiresAt` INTEGER, `isOutgoing` INTEGER NOT NULL, `replyToId` TEXT, `replyQuote` TEXT, `replyToOwn` INTEGER NOT NULL, `myReaction` TEXT, `theirReaction` TEXT, `mediaKind` TEXT, `mediaMime` TEXT, `mediaKey` BLOB, `mediaDurationMs` INTEGER NOT NULL, `mediaWidth` INTEGER NOT NULL, `mediaHeight` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderId` TEXT NOT NULL, `recipientId` TEXT NOT NULL, `encryptedBody` BLOB NOT NULL, `nonce` BLOB NOT NULL, `plaintext` TEXT NOT NULL, `state` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `expiresAt` INTEGER, `isOutgoing` INTEGER NOT NULL, `replyToId` TEXT, `replyQuote` TEXT, `replyToOwn` INTEGER NOT NULL, `myReaction` TEXT, `theirReaction` TEXT, `mediaKind` TEXT, `mediaMime` TEXT, `mediaKey` BLOB, `mediaDurationMs` INTEGER NOT NULL, `mediaWidth` INTEGER NOT NULL, `mediaHeight` INTEGER NOT NULL, `mediaName` TEXT, `mediaSize` INTEGER NOT NULL, `mediaState` TEXT, `attachmentId` TEXT, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -139,6 +139,30 @@
             "columnName": "mediaHeight",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "mediaName",
+            "columnName": "mediaName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "mediaSize",
+            "columnName": "mediaSize",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaState",
+            "columnName": "mediaState",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "attachmentId",
+            "columnName": "attachmentId",
+            "affinity": "TEXT",
+            "notNull": false
           }
         ],
         "primaryKey": {
@@ -376,7 +400,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '94e56c31888b3fb1bb5de821a3722c85')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '81f93e9dfe58f41625785a85afe21a7a')"
     ]
   }
 }

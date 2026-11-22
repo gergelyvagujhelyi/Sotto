@@ -8,7 +8,7 @@ import com.sotto.app.data.local.entity.MessageEntity
 import kotlinx.coroutines.flow.Flow
 
 /** A received message's text and time, for its chat's notification. */
-data class UnseenText(val text: String, val timestamp: Long, val mediaKind: String? = null)
+data class UnseenText(val text: String, val timestamp: Long, val mediaKind: String? = null, val mediaName: String? = null)
 
 @Dao
 interface MessageDao {
@@ -50,7 +50,7 @@ interface MessageDao {
      * what its notification lists.
      */
     @Query(
-        "SELECT text, timestamp, mediaKind FROM (SELECT plaintext AS text, timestamp, mediaKind FROM messages " +
+        "SELECT text, timestamp, mediaKind, mediaName FROM (SELECT plaintext AS text, timestamp, mediaKind, mediaName FROM messages " +
             "WHERE conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED' " +
             "ORDER BY timestamp DESC LIMIT :limit) ORDER BY timestamp ASC"
     )
@@ -135,6 +135,12 @@ interface MessageDao {
 
     @Query("UPDATE messages SET mediaKind = :kind, mediaMime = :mime, mediaKey = :key, mediaDurationMs = :durationMs, mediaWidth = :width, mediaHeight = :height WHERE id = :messageId")
     suspend fun setMedia(messageId: String, kind: String, mime: String, key: ByteArray, durationMs: Long, width: Int, height: Int)
+
+    @Query("UPDATE messages SET mediaState = :state WHERE id = :messageId")
+    suspend fun setMediaState(messageId: String, state: String)
+
+    @Query("UPDATE messages SET attachmentId = :attachmentId WHERE id = :messageId")
+    suspend fun setAttachmentId(messageId: String, attachmentId: String)
 
     @Query("DELETE FROM messages")
     suspend fun deleteAll()

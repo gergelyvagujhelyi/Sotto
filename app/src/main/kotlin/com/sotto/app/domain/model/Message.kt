@@ -20,7 +20,7 @@ data class Message(
     val media: MessageMedia? = null,
 ) {
     /** What a chat list, notification or quote says for it: the text, or the media's kind and caption. */
-    val preview: String get() = previewText(media?.kind, plaintext)
+    val preview: String get() = previewText(media?.kind, plaintext, media?.name.orEmpty())
 
     /** Whether this can be replied to: a readable message, not a call, key change or "could not decrypt" placeholder. */
     val canReply: Boolean

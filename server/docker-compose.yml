@@ -76,6 +76,16 @@ services:
       # Accept each auth token once (refuse replays). Only with every phone on 0.7.3+:
       # older apps sometimes sent identical tokens. Off unless .env turns it on.
       AUTH_SINGLE_USE_TOKENS: ${AUTH_SINGLE_USE_TOKENS:-false}
+      # Encrypted attachments through an S3-compatible bucket (ADR-29); empty: none.
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-}
+      S3_SECRET: ${S3_SECRET:-}
+      S3_REGION: ${S3_REGION:-auto}
+      ATTACHMENT_MAX_BYTES: ${ATTACHMENT_MAX_BYTES:-104857600}
+      ATTACHMENT_MONTHLY_BYTES_PER_USER: ${ATTACHMENT_MONTHLY_BYTES_PER_USER:-2147483648}
+      ATTACHMENT_STORE_LIMIT_BYTES: ${ATTACHMENT_STORE_LIMIT_BYTES:-4294967296}
+      ATTACHMENT_MONTHLY_UPLOADS: ${ATTACHMENT_MONTHLY_UPLOADS:-5000}
       # nginx reaches the server over the compose network, not from 127.0.0.1.
       # Without this every client shares nginx's IP for IP rate limiting.
       # Only nginx can reach server:8000 (expose, not published).

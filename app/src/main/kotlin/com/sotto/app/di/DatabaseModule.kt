@@ -196,6 +196,10 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE messages ADD COLUMN mediaDurationMs INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE messages ADD COLUMN mediaWidth INTEGER NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE messages ADD COLUMN mediaHeight INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaName TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaSize INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE messages ADD COLUMN mediaState TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN attachmentId TEXT")
         }
     }
 

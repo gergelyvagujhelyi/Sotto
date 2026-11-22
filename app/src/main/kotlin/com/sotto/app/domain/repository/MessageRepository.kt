@@ -32,6 +32,25 @@ interface MessageRepository {
     suspend fun retryFailed(messageId: String)
     suspend fun deleteMessage(messageId: String)
 
+    /** Sends any file through the relay's object store (ADR-29), with an optional [caption]. */
+    suspend fun sendFile(
+        conversationId: String,
+        recipientId: String,
+        uri: android.net.Uri,
+        caption: String = "",
+        replyTo: Message? = null,
+    ): Message
+
+    /** Downloads a file a contact sent; its state says how it went (READY, or GONE). */
+    suspend fun downloadFile(messageId: String)
+
+    /** A decrypted copy of a file, in the cache, for another app to open; null when it isn't here. */
+    suspend fun decryptFileForOpening(messageId: String): java.io.File?
+
+    /** File uploads and downloads under way, by message id (0..1). */
+    val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>>
+        get() = kotlinx.coroutines.flow.MutableStateFlow(emptyMap())
+
     /** The decrypted media of [messageId] (voice or photo), or null when it has none or it's gone. */
     suspend fun loadMedia(messageId: String): ByteArray?
     suspend fun deleteMessagesOlderThan(conversationId: String, timestampMillis: Long)

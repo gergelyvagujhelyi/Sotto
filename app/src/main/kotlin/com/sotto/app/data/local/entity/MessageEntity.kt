@@ -41,6 +41,11 @@ data class MessageEntity(
     val mediaDurationMs: Long = 0,
     val mediaWidth: Int = 0,
     val mediaHeight: Int = 0,
+    /** A file's name, its size in bytes, its transfer state (FileState.wire) and the relay's id for it. */
+    val mediaName: String? = null,
+    val mediaSize: Long = 0,
+    val mediaState: String? = null,
+    val attachmentId: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

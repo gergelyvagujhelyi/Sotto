@@ -95,6 +95,7 @@ class MessageSigningAndResetTest {
             blockedUserDao = blockedUserDao,
             contactNames = mockk<ContactNameStore>(relaxed = true),
             mediaStore = mockk<com.sotto.app.data.media.MediaStore>(relaxed = true),
+            fileDrop = mockk<com.sotto.app.data.media.FileDrop>(relaxed = true),
         )
     }
 

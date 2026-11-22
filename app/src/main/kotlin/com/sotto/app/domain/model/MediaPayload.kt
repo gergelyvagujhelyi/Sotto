@@ -13,7 +13,9 @@ import java.util.Base64
 /** What kind of media a message carries. [wire] is its name inside [MediaPayload]. */
 enum class MediaKind(val wire: String, val label: String) {
     VOICE("voice", "🎤 Voice message"),
-    PHOTO("photo", "📷 Photo");
+    PHOTO("photo", "📷 Photo"),
+    /** Any file, sent through the relay's object store rather than inline (FilePayload). */
+    FILE("file", "📎 File");
 
     companion object {
         fun fromWire(name: String?): MediaKind? = entries.firstOrNull { it.wire == name }
@@ -31,13 +33,38 @@ data class MessageMedia(
     val durationMs: Long = 0,
     val width: Int = 0,
     val height: Int = 0,
+    /** A file's name and size in bytes, and where its transfer is. */
+    val name: String = "",
+    val size: Long = 0,
+    val fileState: FileState? = null,
 )
 
+/** Where a file (MediaKind.FILE) is: on its way up, waiting to be fetched, here, or gone. */
+enum class FileState(val wire: String) {
+    /** Sender: encrypting and uploading. */
+    UPLOADING("uploading"),
+    /** Sender: on the relay's store (or already fetched); this phone has its own copy. */
+    SENT("sent"),
+    /** Receiver: on the relay's store, not downloaded yet. */
+    REMOTE("remote"),
+    /** On this phone, ready to open. */
+    READY("ready"),
+    /** Receiver: the store no longer has it (expired or deleted) and it was never downloaded. */
+    GONE("gone");
+
+    companion object {
+        fun fromWire(name: String?): FileState? = entries.firstOrNull { it.wire == name }
+    }
+}
+
 /** What a chat list, notification or reply quote says for a message: its text, or for media its kind and caption. */
-fun previewText(media: MediaKind?, caption: String): String = when {
-    media == null -> caption
-    caption.isBlank() -> media.label
-    else -> "${media.label}: ${caption.trim()}"
+fun previewText(media: MediaKind?, caption: String, fileName: String = ""): String {
+    val label = if (media == MediaKind.FILE && fileName.isNotBlank()) "📎 $fileName" else media?.label
+    return when {
+        label == null -> caption
+        caption.isBlank() -> label
+        else -> "$label: ${caption.trim()}"
+    }
 }
 
 /**
@@ -136,6 +163,73 @@ object MediaPayload {
 
     /** Pixel sizes beyond this are junk (the sender shrinks photos to about 1280). */
     private const val MAX_DIMENSION = 16_384
+}
+
+/**
+ * A file sent through the relay's object store (ADR-29): which object ([id], as the relay
+ * named it), the key it's encrypted under, and its name, type and size. Like the other
+ * payloads it travels ratchet-encrypted; the relay only ever sees the ciphertext object.
+ */
+object FilePayload {
+    private const val PREFIX = "\u0001sotto/file/v1:"
+    private val ID = Regex("^[0-9a-f]{32}$")
+    private val MIME = Regex("^[a-z0-9.+-]{1,40}/[a-z0-9.+-]{1,80}$")
+    const val MAX_SIZE = 2L * 1024 * 1024 * 1024
+
+    data class Decoded(
+        val id: String,
+        val key: ByteArray,
+        val name: String,
+        val mime: String,
+        val size: Long,
+        val caption: String,
+        val reply: MediaPayload.Reply?,
+    ) {
+        override fun equals(other: Any?) = other is Decoded && id == other.id && key.contentEquals(other.key) &&
+            name == other.name && mime == other.mime && size == other.size && caption == other.caption && reply == other.reply
+        override fun hashCode() = id.hashCode()
+    }
+
+    fun encode(id: String, key: ByteArray, name: String, mime: String, size: Long, caption: String, reply: MediaPayload.Reply? = null): String =
+        PREFIX + buildJsonObject {
+            put("id", id)
+            put("key", Base64.getEncoder().encodeToString(key))
+            put("name", name)
+            put("mime", mime)
+            put("size", size)
+            put("caption", caption)
+            if (reply != null) {
+                put("to", reply.to)
+                put("quote", ReplyPayload.quoteOf(reply.quote))
+                put("mine", reply.mine)
+            }
+        }.toString()
+
+    fun isFile(plaintext: String): Boolean = plaintext.startsWith(PREFIX)
+
+    fun decode(plaintext: String): Decoded? {
+        if (!isFile(plaintext)) return null
+        return runCatching {
+            val obj = Json.parseToJsonElement(plaintext.removePrefix(PREFIX)) as JsonObject
+            fun string(key: String) = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            val id = string("id")?.takeIf { ID.matches(it) } ?: return null
+            val key = string("key")?.let { Base64.getDecoder().decode(it) }?.takeIf { it.size == 32 } ?: return null
+            val size = (obj["size"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull?.takeIf { it in 0..MAX_SIZE } ?: return null
+            val mime = string("mime")?.lowercase()?.takeIf { MIME.matches(it) } ?: "application/octet-stream"
+            val to = string("to")?.takeIf { it.isNotEmpty() && it.length <= 64 }
+            Decoded(
+                id = id,
+                key = key,
+                name = com.sotto.app.data.media.FileNames.clean(string("name").orEmpty()),
+                mime = mime,
+                size = size,
+                caption = string("caption").orEmpty().take(4_000),
+                reply = to?.let {
+                    MediaPayload.Reply(it, ReplyPayload.quoteOf(string("quote").orEmpty()), (obj["mine"] as? JsonPrimitive)?.booleanOrNull ?: false)
+                },
+            )
+        }.getOrNull()
+    }
 }
 
 /**

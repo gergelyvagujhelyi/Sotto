@@ -21,6 +21,15 @@ data class InviteDto(
 )
 
 @Serializable
+data class AttachmentReserveRequest(val recipientId: String, val size: Long)
+
+@Serializable
+data class AttachmentReserveResponse(val id: String, val uploadUrl: String, val expiresIn: Int = 0)
+
+@Serializable
+data class AttachmentDownloadResponse(val downloadUrl: String, val size: Long, val expiresIn: Int = 0)
+
+@Serializable
 data class RelayHealthDto(
     val status: String = "",
     val version: String = "",

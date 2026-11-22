@@ -71,6 +71,7 @@ messages from the losing session are still decrypted.
 - Timing of message submission and retrieval
 - Who invited whom (since 0.5.17): each invite records the member who created it and the account that used it, until 30 days after its use
 - The IP address a phone connects from, while it's connected, as any server sees it. The IP rate limits count requests per address in memory. No log keeps addresses (see Relay Logs and Scanners).
+- For files sent through its object store (0.7.7): who sends a file to whom, its encrypted size and when, until the recipient has it (at most 30 days); and each account's bytes uploaded over 30 days, for its allowance. Never the file's name, type, content or key.
 
 ### What the Server Does NOT Know
 - Message content
@@ -290,6 +291,12 @@ Network security config (generated at build time for the owner's relay, `sotto.o
 - Scanners that sweep IP addresses get nothing back, not even the relay's name from its certificate.
 
 The name itself is public, because Certificate Transparency logs list every certificate. So this cuts the noise of address sweeps rather than hiding the relay; a scanner that knows the name gets through to nginx. Paths the relay doesn't serve get a closed connection instead of an answer. The relay stays on port 443, for the reasons in ARCHITECTURE.md ADR-26.
+
+### Voice Messages, Photos and Files (0.7.7)
+- **Small media inline.** A voice message (up to 60 s) or a photo shrunk to about 1280 px travels inside an ordinary ratchet-encrypted, signed message, at most about 190 KB. It is as protected as a text message, post-quantum included. The relay can tell it from text only by its size. Photos are decoded and re-encoded as JPEG on the phone, so no EXIF (location, camera, time) leaves it.
+- **Files through an object store.** A larger file is encrypted on the phone with AES-256-GCM in 64 KiB segments under a random key (each segment's nonce holds a random prefix, its number and a last-segment flag, so changes, reordering and truncation are detected). The ciphertext goes straight to an S3-compatible bucket (Tigris, for the author's relay) with a URL the relay signs, size included. The key, name and type go to the recipient inside an end-to-end encrypted message; the relay and the store see only ciphertext, sizes, timing and the phones' addresses. The recipient checks every segment before keeping the file, then the object is deleted; anything uncollected goes after 30 days.
+- **At rest.** Media and files sit under `files/media`, encrypted, with their keys in the message's SQLCipher row. Playing and viewing decrypt into memory; opening a file in another app decrypts a copy into the app's cache, which is removed within an hour. Files of deleted messages are swept, and their keys went with the rows.
+- **The relay's key** to the bucket can read and write that bucket only. It can't create buckets, keys or policies.
 
 ## Security Checklist
 

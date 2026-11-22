@@ -4,7 +4,14 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+Everyone needs this version: 0.7.6 and older show a voice message, photo or file as a line of raw text.
+
+- **Voice messages** — Hold the microphone (where Send is while the message box is empty) to record, and let go to send. Slide left to cancel, or slide up to lock and keep recording hands-free, then send with the big button or throw it away with the bin. Up to a minute. A voice message plays straight from the chat, one at a time.
+- **Photos** — The paperclip opens a menu: "Photo" opens the phone's photo picker, which shows Sotto only the photo you pick. Whatever you typed goes with it as a caption. Photos are shrunk to 1280 pixels on the long side and turned upright, and their hidden details (location, camera, time) are left out. Tap a photo to see it full screen, and pinch to zoom.
+- **Files and videos** — "File or video" sends any file up to 100 MB. It's encrypted on your phone and goes to the relay's file storage, which only ever holds the encrypted copy; the key travels in the message itself. Your contact taps the file to download it, and it's deleted from the storage as soon as they have it (or after 30 days). Tap a downloaded file to open it in another app; if no app on the phone can open it, Sotto offers to save a copy.
+- **Replies, reactions and notifications know about media** — You can reply to a voice message, photo or file, and reply with one. Chat previews and notifications say "🎤 Voice message", "📷 Photo" or the file's name.
+- **Messages from newer versions** — A kind of message this version doesn't know yet now shows a note to update Sotto, instead of raw text.
+- **Relay: file storage** — With `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET` in `.env`, the relay signs short-lived upload and download URLs for an S3-compatible bucket; it never carries the files. It keeps each account to 2 GB per 30 days and the bucket under 4 GB, and removes uncollected files after 30 days. `/health` says the largest file it takes (`attachment_max_bytes`, 0 without storage). See `.env.example`.
 
 ## 0.7.6 — 2026-11-22
 

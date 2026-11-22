@@ -30,7 +30,7 @@ from sqlalchemy import delete, text
 from app.database import async_session, engine, get_db
 from app.models.schemas import AppReleaseCall, HealthResponse
 from app import config
-from app.routers import calling, identity, invites, messages, push, receipts, web, websocket
+from app.routers import attachments, calling, identity, invites, messages, push, receipts, web, websocket
 from app.services import app_release as app_release_service
 from app.services.invites import relay_founded
 from app.services.metrics import MetricsMiddleware, metrics_endpoint
@@ -146,6 +146,11 @@ async def _purge_expired_messages() -> None:
                 await db.execute(delete(Invite).where(Invite.used_at.is_(None), Invite.expires_at < now))
                 await db.execute(delete(Invite).where(Invite.used_at < now - timedelta(days=30)))
                 await db.commit()
+                # Attachments: expired, never finished, or whose sender or recipient is gone.
+                try:
+                    await attachments.purge_attachments(db)
+                except Exception:
+                    logger.exception("Failed to purge attachments")
                 if result.rowcount:
                     logger.info("Purged %d expired pending messages (older than %d days)",
                                 result.rowcount, PENDING_MESSAGE_TTL_DAYS)
@@ -290,6 +295,7 @@ app.include_router(websocket.router)
 app.include_router(calling.router)
 app.include_router(receipts.router)
 app.include_router(invites.router)
+app.include_router(attachments.router)
 app.include_router(web.router)
 
 
@@ -337,4 +343,5 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     return HealthResponse(
         version=app.version,
         invite_required=config.INVITE_ONLY and founded,
+        attachment_max_bytes=config.ATTACHMENT_MAX_BYTES if config.S3_BUCKET and config.S3_ENDPOINT else 0,
     )

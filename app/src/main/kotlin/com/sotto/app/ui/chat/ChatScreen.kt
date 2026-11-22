@@ -59,6 +59,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.snapshotFlow
@@ -186,6 +187,35 @@ fun ChatScreen(
     val isBlocked by viewModel.isBlocked.collectAsState()
     val contact by viewModel.contact.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
+    val fileProgress by viewModel.fileProgress.collectAsState()
+    // A file was decrypted for opening: hand it to whichever app can show it.
+    // With no app for it, the user can save a copy somewhere instead.
+    val openContext = LocalContext.current
+    var saving by remember { mutableStateOf<ChatViewModel.OpenedFile?>(null) }
+    val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { target ->
+        val file = saving
+        saving = null
+        if (target != null && file != null) viewModel.saveCopy(file, target)
+    }
+    LaunchedEffect(Unit) {
+        viewModel.openFile.collect { opened ->
+            val uri = androidx.core.content.FileProvider.getUriForFile(openContext, "${openContext.packageName}.files", opened.file)
+            val view = android.content.Intent(android.content.Intent.ACTION_VIEW)
+                .setDataAndType(uri, opened.mime)
+                .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val canOpen = openContext.packageManager.queryIntentActivities(view, 0).isNotEmpty()
+            if (canOpen) {
+                try {
+                    openContext.startActivity(android.content.Intent.createChooser(view, "Open with"))
+                } catch (_: android.content.ActivityNotFoundException) {
+                    viewModel.reportError("No app on this phone can open this file.")
+                }
+            } else {
+                saving = opened
+                saveLauncher.launch(opened.file.name)
+            }
+        }
+    }
     var confirmBlock by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
@@ -327,6 +357,9 @@ fun ChatScreen(
         onReact = viewModel::react,
         onSendVoice = viewModel::sendVoice,
         onSendPhoto = viewModel::sendPhoto,
+        onSendFile = viewModel::sendFile,
+        onFileTap = viewModel::onFileTap,
+        fileProgress = fileProgress,
         loadMedia = viewModel::loadMedia,
     )
 }
@@ -370,6 +403,10 @@ fun ChatContent(
     /** Send a recorded voice message, or the photo picked. */
     onSendVoice: (com.sotto.app.media.VoiceRecording) -> Unit = {},
     onSendPhoto: (android.net.Uri) -> Unit = {},
+    onSendFile: (android.net.Uri) -> Unit = {},
+    /** A file's bubble was tapped. */
+    onFileTap: (Message) -> Unit = {},
+    fileProgress: Map<String, Float> = emptyMap(),
     /** The decrypted media of a message, for its bubble. */
     loadMedia: suspend (String) -> ByteArray? = { null },
 ) {
@@ -377,7 +414,11 @@ fun ChatContent(
     val context = LocalContext.current
     val voicePlayer = remember { com.sotto.app.media.VoicePlayer() }
     var viewingPhoto by rememberSaveable { mutableStateOf<String?>(null) }
-    val chatMedia = remember(loadMedia) { ChatMedia(loadMedia, voicePlayer, openPhoto = { viewingPhoto = it }) }
+    val progressState = rememberUpdatedState(fileProgress)
+    val fileTap = rememberUpdatedState(onFileTap)
+    val chatMedia = remember(loadMedia) {
+        ChatMedia(loadMedia, voicePlayer, openPhoto = { viewingPhoto = it }, onFile = { fileTap.value(it) }, fileProgress = progressState)
+    }
     viewingPhoto?.let { id -> ProvideChatMedia(chatMedia) { PhotoViewer(id, onDismiss = { viewingPhoto = null }) } }
 
     // Voice messages: hold the mic to record (see MicButton).
@@ -446,6 +487,9 @@ fun ChatContent(
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) onSendPhoto(uri)
+    }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) onSendFile(uri)
     }
     val quoteName = contactName ?: "Them"
     val scope = rememberCoroutineScope()
@@ -726,6 +770,7 @@ fun ChatContent(
                                 androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
+                        onAttachFile = { filePicker.launch(arrayOf("*/*")) },
                         onRecordPress = startRecording,
                         onRecordRelease = { finishRecording(true) },
                         onRecordCancel = {
@@ -1273,6 +1318,7 @@ private fun Composer(
     recordLevel: Float = 0f,
     recordSlide: Offset = Offset.Zero,
     onAttach: () -> Unit = {},
+    onAttachFile: () -> Unit = {},
     onRecordPress: () -> Boolean = { false },
     onRecordRelease: () -> Unit = {},
     onRecordCancel: () -> Unit = {},
@@ -1286,7 +1332,7 @@ private fun Composer(
         verticalAlignment = Alignment.Bottom,
     ) {
         if (recordState == RecordState.IDLE) {
-            AttachButton(enabled = enabled, onClick = onAttach)
+            AttachButton(enabled = enabled, onPhoto = onAttach, onFile = onAttachFile)
             AuroraTextField(
                 value = text,
                 onValueChange = onTextChange,

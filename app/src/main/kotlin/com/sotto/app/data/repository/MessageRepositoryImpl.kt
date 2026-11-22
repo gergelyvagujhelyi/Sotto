@@ -61,7 +61,10 @@ class MessageRepositoryImpl @Inject constructor(
     private val blockedUserDao: com.sotto.app.data.local.dao.BlockedUserDao,
     private val contactNames: ContactNameStore,
     private val mediaStore: MediaStore,
+    private val fileDrop: com.sotto.app.data.media.FileDrop,
 ) : MessageRepository {
+
+    override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
 
     private val peerLocks = ConcurrentHashMap<String, kotlinx.coroutines.sync.Mutex>()
     /** One reaction send at a time, so quick changes reach the contact in the order made. */
@@ -133,6 +136,7 @@ class MessageRepositoryImpl @Inject constructor(
      * unreadable.
      */
     private suspend fun sweepMedia() {
+        runCatching { fileDrop.sweepOpened() }
         try {
             mediaStore.sweep(messageDao.getMediaMessageIds().toHashSet())
         } catch (e: Exception) {
@@ -224,6 +228,82 @@ class MessageRepositoryImpl @Inject constructor(
         sendMessageInternal(conversationId, recipientId, caption, replyTo, media, bytes)
     }
 
+    /**
+     * Encrypts the file at [uri] on the phone, uploads it to the relay's object store and
+     * sends its key and name in an ordinary message (ADR-29). Not cancellable once started.
+     */
+    override suspend fun sendFile(
+        conversationId: String,
+        recipientId: String,
+        uri: android.net.Uri,
+        caption: String,
+        replyTo: Message?,
+    ): Message = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        val messageId = UUID.randomUUID().toString()
+        val file = fileDrop.encrypt(uri, messageId, MAX_FILE_BYTES)
+        try {
+            sendMessageInternal(conversationId, recipientId, caption, replyTo, file = file, fixedId = messageId)
+        } catch (e: Exception) {
+            // Without a row the file would only wait for the sweep.
+            if (messageDao.getById(messageId) == null) mediaStore.delete(messageId)
+            throw e
+        }
+    }
+
+    /** Puts our file on the relay's store, once: reserve, upload, confirm. Returns the row as it is then. */
+    private suspend fun ensureUploaded(entity: MessageEntity): MessageEntity {
+        if (entity.attachmentId != null) return entity
+        messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.UPLOADING.wire)
+        val size = fileDrop.fileFor(entity.id).length()
+        val reserved = apiService.reserveAttachment(
+            com.sotto.app.data.remote.dto.AttachmentReserveRequest(entity.recipientId, size),
+        )
+        fileDrop.upload(entity.id, reserved.uploadUrl)
+        apiService.completeAttachment(reserved.id)
+        messageDao.setAttachmentId(entity.id, reserved.id)
+        messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.SENT.wire)
+        return entity.copy(attachmentId = reserved.id)
+    }
+
+    override suspend fun downloadFile(messageId: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        val entity = messageDao.getById(messageId) ?: return@withContext
+        if (entity.mediaKind != MediaKind.FILE.wire || entity.isOutgoing) return@withContext
+        val id = entity.attachmentId ?: return@withContext
+        val key = entity.mediaKey ?: return@withContext
+        if (fileDrop.hasFile(messageId)) {
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
+            return@withContext
+        }
+        val download = apiService.attachmentDownload(id)
+        val expected = com.sotto.app.data.media.SegmentedCrypto.encryptedSize(entity.mediaSize)
+        if (download == null) {
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.GONE.wire)
+            return@withContext
+        }
+        // The size the sender declared (inside the encryption) must be the one stored.
+        if (download.size != expected) throw java.io.IOException("The file on the relay isn't the one sent")
+        try {
+            fileDrop.download(messageId, download.downloadUrl, key, expected)
+        } catch (e: com.sotto.app.data.media.FileGoneException) {
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.GONE.wire)
+            return@withContext
+        }
+        messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
+        // We have it: it needn't wait on the relay's store any longer.
+        try {
+            apiService.deleteAttachment(id)
+        } catch (e: Exception) {
+            if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Attachment not deleted: ${e.message}")
+        }
+    }
+
+    override suspend fun decryptFileForOpening(messageId: String): java.io.File? {
+        val entity = messageDao.getById(messageId) ?: return null
+        if (entity.mediaKind != MediaKind.FILE.wire || !fileDrop.hasFile(messageId)) return null
+        val key = entity.mediaKey ?: return null
+        return fileDrop.decryptForOpening(messageId, key, entity.mediaName ?: "file")
+    }
+
     private suspend fun sendMessageInternal(
         conversationId: String,
         recipientId: String,
@@ -231,8 +311,10 @@ class MessageRepositoryImpl @Inject constructor(
         replyTo: Message? = null,
         media: MessageMedia? = null,
         mediaBytes: ByteArray? = null,
+        file: com.sotto.app.data.media.EncryptedFile? = null,
+        fixedId: String? = null,
     ): Message {
-        val messageId = UUID.randomUUID().toString()
+        val messageId = fixedId ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val senderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
         // The media is on disk before its row exists, so the row never points at nothing.
@@ -256,12 +338,15 @@ class MessageRepositoryImpl @Inject constructor(
             replyToId = replyTo?.takeIf { it.conversationId == conversationId }?.id,
             replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(it.preview) },
             replyToOwn = replyTo?.takeIf { it.conversationId == conversationId }?.isOutgoing == true,
-            mediaKind = media?.kind?.wire,
-            mediaMime = media?.mime,
-            mediaKey = mediaKey,
+            mediaKind = media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
+            mediaMime = media?.mime ?: file?.mime,
+            mediaKey = mediaKey ?: file?.key,
             mediaDurationMs = media?.durationMs ?: 0,
             mediaWidth = media?.width ?: 0,
             mediaHeight = media?.height ?: 0,
+            mediaName = file?.name,
+            mediaSize = file?.size ?: 0,
+            mediaState = file?.let { com.sotto.app.domain.model.FileState.UPLOADING.wire },
         )
         try {
             messageDao.insert(entity)
@@ -271,7 +356,8 @@ class MessageRepositoryImpl @Inject constructor(
         }
 
         val envelope = try {
-            encryptFor(recipientId, wirePayload(entity, senderId).toByteArray(Charsets.UTF_8))
+            val ready = if (file != null) ensureUploaded(entity) else entity
+            encryptFor(recipientId, wirePayload(ready, senderId).toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             throw e
@@ -300,7 +386,7 @@ class MessageRepositoryImpl @Inject constructor(
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
 
-            updateConversationPreview(conversationId, recipientId, previewText(media?.kind, plaintext), response.timestamp)
+            updateConversationPreview(conversationId, recipientId, entity.preview(), response.timestamp)
 
             return entity.toDomain(senderId).copy(
                 state = MessageState.SENT,
@@ -392,7 +478,9 @@ class MessageRepositoryImpl @Inject constructor(
 
         try {
             val retrySenderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
-            val envelope = encryptFor(entity.recipientId, wirePayload(entity, retrySenderId).toByteArray(Charsets.UTF_8))
+            // A file whose upload didn't finish goes up again first.
+            val ready = if (entity.mediaKind == MediaKind.FILE.wire) ensureUploaded(entity) else entity
+            val envelope = encryptFor(entity.recipientId, wirePayload(ready, retrySenderId).toByteArray(Charsets.UTF_8))
 
             val retrySigPayload = buildMessageSigPayload(retrySenderId, entity.recipientId, envelope.nonce, envelope.ciphertext)
             val retrySignature = keyManager.sign(retrySigPayload)
@@ -412,10 +500,7 @@ class MessageRepositoryImpl @Inject constructor(
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
             // The message now sorts as the newest one (relay timestamp): show it in the list.
-            updateConversationPreview(
-                entity.conversationId, entity.recipientId,
-                previewText(MediaKind.fromWire(entity.mediaKind), plaintext), response.timestamp,
-            )
+            updateConversationPreview(entity.conversationId, entity.recipientId, entity.preview(), response.timestamp)
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             throw e
@@ -431,6 +516,15 @@ class MessageRepositoryImpl @Inject constructor(
     private suspend fun wirePayload(entity: MessageEntity, me: String): String {
         val replyTo = entity.replyToId
         val to = replyTo?.let { if (entity.replyToOwn) ReceiptManager.relayMessageId(me, it) else it }
+        if (entity.mediaKind == MediaKind.FILE.wire) {
+            val id = entity.attachmentId ?: throw IllegalStateException("File not uploaded")
+            val key = entity.mediaKey ?: throw IllegalStateException("File without a key")
+            val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
+            return com.sotto.app.domain.model.FilePayload.encode(
+                id, key, entity.mediaName ?: "file", entity.mediaMime ?: "application/octet-stream",
+                entity.mediaSize, entity.plaintext, reply,
+            )
+        }
         val media = entity.media()
         if (media != null) {
             val key = entity.mediaKey ?: throw IllegalStateException("Media without a key")
@@ -759,13 +853,15 @@ class MessageRepositoryImpl @Inject constructor(
         // "mine" is the sender's: the original is theirs, so it has the relay's id here.
         // A voice message or photo carries the same reply fields, and its caption as text.
         val media = MediaPayload.decode(plaintextStr)
-        val reply = if (media != null) {
-            media.reply?.let { ReplyPayload.Decoded(media.caption, it.to, it.quote, it.mine) }
-        } else {
-            ReplyPayload.decode(plaintextStr)
+        val file = if (media == null) com.sotto.app.domain.model.FilePayload.decode(plaintextStr) else null
+        val reply = when {
+            media != null -> media.reply?.let { ReplyPayload.Decoded(media.caption, it.to, it.quote, it.mine) }
+            file != null -> file.reply?.let { ReplyPayload.Decoded(file.caption, it.to, it.quote, it.mine) }
+            else -> ReplyPayload.decode(plaintextStr)
         }
         val messageText = when {
             media != null -> media.caption
+            file != null -> file.caption
             reply != null -> reply.text
             // A newer Sotto's payload, or a malformed one: a note, never the raw payload.
             UnknownPayload.isUnknown(plaintextStr) -> UnknownPayload.NOTE
@@ -792,16 +888,20 @@ class MessageRepositoryImpl @Inject constructor(
             replyToId = replyToId,
             replyQuote = reply?.quote,
             replyToOwn = reply != null && !reply.mine,
-            mediaKind = media?.media?.kind?.wire,
-            mediaMime = media?.media?.mime,
-            mediaKey = mediaKey,
+            mediaKind = media?.media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
+            mediaMime = media?.media?.mime ?: file?.mime,
+            mediaKey = mediaKey ?: file?.key,
             mediaDurationMs = media?.media?.durationMs ?: 0,
             mediaWidth = media?.media?.width ?: 0,
             mediaHeight = media?.media?.height ?: 0,
+            mediaName = file?.name,
+            mediaSize = file?.size ?: 0,
+            mediaState = file?.let { com.sotto.app.domain.model.FileState.REMOTE.wire },
+            attachmentId = file?.id,
         )
         messageDao.insert(entity)
         receivedIds.add(dto.messageId)
-        val shownText = previewText(media?.media?.kind, messageText)
+        val shownText = entity.preview()
 
         val isActive = conversationId == activeConversationId
         updateConversationPreview(
@@ -873,7 +973,7 @@ class MessageRepositoryImpl @Inject constructor(
         notificationManager.showMessageNotification(
             senderId = senderId,
             senderName = contactDao.getByUserId(senderId)?.displayName ?: senderId.take(8),
-            messageBody = reactionNotificationText(emoji, previewText(MediaKind.fromWire(target.mediaKind), target.plaintext)),
+            messageBody = reactionNotificationText(emoji, target.preview()),
             conversationId = conversation.id,
             isReaction = true,
         )
@@ -1181,6 +1281,8 @@ class MessageRepositoryImpl @Inject constructor(
     companion object {
         /** Server default page size for GET /v1/messages/pending. */
         private const val PENDING_PAGE_SIZE = 100
+        /** Largest file sent through the store: its ciphertext stays within the relay's 100 MiB. */
+        const val MAX_FILE_BYTES = 100L * 1024 * 1024 - 64 * 1024
         /** How many of our own newest messages a received reply's original is looked for in. */
         private const val OWN_REPLY_SEARCH_LIMIT = 5_000
         /** Preview and notification text when someone adds the user and sends only their name. */
@@ -1241,5 +1343,11 @@ private fun MessageEntity.toDomain(localUserId: String): Message {
 /** The media this row carries, or null for a text message (or an unknown kind). */
 internal fun MessageEntity.media(): MessageMedia? {
     val kind = MediaKind.fromWire(mediaKind) ?: return null
-    return MessageMedia(kind, mediaMime.orEmpty(), mediaDurationMs, mediaWidth, mediaHeight)
+    return MessageMedia(
+        kind, mediaMime.orEmpty(), mediaDurationMs, mediaWidth, mediaHeight,
+        name = mediaName.orEmpty(), size = mediaSize, fileState = com.sotto.app.domain.model.FileState.fromWire(mediaState),
+    )
 }
+
+/** What the chat list or a notification says for this row. */
+internal fun MessageEntity.preview(): String = previewText(MediaKind.fromWire(mediaKind), plaintext, mediaName.orEmpty())

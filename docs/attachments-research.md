@@ -1,6 +1,6 @@
 # Attachments: research notes (deferred)
 
-**Status:** deferred on 2026-11-19, after 0.5.13; restarted on 2026-11-23 with the plan below (ADR-29 in [ARCHITECTURE.md](../ARCHITECTURE.md)). The rest of these notes are the original research, kept so it isn't repeated. ADR-19 still holds: no file bytes through the GCP relay.
+**Status:** deferred on 2026-11-19, after 0.5.13; restarted on 2026-11-23 with the plan below, and built for 0.7.7 except the direct transfer (ADR-29 in [ARCHITECTURE.md](../ARCHITECTURE.md)). The rest of these notes are the original research, kept so it isn't repeated. ADR-19 still holds: no file bytes through the GCP relay.
 
 ## The plan (2026-11-23)
 

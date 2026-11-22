@@ -36,6 +36,11 @@
     <!-- The update notice opens SourceDrop when it is installed (update/SourceDrop.kt). -->
     <queries>
         <package android:name="dev.sourcedrop.app" />
+        <!-- Whether any app can open a file someone sent; if none, Sotto offers to save it. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="*/*" />
+        </intent>
     </queries>
 
     <application
@@ -142,6 +147,17 @@
                 android:name="androidx.work.WorkManagerInitializer"
                 android:value="androidx.startup"
                 tools:node="remove" />
+        </provider>
+
+        <!-- Files a contact sent, decrypted into the cache only while another app opens them. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/opened_files" />
         </provider>
 
     </application>

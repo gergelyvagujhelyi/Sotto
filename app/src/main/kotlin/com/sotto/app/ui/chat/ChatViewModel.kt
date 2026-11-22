@@ -229,6 +229,90 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** File transfers under way, by message id (0..1), for the file bubbles. */
+    val fileProgress: StateFlow<Map<String, Float>> = messageRepository.fileProgress
+
+    /** A file decrypted for opening, and its type. */
+    class OpenedFile(val file: java.io.File, val mime: String)
+
+    private val _openFile = kotlinx.coroutines.flow.MutableSharedFlow<OpenedFile>(extraBufferCapacity = 1)
+    val openFile: kotlinx.coroutines.flow.SharedFlow<OpenedFile> = _openFile
+
+    /** No app opens [file]: the user picked where to save a copy of it. */
+    fun saveCopy(file: OpenedFile, target: android.net.Uri) {
+        viewModelScope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching {
+                    appContext.contentResolver.openOutputStream(target)?.use { out -> file.file.inputStream().use { it.copyTo(out) } }
+                        ?: error("No output")
+                }.isSuccess
+            }
+            _sendError.value = if (ok) "Saved." else "The file couldn't be saved."
+        }
+    }
+
+    fun reportError(message: String) {
+        _sendError.value = message
+    }
+
+    /** Sends any file through the relay's store, with the composer's text as its caption. */
+    fun sendFile(uri: android.net.Uri) {
+        val replyTo = replyingTo.value
+        val caption = draft.trim()
+        if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
+            _sendError.value = "Caption is too long (max ${SendMessageUseCase.MAX_MESSAGE_LENGTH} characters)."
+            return
+        }
+        viewModelScope.launch {
+            val blocked = whyNotSendable()
+            if (blocked != null) {
+                _sendError.value = blocked
+                return@launch
+            }
+            if (caption.isNotEmpty() && draft.trim() == caption) draft = ""
+            if (replyTo != null && replyingTo.value?.id == replyTo.id) cancelReply()
+            _sendError.value = null
+            try {
+                messageRepository.sendFile(conversationId, contactId, uri, caption, replyTo)
+            } catch (e: com.sotto.app.data.media.FileTooLargeException) {
+                _sendError.value = "Files can be up to ${e.maxBytes / (1024 * 1024)} MB."
+            } catch (e: com.sotto.app.data.remote.ApiHttpException) {
+                _sendError.value = when (e.message) {
+                    "attachments_unavailable" -> "This relay doesn't take files."
+                    "attachment_monthly_limit" -> "You've sent as much as this relay allows this month."
+                    "attachment_store_full", "attachment_relay_monthly_limit" -> "The relay's file storage is full for now."
+                    "attachment_too_large" -> "That file is too large for this relay."
+                    else -> "Failed to send file"
+                }
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "Sending file failed: ${e.message}")
+                _sendError.value = "Failed to send file"
+            }
+        }
+    }
+
+    /** A file's bubble was tapped: download it, or open it once it's on this phone. */
+    fun onFileTap(message: Message) {
+        val media = message.media ?: return
+        viewModelScope.launch {
+            try {
+                if (media.fileState == com.sotto.app.domain.model.FileState.REMOTE) {
+                    messageRepository.downloadFile(message.id)
+                    return@launch
+                }
+                val file = messageRepository.decryptFileForOpening(message.id)
+                if (file == null) {
+                    _sendError.value = "This file isn't on this phone."
+                    return@launch
+                }
+                _openFile.tryEmit(OpenedFile(file, media.mime.ifBlank { "application/octet-stream" }))
+            } catch (e: Exception) {
+                Log.w("ChatViewModel", "File failed: ${e.message}")
+                _sendError.value = "The file couldn't be downloaded. Try again."
+            }
+        }
+    }
+
     /** The decrypted voice message or photo of [messageId], for playing or showing it. */
     suspend fun loadMedia(messageId: String): ByteArray? = messageRepository.loadMedia(messageId)
 

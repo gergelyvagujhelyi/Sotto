@@ -27,7 +27,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.BrokenImage
+import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
@@ -90,6 +96,10 @@ class ChatMedia(
     val load: suspend (messageId: String) -> ByteArray?,
     val player: VoicePlayer,
     val openPhoto: (messageId: String) -> Unit,
+    /** A file's bubble was tapped: download it, or open it once it's here. */
+    val onFile: (Message) -> Unit = {},
+    /** File transfers under way, by message id (0..1). */
+    val fileProgress: State<Map<String, Float>> = androidx.compose.runtime.mutableStateOf(emptyMap()),
 )
 
 val LocalChatMedia = staticCompositionLocalOf<ChatMedia?> { null }
@@ -106,8 +116,87 @@ internal fun BubbleMedia(message: Message, contentColor: Color) {
     when (media.kind) {
         MediaKind.VOICE -> VoiceMessage(message, contentColor)
         MediaKind.PHOTO -> PhotoThumb(message)
+        MediaKind.FILE -> FileCard(message, contentColor)
     }
 }
+
+/** "1.4 MB" */
+internal fun byteSize(bytes: Long): String = when {
+    bytes < 1024 -> "$bytes B"
+    bytes < 1024 * 1024 -> "%.0f KB".format(bytes / 1024.0)
+    bytes < 1024L * 1024 * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024))
+    else -> "%.2f GB".format(bytes / (1024.0 * 1024 * 1024))
+}
+
+@Composable
+private fun FileCard(message: Message, contentColor: Color) {
+    val host = LocalChatMedia.current ?: return
+    val media = message.media ?: return
+    val progress = host.fileProgress.value[message.id]
+    val state = media.fileState
+    val icon = when {
+        media.mime.startsWith("video/") -> Icons.Rounded.Movie
+        media.mime.startsWith("audio/") -> Icons.Rounded.AudioFile
+        media.mime == "application/pdf" -> Icons.Rounded.PictureAsPdf
+        media.mime.startsWith("image/") -> Icons.Rounded.Image
+        else -> Icons.Rounded.Description
+    }
+    val status = when {
+        progress != null && state == com.sotto.app.domain.model.FileState.UPLOADING -> "Uploading ${(progress * 100).toInt()}%"
+        progress != null -> "Downloading ${(progress * 100).toInt()}%"
+        state == com.sotto.app.domain.model.FileState.UPLOADING -> if (message.state == com.sotto.app.domain.model.MessageState.FAILED) "Not uploaded" else "Encrypting…"
+        state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
+        state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
+        else -> "Tap to open"
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .width(FileWidth)
+            .clip(RoundedCornerShape(14.dp))
+            .background(contentColor.copy(alpha = 0.08f))
+            .clickable(enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE, onClickLabel = status) {
+                host.onFile(message)
+            }
+            .padding(10.dp),
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(contentColor.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (progress != null) {
+                CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(28.dp), strokeWidth = 3.dp, color = contentColor)
+            } else {
+                Icon(
+                    if (state == com.sotto.app.domain.model.FileState.REMOTE) Icons.Rounded.Download else icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                media.name.ifBlank { "File" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = contentColor,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            Text(
+                "${byteSize(media.size)} · $status",
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.75f),
+            )
+        }
+    }
+}
+
+private val FileWidth = 252.dp
 
 /** mm:ss */
 internal fun clock(ms: Long): String {
@@ -339,15 +428,36 @@ fun PhotoViewer(messageId: String, onDismiss: () -> Unit) {
     }
 }
 
-/** The composer's photo button. */
+/** The composer's attach button: a photo (inline) or any file (through the relay's store). */
 @Composable
-internal fun AttachButton(enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(48.dp)) {
-        Icon(
-            Icons.Rounded.Image,
-            contentDescription = "Send a photo",
-            tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-        )
+internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onFile: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.size(48.dp)) {
+            Icon(
+                Icons.Rounded.AttachFile,
+                contentDescription = "Attach a photo or file",
+                tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            )
+        }
+        androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Photo") },
+                leadingIcon = { Icon(Icons.Rounded.Image, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onPhoto()
+                },
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("File or video") },
+                leadingIcon = { Icon(Icons.Rounded.Description, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onFile()
+                },
+            )
+        }
     }
 }
 

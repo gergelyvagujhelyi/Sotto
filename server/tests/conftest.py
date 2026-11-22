@@ -51,6 +51,8 @@ async def setup_db():
     receipts.limiter.reset()
     from app.routers import invites
     invites.limiter.reset()
+    from app.routers import attachments
+    attachments.limiter.reset()
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

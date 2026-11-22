@@ -146,6 +146,8 @@ class HealthResponse(BaseModel):
     service: str = "sotto-relay"
     # ...and whether a new account here needs an invite.
     invite_required: bool = False
+    # Largest encrypted attachment it takes through its object store; 0: none (ADR-29).
+    attachment_max_bytes: int = 0
     # No download link: phones hear whether their update is out from the Sotto-App-Ready
     # header, and update through SourceDrop; the invite page links to the repository.
 

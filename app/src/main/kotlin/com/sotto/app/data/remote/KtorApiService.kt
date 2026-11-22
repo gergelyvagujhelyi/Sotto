@@ -238,6 +238,48 @@ class KtorApiService @Inject constructor(
         check(response.status.isSuccess()) { "ACK failed: ${response.status}" }
     }
 
+    override suspend fun reserveAttachment(
+        request: com.sotto.app.data.remote.dto.AttachmentReserveRequest,
+    ): com.sotto.app.data.remote.dto.AttachmentReserveResponse {
+        val response: HttpResponse = client.post("/v1/attachments") {
+            header("Authorization", "Bearer ${authToken()}")
+            setBody(request)
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiHttpException(response.status.value, errorDetail(response) ?: "Attachment refused: ${response.status}")
+        }
+        return response.body()
+    }
+
+    override suspend fun completeAttachment(id: String) {
+        val response: HttpResponse = client.post("/v1/attachments/$id/complete") {
+            header("Authorization", "Bearer ${authToken()}")
+        }
+        if (!response.status.isSuccess()) {
+            throw ApiHttpException(response.status.value, errorDetail(response) ?: "Attachment not confirmed: ${response.status}")
+        }
+    }
+
+    override suspend fun attachmentDownload(id: String): com.sotto.app.data.remote.dto.AttachmentDownloadResponse? {
+        val response: HttpResponse = client.get("/v1/attachments/$id") {
+            header("Authorization", "Bearer ${authToken()}")
+        }
+        if (response.status.value == 404) return null
+        if (!response.status.isSuccess()) {
+            throw ApiHttpException(response.status.value, errorDetail(response) ?: "Attachment unavailable: ${response.status}")
+        }
+        return response.body()
+    }
+
+    override suspend fun deleteAttachment(id: String) {
+        val response: HttpResponse = client.delete("/v1/attachments/$id") {
+            header("Authorization", "Bearer ${authToken()}")
+        }
+        if (!response.status.isSuccess() && response.status.value != 404) {
+            throw ApiHttpException(response.status.value, "Attachment not deleted: ${response.status}")
+        }
+    }
+
     override suspend fun registerPushToken(request: PushTokenRequest) {
         val response: HttpResponse = client.post("/v1/push/register") {
             header("Authorization", "Bearer ${authToken()}")

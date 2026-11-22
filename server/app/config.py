@@ -48,6 +48,21 @@ TURN_CREDENTIAL_TTL: int = int(os.getenv("TURN_CREDENTIAL_TTL", "3600"))
 PENDING_MESSAGE_TTL_DAYS: int = int(os.getenv("PENDING_MESSAGE_TTL_DAYS", "30"))
 # Sign-up by invitation: a new account needs a one-time code a member created
 # (POST /v1/invites). The very first account on a fresh relay needs none.
+# Encrypted attachments (ADR-29): an S3-compatible bucket the phones upload to and download
+# from with URLs the relay signs; the relay never carries file bytes. Unset: no attachments.
+S3_ENDPOINT: str = os.getenv("S3_ENDPOINT", "")
+S3_BUCKET: str = os.getenv("S3_BUCKET", "")
+S3_ACCESS_KEY_ID: str = os.getenv("S3_ACCESS_KEY_ID", "")
+S3_SECRET: str = os.getenv("S3_SECRET", "")
+S3_REGION: str = os.getenv("S3_REGION", "auto")
+# Largest file (its ciphertext), what one account may upload in 30 days, and what the
+# bucket may hold at once: kept under Tigris's free 5 GB and 10,000 uploads a month.
+ATTACHMENT_MAX_BYTES: int = int(os.getenv("ATTACHMENT_MAX_BYTES", str(100 * 1024 * 1024)))
+ATTACHMENT_MONTHLY_BYTES_PER_USER: int = int(os.getenv("ATTACHMENT_MONTHLY_BYTES_PER_USER", str(2 * 1024 ** 3)))
+ATTACHMENT_STORE_LIMIT_BYTES: int = int(os.getenv("ATTACHMENT_STORE_LIMIT_BYTES", str(4 * 1024 ** 3)))
+ATTACHMENT_MONTHLY_UPLOADS: int = int(os.getenv("ATTACHMENT_MONTHLY_UPLOADS", "5000"))
+# Uncollected files go after this long (the bucket's own expiry rule is the backstop).
+ATTACHMENT_TTL_DAYS: int = int(os.getenv("ATTACHMENT_TTL_DAYS", "30"))
 INVITE_ONLY: bool = os.getenv("INVITE_ONLY", "true").lower() == "true"
 INVITE_TTL_DAYS: int = int(os.getenv("INVITE_TTL_DAYS", "7"))
 MAX_OPEN_INVITES_PER_MEMBER: int = int(os.getenv("MAX_OPEN_INVITES_PER_MEMBER", "5"))
