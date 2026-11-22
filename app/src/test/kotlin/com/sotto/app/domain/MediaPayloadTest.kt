@@ -116,4 +116,24 @@ class MediaPayloadTest {
         sealed[sealed.size - 1] = (sealed[sealed.size - 1].toInt() xor 1).toByte()
         assertThrows(Exception::class.java) { MediaCrypto.open(key, sealed, aad) }
     }
+
+    @Test
+    fun `an HD photo names its full-size copy, and a bad one is ignored`() {
+        val key = MediaCrypto.newKey()
+        val hd = MediaPayload.Hd("0123456789abcdef0123456789abcdef", key, 3_400_000)
+        val d = MediaPayload.decode(MediaPayload.encode(photo, byteArrayOf(1, 2, 3), "", hd = hd))!!
+        assertEquals(hd, d.hd)
+        assertTrue(d.media.hd)
+        assertEquals(3_400_000L, d.media.size)
+
+        val data = Base64.getEncoder().encodeToString(byteArrayOf(1))
+        val k = Base64.getEncoder().encodeToString(key)
+        fun with(hdJson: String, kind: String = "photo", mime: String = "image/jpeg") =
+            MediaPayload.decode("\u0001sotto/media/v1:{\"kind\":\"$kind\",\"mime\":\"$mime\",\"data\":\"$data\",\"hd\":$hdJson}")!!
+        assertNull(with("{\"id\":\"../x\",\"key\":\"$k\",\"size\":5}").hd)
+        assertNull(with("{\"id\":\"0123456789abcdef0123456789abcdef\",\"key\":\"AAAA\",\"size\":5}").hd)
+        assertNull(with("{\"id\":\"0123456789abcdef0123456789abcdef\",\"key\":\"$k\",\"size\":0}").hd)
+        // Only photos have an HD copy.
+        assertNull(with("{\"id\":\"0123456789abcdef0123456789abcdef\",\"key\":\"$k\",\"size\":5}", "voice", "audio/ogg").hd)
+    }
 }

@@ -46,6 +46,8 @@ data class MessageEntity(
     val mediaSize: Long = 0,
     val mediaState: String? = null,
     val attachmentId: String? = null,
+    /** An HD photo's key: its full-size copy goes through the store like a file (attachmentId, mediaSize, mediaState). */
+    val hdKey: ByteArray? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

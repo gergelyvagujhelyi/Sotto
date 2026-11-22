@@ -357,6 +357,7 @@ fun ChatScreen(
         onReact = viewModel::react,
         onSendVoice = viewModel::sendVoice,
         onSendPhoto = viewModel::sendPhoto,
+        loadHd = viewModel::loadHd,
         onSendFile = viewModel::sendFile,
         onFileTap = viewModel::onFileTap,
         fileProgress = fileProgress,
@@ -402,7 +403,8 @@ fun ChatContent(
     onReact: (Message, String) -> Unit = { _, _ -> },
     /** Send a recorded voice message, or the photo picked. */
     onSendVoice: (com.sotto.app.media.VoiceRecording) -> Unit = {},
-    onSendPhoto: (android.net.Uri) -> Unit = {},
+    onSendPhoto: (android.net.Uri, Boolean) -> Unit = { _, _ -> },
+    loadHd: suspend (String) -> ByteArray? = { null },
     onSendFile: (android.net.Uri) -> Unit = {},
     /** A file's bubble was tapped. */
     onFileTap: (Message) -> Unit = {},
@@ -417,9 +419,15 @@ fun ChatContent(
     val progressState = rememberUpdatedState(fileProgress)
     val fileTap = rememberUpdatedState(onFileTap)
     val chatMedia = remember(loadMedia) {
-        ChatMedia(loadMedia, voicePlayer, openPhoto = { viewingPhoto = it }, onFile = { fileTap.value(it) }, fileProgress = progressState)
+        ChatMedia(
+            loadMedia, voicePlayer, openPhoto = { viewingPhoto = it }, onFile = { fileTap.value(it) },
+            fileProgress = progressState, loadHd = loadHd,
+        )
     }
-    viewingPhoto?.let { id -> ProvideChatMedia(chatMedia) { PhotoViewer(id, onDismiss = { viewingPhoto = null }) } }
+    viewingPhoto?.let { id ->
+        val shown = messages.firstOrNull { it.id == id }
+        ProvideChatMedia(chatMedia) { PhotoViewer(id, shown, onDismiss = { viewingPhoto = null }) }
+    }
 
     // Voice messages: hold the mic to record (see MicButton).
     val recorder = remember { com.sotto.app.media.VoiceRecorder(context.applicationContext) }
@@ -485,8 +493,10 @@ fun ChatContent(
             voicePlayer.stop()
         }
     }
+    // Whether the photo being picked goes in HD (the picker can't say).
+    var pickingHd by rememberSaveable { mutableStateOf(false) }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) onSendPhoto(uri)
+        if (uri != null) onSendPhoto(uri, pickingHd)
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onSendFile(uri)
@@ -765,7 +775,14 @@ fun ChatContent(
                         recordElapsedMs = recordElapsed,
                         recordLevel = recordLevel,
                         recordSlide = recordSlide,
+                        onAttachHd = {
+                            pickingHd = true
+                            photoPicker.launch(
+                                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                            )
+                        },
                         onAttach = {
+                            pickingHd = false
                             photoPicker.launch(
                                 androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
@@ -1319,6 +1336,7 @@ private fun Composer(
     recordSlide: Offset = Offset.Zero,
     onAttach: () -> Unit = {},
     onAttachFile: () -> Unit = {},
+    onAttachHd: () -> Unit = {},
     onRecordPress: () -> Boolean = { false },
     onRecordRelease: () -> Unit = {},
     onRecordCancel: () -> Unit = {},
@@ -1332,7 +1350,7 @@ private fun Composer(
         verticalAlignment = Alignment.Bottom,
     ) {
         if (recordState == RecordState.IDLE) {
-            AttachButton(enabled = enabled, onPhoto = onAttach, onFile = onAttachFile)
+            AttachButton(enabled = enabled, onPhoto = onAttach, onHdPhoto = onAttachHd, onFile = onAttachFile)
             AuroraTextField(
                 value = text,
                 onValueChange = onTextChange,

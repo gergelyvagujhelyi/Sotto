@@ -37,6 +37,8 @@ data class MessageMedia(
     val name: String = "",
     val size: Long = 0,
     val fileState: FileState? = null,
+    /** A photo that also has a full-size copy in the store ([size], [fileState] are that copy's). */
+    val hd: Boolean = false,
 )
 
 /** Where a file (MediaKind.FILE) is: on its way up, waiting to be fetched, here, or gone. */
@@ -95,18 +97,25 @@ object MediaPayload {
 
     data class Reply(val to: String, val quote: String, val mine: Boolean)
 
+    /** A photo's full-size copy in the relay's store: its id there, its key, and its size in bytes. */
+    class Hd(val id: String, val key: ByteArray, val size: Long) {
+        override fun equals(other: Any?) = other is Hd && id == other.id && key.contentEquals(other.key) && size == other.size
+        override fun hashCode() = id.hashCode()
+    }
+
     data class Decoded(
         val media: MessageMedia,
         val bytes: ByteArray,
         val caption: String,
         val reply: Reply?,
+        val hd: Hd? = null,
     ) {
         override fun equals(other: Any?) = other is Decoded && media == other.media &&
             bytes.contentEquals(other.bytes) && caption == other.caption && reply == other.reply
         override fun hashCode() = 31 * media.hashCode() + bytes.contentHashCode()
     }
 
-    fun encode(media: MessageMedia, bytes: ByteArray, caption: String, reply: Reply? = null): String {
+    fun encode(media: MessageMedia, bytes: ByteArray, caption: String, reply: Reply? = null, hd: Hd? = null): String {
         require(bytes.size <= MAX_BYTES) { "Media too large: ${bytes.size} bytes" }
         return PREFIX + buildJsonObject {
             put("kind", media.kind.wire)
@@ -120,6 +129,13 @@ object MediaPayload {
                 put("to", reply.to)
                 put("quote", ReplyPayload.quoteOf(reply.quote))
                 put("mine", reply.mine)
+            }
+            if (hd != null) {
+                put("hd", buildJsonObject {
+                    put("id", hd.id)
+                    put("key", Base64.getEncoder().encodeToString(hd.key))
+                    put("size", hd.size)
+                })
             }
         }.toString()
     }
@@ -146,8 +162,17 @@ object MediaPayload {
             val width = (number("w")?.intOrNull ?: 0).coerceIn(0, MAX_DIMENSION)
             val height = (number("h")?.intOrNull ?: 0).coerceIn(0, MAX_DIMENSION)
             val to = string("to")?.takeIf { it.isNotEmpty() && it.length <= ID_MAX }
+            // Only a photo has an HD copy; a malformed one is ignored, the photo still shows.
+            val hd = (obj["hd"] as? JsonObject)?.takeIf { kind == MediaKind.PHOTO }?.let { h ->
+                fun hs(key: String) = (h[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                val id = hs("id")?.takeIf { HD_ID.matches(it) } ?: return@let null
+                val key = hs("key")?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }?.takeIf { it.size == 32 } ?: return@let null
+                val size = (h["size"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull?.takeIf { it in 1..HD_MAX_BYTES } ?: return@let null
+                Hd(id, key, size)
+            }
             Decoded(
-                media = MessageMedia(kind, mime, durationMs, width, height),
+                hd = hd,
+                media = MessageMedia(kind, mime, durationMs, width, height, size = hd?.size ?: 0, hd = hd != null),
                 bytes = bytes,
                 caption = string("caption").orEmpty().take(CAPTION_MAX),
                 reply = to?.let {
@@ -160,6 +185,10 @@ object MediaPayload {
             )
         }.getOrNull()
     }
+
+    private val HD_ID = Regex("^[0-9a-f]{32}$")
+    /** The largest HD photo: a 4096 px JPEG is a few MB. */
+    const val HD_MAX_BYTES = 30L * 1024 * 1024
 
     /** Pixel sizes beyond this are junk (the sender shrinks photos to about 1280). */
     private const val MAX_DIMENSION = 16_384

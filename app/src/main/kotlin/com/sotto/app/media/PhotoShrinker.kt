@@ -23,10 +23,19 @@ class ShrunkPhoto(val bytes: ByteArray, val width: Int, val height: Int)
  */
 object PhotoShrinker {
     const val MAX_SIDE = 1280
+    /** An HD photo's full-size copy: up to 4096 px, at a quality close to the camera's. */
+    const val HD_SIDE = 4096
+    val HD_QUALITIES = intArrayOf(90, 85, 80)
     private val QUALITIES = intArrayOf(82, 72, 62, 52, 42)
 
     /** Null when the file isn't a picture this phone can decode. */
-    fun shrink(context: Context, uri: Uri, maxBytes: Int = MediaPayload.MAX_BYTES): ShrunkPhoto? {
+    fun shrink(
+        context: Context,
+        uri: Uri,
+        maxBytes: Int = MediaPayload.MAX_BYTES,
+        maxSide: Int = MAX_SIDE,
+        qualities: IntArray = QUALITIES,
+    ): ShrunkPhoto? {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         // A bounds-only decode returns no bitmap, just fills in [bounds].
@@ -35,7 +44,7 @@ object PhotoShrinker {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, MAX_SIDE)
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxSide)
         }
         var bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         val orientation = runCatching {
@@ -45,10 +54,10 @@ object PhotoShrinker {
         }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
         bitmap = upright(bitmap, orientation)
 
-        var side = MAX_SIDE
+        var side = maxSide
         while (side >= MIN_SIDE) {
             val scaled = scaleDown(bitmap, side)
-            for (quality in QUALITIES) {
+            for (quality in qualities) {
                 val bytes = ByteArrayOutputStream().use { out ->
                     scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
                     out.toByteArray()

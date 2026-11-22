@@ -299,6 +299,11 @@ class ChatViewModel @Inject constructor(
         val media = message.media ?: return
         viewModelScope.launch {
             try {
+                if (media.kind == com.sotto.app.domain.model.MediaKind.PHOTO) {
+                    // An HD photo's full-size copy: fetch it; the viewer shows it once it's here.
+                    if (media.fileState == com.sotto.app.domain.model.FileState.REMOTE) messageRepository.downloadFile(message.id)
+                    return@launch
+                }
                 if (media.fileState == com.sotto.app.domain.model.FileState.REMOTE) {
                     messageRepository.downloadFile(message.id)
                     return@launch
@@ -319,6 +324,9 @@ class ChatViewModel @Inject constructor(
     /** The decrypted voice message or photo of [messageId], for playing or showing it. */
     suspend fun loadMedia(messageId: String): ByteArray? = messageRepository.loadMedia(messageId)
 
+    /** An HD photo's full-size copy, once it's on this phone. */
+    suspend fun loadHd(messageId: String): ByteArray? = messageRepository.loadHd(messageId)
+
     /** Sends a recorded voice message, replying to the message being replied to, if any. */
     fun sendVoice(recording: com.sotto.app.media.VoiceRecording) {
         val replyTo = replyingTo.value
@@ -338,7 +346,7 @@ class ChatViewModel @Inject constructor(
     }
 
     /** Shrinks the photo at [uri] and sends it, with the composer's text as its caption. */
-    fun sendPhoto(uri: android.net.Uri) {
+    fun sendPhoto(uri: android.net.Uri, hd: Boolean = false) {
         val replyTo = replyingTo.value
         val caption = draft.trim()
         if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
@@ -353,11 +361,27 @@ class ChatViewModel @Inject constructor(
                 _sendError.value = "That picture couldn't be opened."
                 return@launch
             }
+            // HD: also a full-size copy, through the relay's store. Not for a picture that's
+            // no bigger than the normal one anyway.
+            val full = if (hd) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    runCatching {
+                        com.sotto.app.media.PhotoShrinker.shrink(
+                            appContext, uri,
+                            maxBytes = com.sotto.app.domain.model.MediaPayload.HD_MAX_BYTES.toInt(),
+                            maxSide = com.sotto.app.media.PhotoShrinker.HD_SIDE,
+                            qualities = com.sotto.app.media.PhotoShrinker.HD_QUALITIES,
+                        )
+                    }.getOrNull()
+                }?.takeIf { maxOf(it.width, it.height) > maxOf(photo.width, photo.height) }
+            } else {
+                null
+            }
             val sent = sendMediaNow(
                 com.sotto.app.domain.model.MessageMedia(
                     com.sotto.app.domain.model.MediaKind.PHOTO, "image/jpeg", width = photo.width, height = photo.height,
                 ),
-                photo.bytes, caption = caption, replyTo = replyTo,
+                photo.bytes, caption = caption, replyTo = replyTo, hdBytes = full?.bytes,
             )
             // The caption went with it.
             if (sent && caption.isNotEmpty() && draft.trim() == caption) draft = ""
@@ -369,6 +393,7 @@ class ChatViewModel @Inject constructor(
         bytes: ByteArray,
         caption: String,
         replyTo: Message?,
+        hdBytes: ByteArray? = null,
     ): Boolean {
         val blocked = whyNotSendable()
         if (blocked != null) {
@@ -378,8 +403,16 @@ class ChatViewModel @Inject constructor(
         if (replyTo != null && replyingTo.value?.id == replyTo.id) cancelReply()
         _sendError.value = null
         return try {
-            messageRepository.sendMedia(conversationId, contactId, media, bytes, caption, replyTo)
+            messageRepository.sendMedia(conversationId, contactId, media, bytes, caption, replyTo, hdBytes)
             true
+        } catch (e: com.sotto.app.data.remote.ApiHttpException) {
+            Log.w("ChatViewModel", "HD copy refused: ${e.message}")
+            _sendError.value = if (e.status == 404 || e.status == 503) {
+                "This relay doesn't take HD photos. Send it as a normal photo."
+            } else {
+                "The HD copy couldn't be sent. Tap the photo to try again."
+            }
+            false
         } catch (e: Exception) {
             Log.w("ChatViewModel", "Sending media failed: ${e.message}")
             // The message stays in the chat as "Not delivered · Tap to retry" if it got that far.

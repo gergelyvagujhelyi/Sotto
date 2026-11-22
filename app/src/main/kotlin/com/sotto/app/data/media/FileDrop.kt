@@ -92,6 +92,29 @@ class FileDrop @Inject constructor(
         EncryptedFile(key, FileNames.clean(name), mime, size, out.length())
     }
 
+    /** Encrypts [bytes] (an HD photo, say) into the file [name]; returns its key. */
+    suspend fun encryptBytes(bytes: ByteArray, name: String): ByteArray = withContext(Dispatchers.IO) {
+        val key = SegmentedCrypto.newKey()
+        val out = fileFor(name)
+        val tmp = File(out.parentFile, out.name + ".tmp")
+        tmp.outputStream().buffered().use { SegmentedCrypto.encrypt(bytes.inputStream(), it, key) }
+        if (!tmp.renameTo(out)) {
+            tmp.delete()
+            throw IOException("Could not store the file")
+        }
+        key
+    }
+
+    /** The file [name] decrypted into memory (an HD photo); null when it isn't here or doesn't decrypt. */
+    suspend fun decryptToMemory(name: String, key: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
+        if (!hasFile(name)) return@withContext null
+        runCatching {
+            java.io.ByteArrayOutputStream().also { out ->
+                fileFor(name).inputStream().buffered().use { SegmentedCrypto.decrypt(it, out, key) }
+            }.toByteArray()
+        }.getOrNull()
+    }
+
     /** PUTs this message's encrypted file to [url] (presigned, with its size signed). */
     suspend fun upload(messageId: String, url: String) = withContext(Dispatchers.IO) {
         val file = fileFor(messageId)

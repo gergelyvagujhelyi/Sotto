@@ -57,7 +57,7 @@ class MediaStore @Inject constructor(
             // A .tmp is a file being written (an encryption or download under way) until it's old.
             if (file.name.endsWith(".tmp")) {
                 if (file.lastModified() < staleTmp) file.delete()
-            } else if (file.name !in keep) {
+            } else if (file.name.removeSuffix(HD_SUFFIX) !in keep) {
                 file.delete()
             }
         }
@@ -78,9 +78,11 @@ class MediaStore @Inject constructor(
     /** Ties a file to its message, so files can't be swapped between messages unnoticed. */
     private fun aad(messageId: String) = "sotto/media-file/v1:$messageId".toByteArray(Charsets.UTF_8)
 
-    private companion object {
-        const val DIR = "media"
-        val ID = Regex("^[A-Za-z0-9-]{1,64}$")
+    companion object {
+        /** An HD photo's full-size copy sits beside its message's file. */
+        const val HD_SUFFIX = "-hd"
+        private const val DIR = "media"
+        private val ID = Regex("^[A-Za-z0-9-]{1,64}$")
     }
 }
 

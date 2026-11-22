@@ -223,9 +223,25 @@ class MessageRepositoryImpl @Inject constructor(
         bytes: ByteArray,
         caption: String,
         replyTo: Message?,
+        hdBytes: ByteArray?,
     ): Message = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
         require(bytes.isNotEmpty() && bytes.size <= MediaPayload.MAX_BYTES) { "Media too large" }
-        sendMessageInternal(conversationId, recipientId, caption, replyTo, media, bytes)
+        require(hdBytes == null || (media.kind == MediaKind.PHOTO && hdBytes.size <= MediaPayload.HD_MAX_BYTES)) { "Bad HD copy" }
+        sendMessageInternal(conversationId, recipientId, caption, replyTo, media, bytes, hdBytes = hdBytes)
+    }
+
+    /** The name of this row's file in the store: a file's own, or an HD photo's full-size copy. */
+    private fun storeName(entity: MessageEntity): String =
+        if (entity.mediaKind == MediaKind.FILE.wire) entity.id else entity.id + com.sotto.app.data.media.MediaStore.HD_SUFFIX
+
+    /** Whether this row has a file that goes through the relay's store. */
+    private fun usesStore(entity: MessageEntity): Boolean =
+        entity.mediaKind == MediaKind.FILE.wire || (entity.mediaKind == MediaKind.PHOTO.wire && entity.hdKey != null)
+
+    override suspend fun loadHd(messageId: String): ByteArray? {
+        val entity = messageDao.getById(messageId) ?: return null
+        val key = entity.hdKey ?: return null
+        return fileDrop.decryptToMemory(storeName(entity), key)
     }
 
     /**
@@ -254,11 +270,12 @@ class MessageRepositoryImpl @Inject constructor(
     private suspend fun ensureUploaded(entity: MessageEntity): MessageEntity {
         if (entity.attachmentId != null) return entity
         messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.UPLOADING.wire)
-        val size = fileDrop.fileFor(entity.id).length()
+        val name = storeName(entity)
+        val size = fileDrop.fileFor(name).length()
         val reserved = apiService.reserveAttachment(
             com.sotto.app.data.remote.dto.AttachmentReserveRequest(entity.recipientId, size),
         )
-        fileDrop.upload(entity.id, reserved.uploadUrl)
+        fileDrop.upload(name, reserved.uploadUrl)
         apiService.completeAttachment(reserved.id)
         messageDao.setAttachmentId(entity.id, reserved.id)
         messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.SENT.wire)
@@ -267,10 +284,11 @@ class MessageRepositoryImpl @Inject constructor(
 
     override suspend fun downloadFile(messageId: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
         val entity = messageDao.getById(messageId) ?: return@withContext
-        if (entity.mediaKind != MediaKind.FILE.wire || entity.isOutgoing) return@withContext
+        if (!usesStore(entity) || entity.isOutgoing) return@withContext
         val id = entity.attachmentId ?: return@withContext
-        val key = entity.mediaKey ?: return@withContext
-        if (fileDrop.hasFile(messageId)) {
+        val key = (if (entity.mediaKind == MediaKind.FILE.wire) entity.mediaKey else entity.hdKey) ?: return@withContext
+        val name = storeName(entity)
+        if (fileDrop.hasFile(name)) {
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
             return@withContext
         }
@@ -283,7 +301,7 @@ class MessageRepositoryImpl @Inject constructor(
         // The size the sender declared (inside the encryption) must be the one stored.
         if (download.size != expected) throw java.io.IOException("The file on the relay isn't the one sent")
         try {
-            fileDrop.download(messageId, download.downloadUrl, key, expected)
+            fileDrop.download(name, download.downloadUrl, key, expected)
         } catch (e: com.sotto.app.data.media.FileGoneException) {
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.GONE.wire)
             return@withContext
@@ -313,12 +331,14 @@ class MessageRepositoryImpl @Inject constructor(
         mediaBytes: ByteArray? = null,
         file: com.sotto.app.data.media.EncryptedFile? = null,
         fixedId: String? = null,
+        hdBytes: ByteArray? = null,
     ): Message {
         val messageId = fixedId ?: UUID.randomUUID().toString()
         val now = System.currentTimeMillis()
         val senderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
         // The media is on disk before its row exists, so the row never points at nothing.
         val mediaKey = if (media != null && mediaBytes != null) mediaStore.save(messageId, mediaBytes) else null
+        val hdKey = hdBytes?.let { fileDrop.encryptBytes(it, messageId + com.sotto.app.data.media.MediaStore.HD_SUFFIX) }
 
         // Store locally as SENDING before encryption so the message is never
         // lost even if session establishment or encryption fails.
@@ -345,18 +365,20 @@ class MessageRepositoryImpl @Inject constructor(
             mediaWidth = media?.width ?: 0,
             mediaHeight = media?.height ?: 0,
             mediaName = file?.name,
-            mediaSize = file?.size ?: 0,
-            mediaState = file?.let { com.sotto.app.domain.model.FileState.UPLOADING.wire },
+            mediaSize = file?.size ?: hdBytes?.size?.toLong() ?: 0,
+            mediaState = if (file != null || hdKey != null) com.sotto.app.domain.model.FileState.UPLOADING.wire else null,
+            hdKey = hdKey,
         )
         try {
             messageDao.insert(entity)
         } catch (e: Exception) {
             if (mediaKey != null) mediaStore.delete(messageId)
+            if (hdKey != null) mediaStore.delete(messageId + com.sotto.app.data.media.MediaStore.HD_SUFFIX)
             throw e
         }
 
         val envelope = try {
-            val ready = if (file != null) ensureUploaded(entity) else entity
+            val ready = if (usesStore(entity)) ensureUploaded(entity) else entity
             encryptFor(recipientId, wirePayload(ready, senderId).toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
@@ -479,7 +501,7 @@ class MessageRepositoryImpl @Inject constructor(
         try {
             val retrySenderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
             // A file whose upload didn't finish goes up again first.
-            val ready = if (entity.mediaKind == MediaKind.FILE.wire) ensureUploaded(entity) else entity
+            val ready = if (usesStore(entity)) ensureUploaded(entity) else entity
             val envelope = encryptFor(entity.recipientId, wirePayload(ready, retrySenderId).toByteArray(Charsets.UTF_8))
 
             val retrySigPayload = buildMessageSigPayload(retrySenderId, entity.recipientId, envelope.nonce, envelope.ciphertext)
@@ -530,7 +552,11 @@ class MessageRepositoryImpl @Inject constructor(
             val key = entity.mediaKey ?: throw IllegalStateException("Media without a key")
             val bytes = mediaStore.load(entity.id, key) ?: throw IllegalStateException("Media file missing")
             val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
-            return MediaPayload.encode(media, bytes, entity.plaintext, reply)
+            val hd = entity.hdKey?.let { key ->
+                val id = entity.attachmentId ?: throw IllegalStateException("HD copy not uploaded")
+                MediaPayload.Hd(id, key, entity.mediaSize)
+            }
+            return MediaPayload.encode(media.copy(size = 0, hd = false), bytes, entity.plaintext, reply, hd)
         }
         to ?: return entity.plaintext
         return ReplyPayload.encode(entity.plaintext, to, entity.replyQuote.orEmpty(), mine = entity.replyToOwn)
@@ -895,9 +921,10 @@ class MessageRepositoryImpl @Inject constructor(
             mediaWidth = media?.media?.width ?: 0,
             mediaHeight = media?.media?.height ?: 0,
             mediaName = file?.name,
-            mediaSize = file?.size ?: 0,
-            mediaState = file?.let { com.sotto.app.domain.model.FileState.REMOTE.wire },
-            attachmentId = file?.id,
+            mediaSize = file?.size ?: media?.hd?.size ?: 0,
+            mediaState = if (file != null || media?.hd != null) com.sotto.app.domain.model.FileState.REMOTE.wire else null,
+            attachmentId = file?.id ?: media?.hd?.id,
+            hdKey = media?.hd?.key,
         )
         messageDao.insert(entity)
         receivedIds.add(dto.messageId)
@@ -1346,6 +1373,7 @@ internal fun MessageEntity.media(): MessageMedia? {
     return MessageMedia(
         kind, mediaMime.orEmpty(), mediaDurationMs, mediaWidth, mediaHeight,
         name = mediaName.orEmpty(), size = mediaSize, fileState = com.sotto.app.domain.model.FileState.fromWire(mediaState),
+        hd = hdKey != null,
     )
 }
 

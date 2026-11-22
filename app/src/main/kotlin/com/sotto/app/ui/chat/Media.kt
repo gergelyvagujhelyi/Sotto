@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.AudioFile
 import androidx.compose.material.icons.rounded.BrokenImage
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Hd
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.PictureAsPdf
 import androidx.compose.material.icons.rounded.Delete
@@ -100,6 +101,8 @@ class ChatMedia(
     val onFile: (Message) -> Unit = {},
     /** File transfers under way, by message id (0..1). */
     val fileProgress: State<Map<String, Float>> = androidx.compose.runtime.mutableStateOf(emptyMap()),
+    /** An HD photo's full-size copy, once it's on this phone. */
+    val loadHd: suspend (messageId: String) -> ByteArray? = { null },
 )
 
 val LocalChatMedia = staticCompositionLocalOf<ChatMedia?> { null }
@@ -324,15 +327,15 @@ private fun decode(bytes: ByteArray, maxSide: Int): ImageBitmap? {
 }
 
 @Composable
-private fun rememberPhoto(messageId: String, maxSide: Int): State<ImageBitmap?> {
+private fun rememberPhoto(messageId: String, maxSide: Int, hd: Boolean = false): State<ImageBitmap?> {
     val host = LocalChatMedia.current
-    val key = "$messageId@$maxSide"
+    val key = "$messageId@$maxSide${if (hd) "-hd" else ""}"
     return produceState(PhotoCache.get(key), key) {
         if (value != null || host == null) return@produceState
         value = withContext(Dispatchers.Default) {
-            host.load(messageId)?.let { decode(it, maxSide) }
+            (if (hd) host.loadHd(messageId) else host.load(messageId))?.let { decode(it, maxSide) }
         }?.also { PhotoCache.put(key, it) }
-        if (value == null) failedPhotos.add(messageId)
+        if (value == null && !hd) failedPhotos.add(messageId)
     }
 }
 
@@ -369,14 +372,34 @@ private fun PhotoThumb(message: Message) {
                 modifier = Modifier.size(32.dp),
             )
         }
+        if (media.hd) {
+            Text(
+                "HD",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .semantics { contentDescription = "HD photo" },
+            )
+        }
     }
 }
 
 /** A photo on its own, full screen: pinch to zoom, drag to move, Back or ✕ to close. */
 @Composable
-fun PhotoViewer(messageId: String, onDismiss: () -> Unit) {
+fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
+    val host = LocalChatMedia.current
+    val media = message?.media
+    // An HD photo's full-size copy is shown once it's on this phone; until then the normal one.
+    val hdHere = media?.hd == true && (message.isOutgoing || media.fileState == com.sotto.app.domain.model.FileState.READY)
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        val photo by rememberPhoto(messageId, maxSide = 2048)
+        val normal by rememberPhoto(messageId, maxSide = 2048)
+        val full by rememberPhoto(messageId, maxSide = 4096, hd = hdHere)
+        val photo = if (hdHere) full ?: normal else normal
         var scale by remember { mutableFloatStateOf(1f) }
         var offsetX by remember { mutableFloatStateOf(0f) }
         var offsetY by remember { mutableFloatStateOf(0f) }
@@ -424,13 +447,33 @@ fun PhotoViewer(messageId: String, onDismiss: () -> Unit) {
             ) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Close photo", tint = Color.White)
             }
+            if (message != null && media?.hd == true && !hdHere) {
+                val progress = host?.fileProgress?.value?.get(messageId + "-hd")
+                val gone = media.fileState == com.sotto.app.domain.model.FileState.GONE
+                Text(
+                    text = when {
+                        progress != null -> "Downloading HD ${(progress * 100).toInt()}%"
+                        gone -> "The HD copy is no longer available"
+                        else -> "Download HD · ${byteSize(media.size)}"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 48.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White.copy(alpha = 0.18f))
+                        .clickable(enabled = progress == null && !gone) { host?.onFile?.invoke(message) }
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                )
+            }
         }
     }
 }
 
 /** The composer's attach button: a photo (inline) or any file (through the relay's store). */
 @Composable
-internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onFile: () -> Unit) {
+internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onHdPhoto: () -> Unit, onFile: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.size(48.dp)) {
@@ -447,6 +490,14 @@ internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onFile: () -> U
                 onClick = {
                     open = false
                     onPhoto()
+                },
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("HD photo") },
+                leadingIcon = { Icon(Icons.Rounded.Hd, contentDescription = null) },
+                onClick = {
+                    open = false
+                    onHdPhoto()
                 },
             )
             androidx.compose.material3.DropdownMenuItem(

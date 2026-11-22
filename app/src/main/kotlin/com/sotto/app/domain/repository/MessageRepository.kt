@@ -16,7 +16,13 @@ interface MessageRepository {
         bytes: ByteArray,
         caption: String = "",
         replyTo: Message? = null,
+        /** A photo's full-size copy, sent through the relay's store as its HD version. */
+        hdBytes: ByteArray? = null,
     ): Message
+
+    /** An HD photo's full-size copy, decrypted into memory; null until it's on this phone. */
+    suspend fun loadHd(messageId: String): ByteArray? = null
+
     /**
      * React to [message] with [emoji] (null takes the reaction back), and tell its chat's
      * contact. Shown at once; undone if it can't be sent.
