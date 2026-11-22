@@ -27,8 +27,11 @@ object ReactionPayload {
     /** The longest emoji (a family, a flag with its tags) is well under this many chars. */
     const val EMOJI_MAX = 32
 
+    /** What double-tapping a message reacts with. */
+    const val HEART = "❤️"
+
     /** The quick choices, in WhatsApp's order. */
-    val QUICK = listOf("👍", "❤️", "😂", "😮", "😢", "🙏")
+    val QUICK = listOf("👍", HEART, "😂", "😮", "😢", "🙏")
 
     /** Behind "+": the quick ones and more. */
     val MORE = listOf(
