@@ -4,6 +4,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.7 — 2026-11-23
+
 Everyone needs this version: 0.7.6 and older show a voice message, photo or file as a line of raw text.
 
 - **Voice messages** — Hold the microphone (where Send is while the message box is empty) to record, and let go to send. Slide left to cancel, or slide up to lock and keep recording hands-free, then send with the big button or throw it away with the bin. Up to a minute. A voice message plays straight from the chat, one at a time.
