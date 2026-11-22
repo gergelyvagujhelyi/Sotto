@@ -27,6 +27,7 @@ bouncycastle = "1.79"
 webrtc = "144.7559.01"
 zxing = "3.5.3"
 camerax = "1.4.2"
+exifinterface = "1.3.7"
 
 [libraries]
 # AndroidX Core
@@ -107,6 +108,9 @@ zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" 
 androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+
+# Photo orientation (it came only through CameraX before)
+androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }

@@ -4,7 +4,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.media.ExifInterface
+import androidx.core.graphics.scale
+import androidx.exifinterface.media.ExifInterface
 import android.net.Uri
 import com.sotto.app.domain.model.MediaPayload
 import java.io.ByteArrayOutputStream
@@ -78,7 +79,7 @@ object PhotoShrinker {
         val long = max(bitmap.width, bitmap.height)
         if (long <= side) return bitmap
         val f = side.toFloat() / long
-        return Bitmap.createScaledBitmap(bitmap, (bitmap.width * f).roundToInt().coerceAtLeast(1), (bitmap.height * f).roundToInt().coerceAtLeast(1), true)
+        return bitmap.scale((bitmap.width * f).roundToInt().coerceAtLeast(1), (bitmap.height * f).roundToInt().coerceAtLeast(1))
     }
 
     private fun upright(bitmap: Bitmap, orientation: Int): Bitmap {
