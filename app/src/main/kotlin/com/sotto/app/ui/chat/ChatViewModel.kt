@@ -277,12 +277,15 @@ class ChatViewModel @Inject constructor(
             } catch (e: com.sotto.app.data.media.FileTooLargeException) {
                 _sendError.value = "Files can be up to ${e.maxBytes / (1024 * 1024)} MB."
             } catch (e: com.sotto.app.data.remote.ApiHttpException) {
-                _sendError.value = when (e.message) {
-                    "attachments_unavailable" -> "This relay doesn't take files."
+                _sendError.value = when {
+                    // An older relay has no such endpoint (404); one without storage says so (503).
+                    e.status == 404 || e.status == 503 -> "This relay doesn't take files."
+                    else -> when (e.message) {
                     "attachment_monthly_limit" -> "You've sent as much as this relay allows this month."
                     "attachment_store_full", "attachment_relay_monthly_limit" -> "The relay's file storage is full for now."
                     "attachment_too_large" -> "That file is too large for this relay."
                     else -> "Failed to send file"
+                    }
                 }
             } catch (e: Exception) {
                 Log.w("ChatViewModel", "Sending file failed: ${e.message}")
