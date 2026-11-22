@@ -1,6 +1,35 @@
 # Attachments: research notes (deferred)
 
-**Status:** deferred on 2026-11-19, after 0.5.13. Nothing here is implemented. These notes record what was found so the work can restart without repeating the research. The decision itself is ADR-19 in [ARCHITECTURE.md](../ARCHITECTURE.md).
+**Status:** deferred on 2026-11-19, after 0.5.13; restarted on 2026-11-23 with the plan below (ADR-29 in [ARCHITECTURE.md](../ARCHITECTURE.md)). The rest of these notes are the original research, kept so it isn't repeated. ADR-19 still holds: no file bytes through the GCP relay.
+
+## The plan (2026-11-23)
+
+Three paths, chosen by size, none of which puts file bytes through the relay's Premium-tier egress except the small inline ones:
+
+| What | Path | Relay carries | Cost |
+|---|---|---|---|
+| Voice messages (up to about a minute) and photos shrunk to about 1280 px | Inline, inside the ordinary end-to-end encrypted message (option 3 below) | The message, at most about 190 KB | Under 1% of the free gigabyte at normal use |
+| Larger files and videos | An encrypted drop in Tigris object storage | A small descriptor message and short-lived signed URLs | 0: Tigris has free egress, and an account without a card stops at the free tier instead of billing |
+| Larger files, later | Directly phone to phone over a WebRTC data channel that gets no TURN credentials, with the drop as fallback | A descriptor and the connection signals | 0 |
+
+### Inline media
+
+- **Payload.** `"\u0001sotto/media/v1:" + JSON` with `kind` (`voice` or `photo`), `mime`, the media as base64, a caption, and for voice its length, for photos width and height. It may also carry a reply (`to`, `quote`, `mine`, as in `ReplyPayload`). Like replies and reactions it is ratchet-encrypted and signed, so the relay can't tell it from text, apart from its size.
+- **Size.** The relay accepts 262,144 base64 characters per message; that leaves about 140 KB of media. Voice is Opus at 16 kbit/s (Android 10+) or HE-AAC (older), at most 60 s. Photos are decoded at most 1280 px on the long side and re-encoded as JPEG until they fit; re-encoding drops EXIF, so no location leaves the phone.
+- **On the phone.** The media is kept out of the database row: it goes to `files/media/<message id>`, encrypted with AES-GCM under a random key stored in the (SQLCipher) row. Playing and showing decrypt into memory only. Files whose message is gone (deleted, disappeared, chat cleared, history limit) are swept.
+- **Older apps.** 0.7.6 and older show the payload as raw text, as with replies (ADR-27). Everyone updates together. New apps show any `\u0001sotto/…` payload they don't know as "Update Sotto to see this message", so the next format change is gentler.
+
+### Encrypted drop (Tigris)
+
+- **Bucket.** `sotto-drop-…` in Tigris, single region `fra`, private, Standard tier, a 30-day expiry rule, soft delete off. The relay's key has Read-write on that bucket only, with "default permissions" off (it can't create buckets, keys or policies).
+- **Relay.** It never touches file bytes. `POST /v1/attachments` reserves an upload for a recipient and size, checks the sender's monthly allowance in Postgres and returns a presigned PUT whose signed `content-length` Tigris enforces (checked on 2026-11-22: a bigger body gets 403). `POST /v1/attachments/{id}/complete` checks the stored size with a HEAD. The recipient gets a presigned GET from `GET /v1/attachments/{id}`, and `DELETE` removes the object once it has the file. Settings come from `S3_*` in `.env` (forwarded by `docker-compose.yml`); without them the relay offers no drop.
+- **File format.** The phone encrypts in 64 KiB segments with AES-256-GCM: a random 7-byte nonce prefix, a 4-byte segment counter and a last-segment flag make each nonce, so reordering and truncation are detected (the construction Tink documents for streaming AEAD). The key is random per file and travels inside the ratchet-encrypted descriptor (`"\u0001sotto/file/v1:"`), so the file is as post-quantum protected as the message. The store sees IP addresses, sizes and timing, never content or keys.
+- **Checked on 2026-11-22** with a throwaway script: presigned PUT, GET, HEAD and DELETE; a bigger body than signed is refused; a URL for one object can't read another. The console showed no payment method and a banner that usage beyond the free tier needs one "to avoid interruptions".
+
+### Direct transfer (later)
+
+A second, data-only `PeerConnection` with only the relay's STUN server and no TURN entry, so it can never fall back to the relay; consent as for direct calls (ADR-17); the drop when no direct path is found or the receiver is offline. Home Wi-Fi to some mobile networks has no direct path (see the call tests), so the drop is the path that always works and comes first.
+
 
 ## Why it's deferred
 

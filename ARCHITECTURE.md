@@ -309,3 +309,12 @@
 **Why**: The owner asked for reactions "like in facebook or whatsapp". As with replies, a separate kind of envelope would show the relay which messages are reactions. Chats are one-to-one, so two columns hold every reaction a message can have, and a reaction goes when its message does (deleted, disappeared, or the chat cleared).
 
 **Tradeoff**: Sotto 0.7.1 and older show a reaction as raw payload, so everyone has to update together. A reaction that can't be sent isn't queued: it goes back, and the user is told to try again. A reaction from "+" accepts any short emoji-looking text (`ReactionPayload.isEmoji`), not only the offered ones.
+
+## ADR-29: Media inline when small, through an encrypted drop when large
+
+**Decision**: Voice messages (up to 60 s) and photos shrunk to fit (about 1280 px, at most about 140 KB) travel inside the ordinary ratchet-encrypted message as a `"\u0001sotto/media/v1:"` payload. Larger files are encrypted on the phone (AES-256-GCM in 64 KiB segments, a random key per file) and uploaded straight to a Tigris bucket with a URL the relay signs; the key travels in a `"\u0001sotto/file/v1:"` message, and the receiver deletes the object once it has the file. On the phone, media sits in `files/media`, encrypted under a key kept in the message's (SQLCipher) row. Details: [docs/attachments-research.md](docs/attachments-research.md).
+
+**Why**: ADR-19 keeps the relay on the Premium tier with 1 GB of free egress a month, which calls need. Small inline media costs a few MB a month of it and needs nothing new; large files never touch the relay, and Tigris has free egress and, without a card on file, stops at its free tier rather than billing. The relay signs every URL, so it decides who may upload how much, and a signed size can't be exceeded.
+
+**Tradeoff**: A third party (Tigris) sees the phones' addresses, file sizes and timing, though never content or keys. Inline media makes a message as large as about 190 KB, so it shows its kind by size. Sotto 0.7.6 and older show the new payloads as raw text, so everyone updates together. Direct phone-to-phone transfer is designed but comes later.
+
