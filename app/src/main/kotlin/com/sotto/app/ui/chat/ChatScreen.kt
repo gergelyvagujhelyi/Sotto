@@ -502,7 +502,7 @@ private fun VerifyChoice(
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.width(8.dp))
                 Text(badge, style = MaterialTheme.typography.labelSmall, color = tint)
             }
