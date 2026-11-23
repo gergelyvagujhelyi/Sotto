@@ -38,7 +38,7 @@ class AppUpdateNotifier @Inject constructor(
         val open = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,
-            SourceDrop.intent(context),
+            SourceDrop.intent(context, update.version),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
