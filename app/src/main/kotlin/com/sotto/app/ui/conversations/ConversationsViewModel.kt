@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import com.sotto.app.domain.model.trust
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,6 +37,12 @@ class ConversationsViewModel @Inject constructor(
     val conversations: StateFlow<List<Conversation>> =
         conversationRepository.getConversations()
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Each contact's verification, by user id, for the shield on their chat. */
+    val trust: StateFlow<Map<String, com.sotto.app.domain.model.ContactTrust>> =
+        identityRepository.getContacts()
+            .map { contacts -> contacts.associate { it.userId to it.trust } }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
     val messageRequests: StateFlow<List<Conversation>> =
         conversationRepository.getMessageRequests()

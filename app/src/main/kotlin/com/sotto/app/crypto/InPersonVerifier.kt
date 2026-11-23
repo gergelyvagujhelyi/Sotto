@@ -20,6 +20,12 @@ sealed interface InPersonResult {
 
     /** Not a contact on this phone (any more). */
     data object NotAContact : InPersonResult
+
+    /**
+     * Their keys match, but the QR code wasn't live: older than [InPersonVerifier.LIVE_WINDOW_S],
+     * or not signed by them. A picture of their code, not their phone: not verified in person.
+     */
+    data object NotLive : InPersonResult
 }
 
 /**
@@ -36,7 +42,19 @@ class InPersonVerifier @Inject constructor(
     private val contactDao: ContactDao,
     private val keyVerifier: ContactKeyVerifier,
     private val keyManager: KeyManager,
+    private val classical: ClassicalKeyAgreement,
 ) {
+
+    /**
+     * This phone's live QR code ([InPersonCode], version 2): made for [nowMs] and signed with
+     * this account's Ed25519 key, so a scanner can tell it's fresh. Shown anew every second.
+     */
+    fun myLiveCode(nowMs: Long = System.currentTimeMillis()): InPersonCode? {
+        val code = myCode() ?: return null
+        val at = nowMs / 1000
+        val payload = InPersonCode.livePayload(code.userId, code.fingerprint, at)
+        return code.copy(issuedAt = at, signature = keyManager.sign(payload))
+    }
 
     /** This phone's own code, to show or send; null before the account exists. */
     fun myCode(): InPersonCode? {
@@ -52,15 +70,27 @@ class InPersonVerifier @Inject constructor(
         return InPersonCode(userId, fingerprint)
     }
 
-    suspend fun verify(contactId: String, code: InPersonCode): InPersonResult {
+    /**
+     * [requireLive]: the code came from a QR code, so it must be a fresh live one, signed by
+     * the very keys it names. NFC codes are exempt: NFC only reaches a phone held against this one.
+     */
+    suspend fun verify(
+        contactId: String,
+        code: InPersonCode,
+        requireLive: Boolean = false,
+        nowMs: Long = System.currentTimeMillis(),
+    ): InPersonResult {
         if (code.userId != contactId) return InPersonResult.OtherAccount
-        val contact = contactDao.getByUserId(contactId) ?: return InPersonResult.NotAContact
+        var contact = contactDao.getByUserId(contactId) ?: return InPersonResult.NotAContact
         var pinned = contact.keyFingerprint
         if (pinned != code.fingerprintHex) {
             // They may have rotated keys since this phone last looked (or the contact predates
             // fingerprints): take the relay's bundle only as far as the keys we hold endorse it.
             pinned = when (val check = keyVerifier.check(contactId)) {
-                is KeyCheck.Known -> check.contact.keyFingerprint
+                is KeyCheck.Known -> {
+                    contact = check.contact
+                    check.contact.keyFingerprint
+                }
                 is KeyCheck.Mismatch -> return InPersonResult.KeysDiffer
                 is KeyCheck.NotFound -> return InPersonResult.KeysDiffer
                 // Offline, a rotation can't be ruled out: no verdict either way.
@@ -69,11 +99,32 @@ class InPersonVerifier @Inject constructor(
             }
         }
         if (pinned != code.fingerprintHex) return InPersonResult.KeysDiffer
+        if (requireLive && !isLive(code, contact.publicSigningKey, nowMs)) return InPersonResult.NotLive
         return if (contactDao.markVerifiedInPerson(contactId, code.fingerprintHex) > 0) {
             InPersonResult.Verified
         } else {
             // The keys moved on between the check and the write: let the user try again.
             InPersonResult.CantCheck
         }
+    }
+
+    /** Fresh, and signed by [signingKey] (theirs, part of the fingerprint that just matched). */
+    private fun isLive(code: InPersonCode, signingKey: ByteArray, nowMs: Long): Boolean {
+        val at = code.issuedAt ?: return false
+        val signature = code.signature ?: return false
+        if (kotlin.math.abs(nowMs / 1000 - at) > LIVE_WINDOW_S) return false
+        return try {
+            classical.verify(code.livePayload(), signature, signingKey)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    companion object {
+        /**
+         * How old (or, with a clock running ahead, how new) a live code may be. Generous enough
+         * for two phones' clocks a little apart; a screenshot sent on later is too old.
+         */
+        const val LIVE_WINDOW_S = 60L
     }
 }

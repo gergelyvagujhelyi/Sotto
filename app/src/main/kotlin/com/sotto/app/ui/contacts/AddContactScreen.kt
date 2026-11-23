@@ -112,6 +112,15 @@ fun AddContactScreen(
     val myCode by viewModel.myCode.collectAsState()
     // Two phones held together here add each other, verified in person.
     com.sotto.app.nfc.InPersonNfcEffect(myCode)
+    // While "Show my QR code" is open, its code changes every second (BankID-style).
+    var qrShown by remember { mutableStateOf(false) }
+    var liveQr by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(qrShown) {
+        while (qrShown) {
+            liveQr = viewModel.liveQr()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
 
     LaunchedEffect(state) {
         if (state is AddContactState.Success) {
@@ -126,7 +135,7 @@ fun AddContactScreen(
         onScannedShareCodeHandled()
         // Their full code, read off their phone: added and verified in person at once.
         val inPerson = com.sotto.app.crypto.InPersonCode.parse(code)
-        if (inPerson != null) viewModel.addInPerson(inPerson) else viewModel.submitScannedShareCode(code)
+        if (inPerson != null) viewModel.addInPerson(inPerson, viaQr = true) else viewModel.submitScannedShareCode(code)
     }
 
     LaunchedEffect(prefilledShareCode) {
@@ -146,8 +155,9 @@ fun AddContactScreen(
         onScanQr = onScanQr,
         showNameHint = !hasMyName,
         onRemoveContact = { viewModel.removeContact(it.userId) },
-        myQr = myCode?.encode(),
+        myQr = liveQr,
         onOpenChat = viewModel::openChat,
+        onQrShownChange = { qrShown = it },
     )
 }
 
@@ -168,6 +178,8 @@ fun AddContactContent(
     myQr: String? = null,
     /** Opens the chat with someone already added. */
     onOpenChat: (Contact) -> Unit = {},
+    /** "Show my QR code" opened or closed: its live code is made only while it's open. */
+    onQrShownChange: (Boolean) -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<Contact?>(null) }
@@ -362,8 +374,10 @@ fun AddContactContent(
         TapPhonesDialog(adding = state is AddContactState.Loading, onDismiss = { tapping = false })
     }
 
+    LaunchedEffect(showMyQr) { onQrShownChange(showMyQr) }
+
     if (showMyQr && myShareCode != null) {
-        ShareCodeQrDialog(shareCode = myShareCode, qrContent = myQr ?: myShareCode, onDismiss = { showMyQr = false })
+        ShareCodeQrDialog(shareCode = myShareCode, qrContent = myQr, onDismiss = { showMyQr = false })
     }
 
     removing?.let { contact ->
@@ -432,7 +446,7 @@ private fun MyShareCodeCard(
 
 /** The user's own share code as a large QR, for someone to scan with "Scan QR code". */
 @Composable
-internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrContent: String = shareCode) {
+internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrContent: String? = shareCode) {
     val activity = LocalContext.current as? Activity
     // Full brightness makes the code easier to read from another phone's camera.
     DisposableEffect(activity) {
@@ -459,7 +473,13 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrConte
                 // A Dialog gives its content no text colour of its own: say it, or dark mode shows dark on dark.
                 Text("Your QR code", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(20.dp))
-                QrCodeImage(content = qrContent, size = 240.dp)
+                if (qrContent != null) {
+                    QrCodeImage(content = qrContent, size = 240.dp)
+                } else {
+                    Box(Modifier.size(240.dp), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 3.dp)
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = shareCode,
@@ -468,7 +488,8 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrConte
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "On their phone: New chat → Scan QR code. Scanning it in person also verifies you.",
+                    text = "On their phone: New chat → Scan their QR code. It changes every second, so only " +
+                        "scanning it here, in person, verifies you. A picture of it just adds you.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

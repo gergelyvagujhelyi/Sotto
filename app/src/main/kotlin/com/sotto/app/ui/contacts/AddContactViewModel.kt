@@ -67,7 +67,7 @@ class AddContactViewModel @Inject constructor(
      * and marks them verified in person: the share code inside the fingerprint finds them on
      * the relay, and their whole fingerprint must match the keys it hands out.
      */
-    fun addInPerson(code: com.sotto.app.crypto.InPersonCode) {
+    fun addInPerson(code: com.sotto.app.crypto.InPersonCode, viaQr: Boolean = false) {
         if (_state.value is AddContactState.Loading) return
         _state.value = AddContactState.Loading
         viewModelScope.launch {
@@ -79,7 +79,15 @@ class AddContactViewModel @Inject constructor(
             try {
                 val existed = identityRepository.getContact(code.userId) != null
                 val contact = addContact(shareCode).getOrThrow()
-                val result = inPersonVerifier.verify(contact.userId, code)
+                // A QR code must be live (it changes every second); NFC reaches only a phone held close.
+                val result = inPersonVerifier.verify(contact.userId, code, requireLive = viaQr)
+                if (result == com.sotto.app.crypto.InPersonResult.NotLive) {
+                    // Their keys, but a picture of their code: added like a share code, not verified.
+                    val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+                    if (!existed) sendMyName(contact.userId)
+                    _state.value = AddContactState.Success(contact, conversationId)
+                    return@launch
+                }
                 if (result != com.sotto.app.crypto.InPersonResult.Verified) {
                     // The relay answered with keys other than the ones on their phone: don't keep them.
                     if (!existed) conversationRepository.removeContact(contact.userId)
@@ -97,6 +105,10 @@ class AddContactViewModel @Inject constructor(
             }
         }
     }
+
+    /** A fresh live QR code for "Show my QR code" (it changes every second, as BankID's does). */
+    suspend fun liveQr(): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myLiveCode() }?.encode()
 
     /** Opens the chat with someone already added (started now if there's none yet). */
     fun openChat(contact: Contact) {

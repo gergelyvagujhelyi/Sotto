@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.sotto.app.crypto.InPersonResult
 import com.sotto.app.ui.components.AuroraBackground
@@ -106,6 +107,15 @@ fun VerifyInPersonScreen(
     // from the other phone's camera.
     val myCode by viewModel.myCode.collectAsState()
     com.sotto.app.nfc.InPersonNfcEffect(myCode)
+    // The QR code changes every second while it's on screen, as BankID's does.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                viewModel.refreshQr()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
     DisposableEffect(lifecycleOwner, activity) {
         val window = activity?.window
         val previousBrightness = window?.attributes?.screenBrightness
@@ -201,7 +211,7 @@ fun VerifyInPersonScreen(
                             Spacer(Modifier.height(12.dp))
                             Text(
                                 text = "$name scans this code with Verify in person on their phone. " +
-                                    "Then you scan theirs.",
+                                    "Then you scan theirs. It changes every second, so a picture of it won't do.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
@@ -320,6 +330,13 @@ private fun OutcomeDialog(outcome: VerifyOutcome, name: String, onDismiss: () ->
             "Couldn't check right now",
             "$name's keys may have changed since your phone last saw them, and the relay can't be " +
                 "reached to confirm that. Connect to the internet and try again.",
+        )
+        InPersonResult.NotLive -> Quad(
+            Icons.Rounded.GppMaybe,
+            Aurora.colors.warning,
+            "That code isn't live",
+            "It's the right person, but the code is a picture of their screen, not the code on their " +
+                "phone right now (it changes every second). Scan the code on their phone while you're together.",
         )
         InPersonResult.NotAContact -> Quad(
             Icons.Rounded.GppMaybe,

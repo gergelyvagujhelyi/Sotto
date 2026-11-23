@@ -68,7 +68,7 @@ class AddContactViewModelTest {
     fun `a code read off their phone adds them and verifies them in person`() {
         coEvery { identities.getContact(theirCode.userId) } returns null
         coEvery { addContact(theirShareCode) } returns Result.success(them)
-        coEvery { verifier.verify(theirCode.userId, theirCode) } returns com.sotto.app.crypto.InPersonResult.Verified
+        coEvery { verifier.verify(theirCode.userId, theirCode, any(), any()) } returns com.sotto.app.crypto.InPersonResult.Verified
         coEvery { conversations.getOrCreateConversation(theirCode.userId) } returns "conv-1"
 
         val vm = viewModel()
@@ -84,7 +84,7 @@ class AddContactViewModelTest {
     fun `keys that don't match their phone are not kept`() {
         coEvery { identities.getContact(theirCode.userId) } returns null
         coEvery { addContact(theirShareCode) } returns Result.success(them)
-        coEvery { verifier.verify(theirCode.userId, theirCode) } returns com.sotto.app.crypto.InPersonResult.KeysDiffer
+        coEvery { verifier.verify(theirCode.userId, theirCode, any(), any()) } returns com.sotto.app.crypto.InPersonResult.KeysDiffer
         coEvery { conversations.removeContact(theirCode.userId) } just Runs
 
         val vm = viewModel()
@@ -142,5 +142,20 @@ class AddContactViewModelTest {
         val state = vm.state.value
         assertTrue("expected success, got $state", state is AddContactState.Success)
         assertEquals("conversation-1", (state as AddContactState.Success).conversationId)
+    }
+
+    @Test
+    fun `a QR code that isn't live still adds them, but not verified`() {
+        coEvery { identities.getContact(theirCode.userId) } returns null
+        coEvery { addContact(theirShareCode) } returns Result.success(them)
+        coEvery { verifier.verify(theirCode.userId, theirCode, true, any()) } returns com.sotto.app.crypto.InPersonResult.NotLive
+        coEvery { conversations.getOrCreateConversation(theirCode.userId) } returns "conv-1"
+
+        val vm = viewModel()
+        vm.addInPerson(theirCode, viaQr = true)
+
+        val state = vm.state.value as AddContactState.Success
+        assertEquals(false, state.contact.verifiedInPerson)
+        coVerify(exactly = 0) { conversations.removeContact(any()) }
     }
 }

@@ -4,9 +4,11 @@ import com.sotto.app.data.local.dao.ContactDao
 import com.sotto.app.data.local.entity.ContactEntity
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class InPersonVerifierTest {
@@ -16,13 +18,16 @@ class InPersonVerifierTest {
     private val rotated = ByteArray(32) { 8 }
     private val contactDao = mockk<ContactDao>()
     private val keyVerifier = mockk<ContactKeyVerifier>()
-    private val verifier = InPersonVerifier(contactDao, keyVerifier, mockk(relaxed = true))
+    private val classical = mockk<ClassicalKeyAgreement>()
+    private val verifier = InPersonVerifier(contactDao, keyVerifier, mockk(relaxed = true), classical)
+    private val now = 1_800_000_000_000L
+    private val signingKey = ByteArray(32) { 9 }
 
     private fun contact(fingerprint: ByteArray?) = ContactEntity(
         userId = contactId,
         displayName = "Astrid",
         publicIdentityKey = ByteArray(32),
-        publicSigningKey = ByteArray(32),
+        publicSigningKey = signingKey,
         keyFingerprint = fingerprint?.let(KeyFingerprint::toHex),
     )
 
@@ -105,5 +110,52 @@ class InPersonVerifierTest {
         coEvery { contactDao.markVerifiedInPerson(contactId, any()) } returns 0
 
         assertEquals(InPersonResult.CantCheck, verify(InPersonCode(contactId, pinned)))
+    }
+
+    private fun live(at: Long, sig: ByteArray = ByteArray(64) { 4 }) =
+        InPersonCode(contactId, pinned, issuedAt = at, signature = sig)
+
+    private fun verifyQr(code: InPersonCode) = runBlocking { verifier.verify(contactId, code, requireLive = true, nowMs = now) }
+
+    @Test
+    fun `a live QR code, fresh and signed by their key, verifies them`() {
+        val code = live(now / 1000 - 5)
+        coEvery { contactDao.getByUserId(contactId) } returns contact(pinned)
+        every { classical.verify(any(), code.signature!!, signingKey) } returns true
+        coEvery { contactDao.markVerifiedInPerson(contactId, KeyFingerprint.toHex(pinned)) } returns 1
+
+        assertEquals(InPersonResult.Verified, verifyQr(code))
+    }
+
+    @Test
+    fun `a QR code older than a minute is a picture, not their phone`() {
+        coEvery { contactDao.getByUserId(contactId) } returns contact(pinned)
+        every { classical.verify(any(), any(), any()) } returns true
+
+        assertEquals(InPersonResult.NotLive, verifyQr(live(now / 1000 - InPersonVerifier.LIVE_WINDOW_S - 1)))
+        coVerify(exactly = 0) { contactDao.markVerifiedInPerson(any(), any()) }
+    }
+
+    @Test
+    fun `a QR code not signed by their key is not live`() {
+        coEvery { contactDao.getByUserId(contactId) } returns contact(pinned)
+        every { classical.verify(any(), any(), any()) } returns false
+
+        assertEquals(InPersonResult.NotLive, verifyQr(live(now / 1000)))
+    }
+
+    @Test
+    fun `a QR code without a time and signature never counts as in person`() {
+        coEvery { contactDao.getByUserId(contactId) } returns contact(pinned)
+
+        assertEquals(InPersonResult.NotLive, verifyQr(InPersonCode(contactId, pinned)))
+    }
+
+    @Test
+    fun `the signature covers who, which keys and when`() {
+        val a = InPersonCode.livePayload(contactId, pinned, 100)
+        assertNotEquals(a.toList(), InPersonCode.livePayload(contactId, pinned, 101).toList())
+        assertNotEquals(a.toList(), InPersonCode.livePayload(contactId, rotated, 100).toList())
+        assertNotEquals(a.toList(), InPersonCode.livePayload("fedcba9876543210", pinned, 100).toList())
     }
 }
