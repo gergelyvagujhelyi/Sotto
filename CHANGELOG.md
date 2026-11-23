@@ -8,7 +8,7 @@ Nothing yet.
 
 ## 0.7.12 — 2026-11-23
 
-- **Verify by phone, easy to find** — It was only on the call screen, once a call was connected, and in the warning before a first message. Now it's also in the chat's ⋮ menu, under Verify in person, and on the Verify in person screen ("Can't meet?"). Both call the contact, and the seven emoji open as soon as the call connects.
+- **One place to verify, with the choice explained** — Tapping "Not verified" under a contact's name, or ⋮ → Verify…, asks how: **In person** (stronger: meet and tap phones or scan their code) or **By phone** (weaker: a call and seven emoji, which relies on knowing their voice). By phone calls them, and the emoji open as soon as the call connects. The Verify in person screen also offers it ("Can't meet?"). In 0.7.11 Verify by phone was hard to find: only on a connected call's screen and in the first-message warning.
 
 ## 0.7.11 — 2026-11-23
 
