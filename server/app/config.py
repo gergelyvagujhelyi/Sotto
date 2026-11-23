@@ -49,6 +49,10 @@ PENDING_MESSAGE_TTL_DAYS: int = int(os.getenv("PENDING_MESSAGE_TTL_DAYS", "30"))
 # Sign-up by invitation: a new account needs a one-time code a member created
 # (POST /v1/invites). The very first account on a fresh relay needs none.
 INVITE_ONLY: bool = os.getenv("INVITE_ONLY", "true").lower() == "true"
+# Key lookups (GET /v1/identity/{id}/keys and /resolve/{code}) need a member's sign-in token.
+# Apps sign them in since 0.7.11; turn this on once every phone runs 0.7.11 or later, or older
+# apps can no longer add contacts or check keys.
+KEY_LOOKUP_AUTH: bool = os.getenv("KEY_LOOKUP_AUTH", "false").lower() == "true"
 INVITE_TTL_DAYS: int = int(os.getenv("INVITE_TTL_DAYS", "7"))
 MAX_OPEN_INVITES_PER_MEMBER: int = int(os.getenv("MAX_OPEN_INVITES_PER_MEMBER", "5"))
 MAX_INVITES_PER_DAY: int = int(os.getenv("MAX_INVITES_PER_DAY", "10"))

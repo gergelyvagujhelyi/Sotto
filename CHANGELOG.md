@@ -4,7 +4,9 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Relay: key lookups by members only, when switched on** — With `KEY_LOOKUP_AUTH=true` in `.env`, looking up someone's keys by share code or user id needs a member's sign-in, so an outsider can't confirm an account exists or watch its key changes. Off by default: turn it on once every phone runs 0.7.11, which signs lookups in.
+- **Relay: unused routes gone** — `DELETE /v1/push/register` and call signals sent over the WebSocket; no app ever used them. nginx no longer passes `/metrics` through (it's read inside the container).
+- **Relay README: the endpoint table is complete** — With receipts, attachments, the release call, the invite page and App Links, and who may call each.
 
 ## 0.7.10 — 2026-11-23
 

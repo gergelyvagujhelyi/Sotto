@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import config
-from app.auth import verify_auth_token
+from app.auth import key_lookup_auth, verify_auth_token
 from app.database import get_db
 from app.models.db import DeliveryReceipt, Identity, Invite, PendingMessage, RateLimit, ReadReceipt, RetiredShareCode
 from app.services import invites
@@ -119,7 +119,7 @@ async def bootstrap_identity(
     return BootstrapResponse(user_id=user_id, share_code=share_code)
 
 
-@router.get("/{user_id}/keys", response_model=KeyBundleResponse, dependencies=[Depends(check_ip_rate_limit)])
+@router.get("/{user_id}/keys", response_model=KeyBundleResponse, dependencies=[Depends(check_ip_rate_limit), Depends(key_lookup_auth)])
 async def fetch_key_bundle(
     user_id: str = Path(..., pattern=r"^[a-f0-9]{16}$"),
     db: AsyncSession = Depends(get_db),
@@ -144,7 +144,7 @@ async def fetch_key_bundle(
     )
 
 
-@router.get("/resolve/{share_code}", response_model=ResolveShareCodeResponse, dependencies=[Depends(check_ip_rate_limit)])
+@router.get("/resolve/{share_code}", response_model=ResolveShareCodeResponse, dependencies=[Depends(check_ip_rate_limit), Depends(key_lookup_auth)])
 async def resolve_share_code(
     share_code: str = Path(..., pattern=r"^[A-Za-z0-9_-]{16}$"),
     db: AsyncSession = Depends(get_db),

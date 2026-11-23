@@ -51,26 +51,40 @@ pytest -v
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/v1/identity/bootstrap` | Register a guest identity (`invite_code`: a member's invite, when the relay needs one) |
-| GET | `/v1/identity/{user_id}/keys` | Fetch public key bundle |
-| GET | `/v1/identity/resolve/{share_code}` | Resolve share code to keys |
-| PUT | `/v1/identity/me/keys` | Rotate identity keys (proof-of-possession required) |
-| DELETE | `/v1/identity/me` | Delete identity and all associated data |
-| POST | `/v1/invites` | Create a one-time invite (valid 7 days; 5 open per member, 10 a day) |
-| POST | `/v1/messages/send` | Submit encrypted envelope |
-| GET | `/v1/messages/pending` | Fetch pending envelopes |
-| POST | `/v1/messages/ack` | Acknowledge receipt |
-| POST | `/v1/push/register` | Register the push target: `fid` (Firebase installation ID) or, from apps before 0.5.5, `token` |
-| DELETE | `/v1/push/register` | Unregister the push target |
-| POST | `/v1/calls/signal` | Relay call signal to peer |
-| GET | `/v1/calls/ice-servers` | Get ICE/TURN server config |
-| WS | `/v1/ws` | Real-time delivery + call signaling |
-| GET | `/health` | Health check; `invite_required` says whether sign-up needs an invite |
-| GET | `/metrics` | Prometheus metrics (token-protected) |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/v1/identity/bootstrap` | — | Register a guest identity (`invite_code`: a member's invite, when the relay needs one) |
+| GET | `/v1/identity/{user_id}/keys` | member, with `KEY_LOOKUP_AUTH` | Fetch public key bundle |
+| GET | `/v1/identity/resolve/{share_code}` | member, with `KEY_LOOKUP_AUTH` | Resolve share code to keys |
+| PUT | `/v1/identity/me/keys` | ✓ | Rotate identity keys (proof-of-possession required) |
+| DELETE | `/v1/identity/me` | ✓ | Delete identity and all associated data |
+| POST | `/v1/invites` | ✓ | Create a one-time invite (valid 7 days; 5 open per member, 10 a day) |
+| POST | `/v1/messages/send` | ✓ | Submit encrypted envelope |
+| GET | `/v1/messages/pending` | ✓ | Fetch pending envelopes |
+| POST | `/v1/messages/ack` | ✓ | Acknowledge receipt (the relay then deletes them) |
+| POST | `/v1/receipts` | ✓ | Send read receipts |
+| GET | `/v1/receipts/pending` | ✓ | Fetch read receipts |
+| POST | `/v1/receipts/ack` | ✓ | Acknowledge read receipts |
+| GET | `/v1/receipts/delivered` | ✓ | Fetch delivery receipts |
+| POST | `/v1/receipts/delivered/ack` | ✓ | Acknowledge delivery receipts |
+| POST | `/v1/push/register` | ✓ | Register the push target: `fid` (Firebase installation ID) or, from apps before 0.5.5, `token` |
+| POST | `/v1/calls/signal` | ✓ | Relay an encrypted call signal to the peer (pushes when a call offer isn't answered) |
+| GET | `/v1/calls/ice-servers` | ✓ | Get ICE/TURN server config with short-lived TURN credentials |
+| POST | `/v1/attachments` | ✓ | Reserve an upload of an encrypted file for a recipient (when `S3_*` is set) |
+| POST | `/v1/attachments/{id}/parts` | ✓ | Signed upload URLs for the file's parts |
+| POST | `/v1/attachments/{id}/complete` | ✓ | Finish the upload |
+| GET | `/v1/attachments/{id}` | ✓ | Signed download URL (the recipient) |
+| DELETE | `/v1/attachments/{id}` | ✓ | Delete it once downloaded |
+| WS | `/v1/ws` | token in the first frame | Real-time delivery: the relay sends `new_message`, `receipts`, call signals, `app_release`; the app sends only `auth` and `ping` |
+| POST | `/v1/app-release` | CI release key | The release workflow says the app of this relay's version is published |
+| GET | `/health` | — | Health check; `invite_required` says whether sign-up needs an invite |
+| GET | `/invite` | — | The page an invite link opens in a browser (the code stays after `#`, never sent here) |
+| GET | `/.well-known/assetlinks.json` | — | Lets invite links open the app directly (Android App Links) |
+| GET | `/metrics` | `METRICS_TOKEN` | Prometheus metrics; not passed through nginx, read inside the container |
 
-All authenticated endpoints require `Authorization: Bearer <user_id>.<timestamp_ms>.<ed25519_signature>[.<mldsa65_signature>]` header. The ML-DSA-65 signature is required when the user has a PQC signing key registered (hybrid post-quantum authentication).
+Authenticated endpoints require `Authorization: Bearer <user_id>.<timestamp_ms>.<ed25519_signature>[.<mldsa65_signature>]`. The ML-DSA-65 signature is required when the user has a PQC signing key registered (hybrid post-quantum authentication).
+
+Key lookups are open to anyone (IP rate-limited) unless `KEY_LOOKUP_AUTH=true`. Apps sign them in since 0.7.11; turn it on once every phone runs 0.7.11 or later, so outsiders can't confirm an account from a share code or watch its key changes.
 
 ## Invites
 

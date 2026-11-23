@@ -283,6 +283,11 @@ A relay creates an account only with a one-time invite from an existing member (
 ### Certificate Pinning
 Network security config (generated at build time for the owner's relay, `sotto.ownerRelayHost`, so its address stays out of the repository) pins the relay server's certificate chain to Let's Encrypt's root keys (ISRG Root X1, ISRG Root X2 and ISRG Root YE), so certificate renewals and Let's Encrypt's intermediate rotations don't lock the app out (since v0.5.1; before, it pinned the server's own certificate and intermediate). Pins expire 2028-10-01 and must be renewed before then. Since v0.5.0, cleartext traffic exemptions for local development domains are restricted to debug builds only.
 
+### Key lookups by members only (0.7.11)
+Looking up someone's keys (`GET /v1/identity/{id}/keys`, `/v1/identity/resolve/{code}`) used to need no sign-in, so anyone who had a share code or user id could confirm the account existed and watch when its keys changed. Apps sign these lookups in since 0.7.11, and with `KEY_LOOKUP_AUTH=true` the relay refuses them from anyone who isn't a member. It's off by default, because older apps don't sign in and could then no longer add contacts or check keys: turn it on once every phone runs 0.7.11. A phone that crashed in the middle of changing its keys asks again signed with its new keys if the relay refuses the old ones.
+
+The same release dropped two routes no app used: `DELETE /v1/push/register` (deleting the account clears the push target) and call signals sent over the WebSocket (they go through `POST /v1/calls/signal`; the socket only takes `auth` and `ping`). nginx no longer passes `/metrics` through: it's read inside the server container.
+
 ### Relay Logs and Scanners (2026-11-20)
 **No addresses in the logs.**
 - nginx logs each request's time, method, path, protocol, status, size and duration, but not the client's address. The account id in `/v1/identity/<id>/keys` and the share code in `/v1/identity/resolve/<code>` are cut from the path.
