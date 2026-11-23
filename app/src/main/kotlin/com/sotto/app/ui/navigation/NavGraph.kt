@@ -295,6 +295,11 @@ fun ChatNavGraph(
                     navController.previousBackStackEntry?.savedStateHandle?.set(SCANNED_SHARE_CODE_KEY, shareCode)
                     navController.popBackStack()
                 },
+                // Their full code (0.7.11 and later) adds and verifies in person; a bare share code just adds.
+                accept = { text ->
+                    com.sotto.app.crypto.InPersonCode.parse(text)?.encode()
+                        ?: com.sotto.app.ui.contacts.shareCodeFromQr(text)
+                },
             )
         }
 

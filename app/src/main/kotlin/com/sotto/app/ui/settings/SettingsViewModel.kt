@@ -27,6 +27,7 @@ class SettingsViewModel @Inject constructor(
     private val messageRepository: com.sotto.app.domain.repository.MessageRepository,
     private val apiService: com.sotto.app.data.remote.ApiService,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
+    private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
 ) : ViewModel() {
 
     /** The relay the account lives on. */
@@ -92,6 +93,16 @@ class SettingsViewModel @Inject constructor(
     private val _shareCode = MutableStateFlow<String?>(null)
     val shareCode: StateFlow<String?> = _shareCode.asStateFlow()
 
+    /** What the QR code holds: this phone's full in-person code, so scanning it adds and verifies. */
+    private val _myQr = MutableStateFlow<String?>(null)
+    val myQr: StateFlow<String?> = _myQr.asStateFlow()
+
+    private fun refreshMyQr() {
+        viewModelScope.launch {
+            _myQr.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myCode() }?.encode()
+        }
+    }
+
     /** The user's own name, sent to new contacts; null when not set. */
     private val _myName = MutableStateFlow<String?>(null)
     val myName: StateFlow<String?> = _myName.asStateFlow()
@@ -120,6 +131,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val identity = identityRepository.getIdentity()
             _shareCode.value = identity?.shareCode
+            refreshMyQr()
             _myName.value = identityRepository.getMyName()
         }
     }
@@ -328,6 +340,7 @@ class SettingsViewModel @Inject constructor(
                 // Refresh the displayed share code
                 val identity = identityRepository.getIdentity()
                 _shareCode.value = identity?.shareCode
+                refreshMyQr()
             } catch (e: Exception) {
                 android.util.Log.e("SettingsVM", "Key rotation failed", e)
                 _rotationError.value = when (e) {

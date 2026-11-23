@@ -22,7 +22,16 @@ class AddContactViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val identityRepository: IdentityRepository,
     private val sendMyName: SendMyNameUseCase,
+    private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
 ) : ViewModel() {
+
+    private val _myCode = MutableStateFlow<com.sotto.app.crypto.InPersonCode?>(null)
+
+    /**
+     * This phone's code: "Show my QR code" shows it, and an NFC tap sends it. Someone who reads
+     * it in person adds this phone and verifies it in one step ([addInPerson]).
+     */
+    val myCode: StateFlow<com.sotto.app.crypto.InPersonCode?> = _myCode.asStateFlow()
 
     private val _shareCodeInput = MutableStateFlow("")
     val shareCodeInput: StateFlow<String> = _shareCodeInput.asStateFlow()
@@ -45,6 +54,47 @@ class AddContactViewModel @Inject constructor(
             val identity = identityRepository.getIdentity()
             _myShareCode.value = identity?.shareCode
             _hasMyName.value = identityRepository.getMyName() != null
+            _myCode.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myCode() }
+        }
+        // Two phones held together on this screen: each adds the other, verified in person.
+        viewModelScope.launch {
+            com.sotto.app.nfc.InPersonNfc.received.collect { addInPerson(it) }
+        }
+    }
+
+    /**
+     * Adds the person whose code was read straight off their phone (NFC tap or their QR code)
+     * and marks them verified in person: the share code inside the fingerprint finds them on
+     * the relay, and their whole fingerprint must match the keys it hands out.
+     */
+    fun addInPerson(code: com.sotto.app.crypto.InPersonCode) {
+        if (_state.value is AddContactState.Loading) return
+        _state.value = AddContactState.Loading
+        viewModelScope.launch {
+            if (code.userId == identityRepository.getIdentity()?.userId) {
+                _state.value = AddContactState.Error(OWN_SHARE_CODE_MESSAGE)
+                return@launch
+            }
+            val shareCode = com.sotto.app.crypto.KeyFingerprint.shareCode(code.fingerprint)
+            try {
+                val existed = identityRepository.getContact(code.userId) != null
+                val contact = addContact(shareCode).getOrThrow()
+                val result = inPersonVerifier.verify(contact.userId, code)
+                if (result != com.sotto.app.crypto.InPersonResult.Verified) {
+                    // The relay answered with keys other than the ones on their phone: don't keep them.
+                    if (!existed) conversationRepository.removeContact(contact.userId)
+                    _state.value = AddContactState.Error(
+                        "The keys the relay gave for this person don't match their phone. Don't add them this way.",
+                    )
+                    return@launch
+                }
+                val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+                if (!existed) sendMyName(contact.userId)
+                _state.value = AddContactState.Success(contact.copy(verifiedInPerson = true), conversationId)
+            } catch (e: Exception) {
+                android.util.Log.e("AddContactVM", "Failed to add contact in person", e)
+                _state.value = AddContactState.Error("Couldn't add them. Check your connection and try again.")
+            }
         }
     }
 

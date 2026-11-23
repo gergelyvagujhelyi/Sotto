@@ -47,7 +47,61 @@ class AddContactViewModelTest {
     @After
     fun tearDown() = Dispatchers.resetMain()
 
-    private fun viewModel() = AddContactViewModel(addContact, conversations, identities, sendMyName)
+    private val verifier = mockk<com.sotto.app.crypto.InPersonVerifier>()
+    private val myCode = com.sotto.app.crypto.InPersonCode("aaaaaaaaaaaaaaaa", ByteArray(32) { 1 })
+    private val theirCode = com.sotto.app.crypto.InPersonCode("bbbbbbbbbbbbbbbb", ByteArray(32) { 2 })
+    private val theirShareCode = com.sotto.app.crypto.KeyFingerprint.shareCode(theirCode.fingerprint)
+    private val them = com.sotto.app.domain.model.Contact(
+        userId = theirCode.userId,
+        displayName = "Astrid",
+        publicIdentityKey = ByteArray(32),
+        publicSigningKey = ByteArray(32),
+        verified = true,
+    )
+
+    private fun viewModel(): AddContactViewModel {
+        every { verifier.myCode() } returns myCode
+        return AddContactViewModel(addContact, conversations, identities, sendMyName, verifier)
+    }
+
+    @Test
+    fun `a code read off their phone adds them and verifies them in person`() {
+        coEvery { identities.getContact(theirCode.userId) } returns null
+        coEvery { addContact(theirShareCode) } returns Result.success(them)
+        coEvery { verifier.verify(theirCode.userId, theirCode) } returns com.sotto.app.crypto.InPersonResult.Verified
+        coEvery { conversations.getOrCreateConversation(theirCode.userId) } returns "conv-1"
+
+        val vm = viewModel()
+        vm.addInPerson(theirCode)
+
+        val state = vm.state.value as AddContactState.Success
+        assertEquals("conv-1", state.conversationId)
+        assertEquals(true, state.contact.verifiedInPerson)
+        coVerify(exactly = 1) { sendMyName(theirCode.userId) }
+    }
+
+    @Test
+    fun `keys that don't match their phone are not kept`() {
+        coEvery { identities.getContact(theirCode.userId) } returns null
+        coEvery { addContact(theirShareCode) } returns Result.success(them)
+        coEvery { verifier.verify(theirCode.userId, theirCode) } returns com.sotto.app.crypto.InPersonResult.KeysDiffer
+        coEvery { conversations.removeContact(theirCode.userId) } just Runs
+
+        val vm = viewModel()
+        vm.addInPerson(theirCode)
+
+        assertTrue(vm.state.value is AddContactState.Error)
+        coVerify(exactly = 1) { conversations.removeContact(theirCode.userId) }
+        coVerify(exactly = 0) { sendMyName(any()) }
+    }
+
+    @Test
+    fun `the user's own in-person code is refused`() {
+        val vm = viewModel()
+        vm.addInPerson(com.sotto.app.crypto.InPersonCode(identity.userId, ByteArray(32) { 1 }))
+        assertEquals(AddContactState.Error(OWN_SHARE_CODE_MESSAGE), vm.state.value)
+        coVerify(exactly = 0) { addContact(any()) }
+    }
 
     @Test
     fun `a contact removed from the list is removed with the chat`() {

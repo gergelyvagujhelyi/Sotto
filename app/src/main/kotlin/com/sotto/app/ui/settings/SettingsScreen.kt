@@ -121,6 +121,7 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.privacySettings.collectAsState()
     val shareCode by viewModel.shareCode.collectAsState()
+    val myQr by viewModel.myQr.collectAsState()
     val showWipeConfirmation by viewModel.showWipeConfirmation.collectAsState()
     val wipeCompleted by viewModel.wipeCompleted.collectAsState()
     val showRotateConfirmation by viewModel.showRotateConfirmation.collectAsState()
@@ -295,6 +296,7 @@ fun SettingsScreen(
     SettingsContent(
         settings = settings,
         shareCode = shareCode,
+        myQr = myQr,
         myName = myName,
         isRotatingKeys = isRotatingKeys,
         onBack = onBack,
@@ -331,6 +333,8 @@ fun SettingsScreen(
 fun SettingsContent(
     settings: PrivacySettings,
     shareCode: String?,
+    /** What the QR code holds: the full in-person code; the share code until it's loaded. */
+    myQr: String? = null,
     myName: String?,
     isRotatingKeys: Boolean,
     onBack: () -> Unit,
@@ -392,6 +396,7 @@ fun SettingsContent(
                 SectionLabel("Identity", Modifier.padding(start = 4.dp, top = 4.dp))
                 IdentityCard(
                     shareCode = shareCode,
+                    qrContent = myQr ?: shareCode,
                     isRotatingKeys = isRotatingKeys,
                     snackbarHostState = snackbarHostState,
                 )
@@ -628,7 +633,12 @@ fun SettingsContent(
  * so copying and sharing wait until the rotation finishes.
  */
 @Composable
-private fun IdentityCard(shareCode: String?, isRotatingKeys: Boolean, snackbarHostState: SnackbarHostState) {
+private fun IdentityCard(
+    shareCode: String?,
+    isRotatingKeys: Boolean,
+    snackbarHostState: SnackbarHostState,
+    qrContent: String? = shareCode,
+) {
     val aurora = Aurora.colors
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -643,7 +653,7 @@ private fun IdentityCard(shareCode: String?, isRotatingKeys: Boolean, snackbarHo
                         .background(Color.White)
                         .padding(6.dp),
                 ) {
-                    QrCodeImage(content = shareCode, size = 184.dp)
+                    QrCodeImage(content = qrContent ?: shareCode, size = 184.dp)
                 }
             } else {
                 Box(Modifier.size(196.dp), contentAlignment = Alignment.Center) {

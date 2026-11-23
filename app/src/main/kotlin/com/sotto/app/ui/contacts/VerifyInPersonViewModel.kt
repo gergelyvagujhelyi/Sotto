@@ -36,7 +36,10 @@ class VerifyInPersonViewModel @Inject constructor(
         identityRepository.observeContact(contactId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val myCode = MutableStateFlow<InPersonCode?>(null)
+    private val _myCode = MutableStateFlow<InPersonCode?>(null)
+
+    /** This phone's code: shown as the QR code, and sent on an NFC tap ([com.sotto.app.nfc.InPersonNfcEffect]). */
+    val myCode: StateFlow<InPersonCode?> = _myCode.asStateFlow()
 
     /** This phone's code as the QR code shows it; null until loaded. */
     private val _myQr = MutableStateFlow<String?>(null)
@@ -48,29 +51,15 @@ class VerifyInPersonViewModel @Inject constructor(
     private val _checking = MutableStateFlow(false)
     val checking: StateFlow<Boolean> = _checking.asStateFlow()
 
-    /** Whether the screen is in front: only then does this phone answer a tap. */
-    private var resumed = false
-
     init {
         viewModelScope.launch {
             val code = withContext(Dispatchers.IO) { verifier.myCode() }
-            myCode.value = code
+            _myCode.value = code
             _myQr.value = code?.encode()
-            if (resumed && code != null) InPersonNfc.start(code)
         }
         viewModelScope.launch {
             InPersonNfc.received.collect { code -> check(code, viaNfc = true) }
         }
-    }
-
-    fun onResumed() {
-        resumed = true
-        myCode.value?.let(InPersonNfc::start)
-    }
-
-    fun onPaused() {
-        resumed = false
-        InPersonNfc.stop()
     }
 
     /** A QR code the scanner accepted ([InPersonCode.parse] already passed). */

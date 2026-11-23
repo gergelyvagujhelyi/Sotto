@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Nfc
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.QrCode2
@@ -105,6 +106,9 @@ fun AddContactScreen(
     val myShareCode by viewModel.myShareCode.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val hasMyName by viewModel.hasMyName.collectAsState()
+    val myCode by viewModel.myCode.collectAsState()
+    // Two phones held together here add each other, verified in person.
+    com.sotto.app.nfc.InPersonNfcEffect(myCode)
 
     LaunchedEffect(state) {
         if (state is AddContactState.Success) {
@@ -117,7 +121,9 @@ fun AddContactScreen(
     LaunchedEffect(scannedShareCode) {
         val code = scannedShareCode ?: return@LaunchedEffect
         onScannedShareCodeHandled()
-        viewModel.submitScannedShareCode(code)
+        // Their full code, read off their phone: added and verified in person at once.
+        val inPerson = com.sotto.app.crypto.InPersonCode.parse(code)
+        if (inPerson != null) viewModel.addInPerson(inPerson) else viewModel.submitScannedShareCode(code)
     }
 
     LaunchedEffect(prefilledShareCode) {
@@ -137,6 +143,7 @@ fun AddContactScreen(
         onScanQr = onScanQr,
         showNameHint = !hasMyName,
         onRemoveContact = { viewModel.removeContact(it.userId) },
+        myQr = myCode?.encode(),
     )
 }
 
@@ -153,9 +160,13 @@ fun AddContactContent(
     onScanQr: () -> Unit,
     showNameHint: Boolean = false,
     onRemoveContact: (Contact) -> Unit = {},
+    /** This phone's in-person code for "Show my QR code"; the share code when not loaded yet. */
+    myQr: String? = null,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<Contact?>(null) }
+    val nfcContext = LocalContext.current
+    val hasNfc = remember { android.nfc.NfcAdapter.getDefaultAdapter(nfcContext) != null }
     val canSubmit = shareCodeInput.isNotBlank() && state !is AddContactState.Loading
     var showMyQr by rememberSaveable { mutableStateOf(false) }
     // Gives the bar its solid colour once content scrolls under it.
@@ -212,6 +223,26 @@ fun AddContactContent(
                         enabled = state !is AddContactState.Loading,
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (hasNfc) {
+                        Row(
+                            modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Rounded.Nfc,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Or both open New chat and hold your phones back to back. " +
+                                    "You add each other, verified in person.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
                     ShareCodeField(
                         value = shareCodeInput,
@@ -280,7 +311,7 @@ fun AddContactContent(
     }
 
     if (showMyQr && myShareCode != null) {
-        ShareCodeQrDialog(shareCode = myShareCode, onDismiss = { showMyQr = false })
+        ShareCodeQrDialog(shareCode = myShareCode, qrContent = myQr ?: myShareCode, onDismiss = { showMyQr = false })
     }
 
     removing?.let { contact ->
@@ -359,7 +390,7 @@ private fun MyShareCodeCard(
 
 /** The user's own share code as a large QR, for someone to scan with "Scan QR code". */
 @Composable
-internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit) {
+internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrContent: String = shareCode) {
     val activity = LocalContext.current as? Activity
     // Full brightness makes the code easier to read from another phone's camera.
     DisposableEffect(activity) {
@@ -385,7 +416,7 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Your QR code", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(20.dp))
-                QrCodeImage(content = shareCode, size = 240.dp)
+                QrCodeImage(content = qrContent, size = 240.dp)
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = shareCode,
@@ -393,7 +424,7 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "On their phone: New chat → Scan QR code.",
+                    text = "On their phone: New chat → Scan QR code. Scanning it in person also verifies you.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,

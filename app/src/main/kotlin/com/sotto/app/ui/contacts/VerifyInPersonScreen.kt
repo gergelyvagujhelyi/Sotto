@@ -1,12 +1,8 @@
 package com.sotto.app.ui.contacts
 
 import android.app.Activity
-import android.app.PendingIntent
 import android.content.Intent
-import android.content.IntentFilter
 import android.nfc.NfcAdapter
-import android.nfc.tech.IsoDep
-import android.os.Build
 import android.provider.Settings
 import android.view.WindowManager
 import androidx.compose.foundation.layout.Arrangement
@@ -106,51 +102,34 @@ fun VerifyInPersonScreen(
         }
     }
 
-    // In front: answer a tap as a card, read the other phone when it's the card (MainActivity
-    // gets the tag), and full brightness so the QR code reads easily from the other camera.
+    // In front: answer and read NFC taps, and full brightness so the QR code reads easily
+    // from the other phone's camera.
+    val myCode by viewModel.myCode.collectAsState()
+    com.sotto.app.nfc.InPersonNfcEffect(myCode)
     DisposableEffect(lifecycleOwner, activity) {
         val window = activity?.window
         val previousBrightness = window?.attributes?.screenBrightness
-        fun dispatchOff() {
-            if (activity != null) runCatching { nfcAdapter?.disableForegroundDispatch(activity) }
+        fun restore() {
+            if (window != null && previousBrightness != null) {
+                window.attributes = window.attributes.apply { screenBrightness = previousBrightness }
+            }
         }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     nfcOn = nfcAdapter?.isEnabled == true
-                    viewModel.onResumed()
-                    if (activity != null && nfcAdapter != null) {
-                        runCatching {
-                            nfcAdapter.enableForegroundDispatch(
-                                activity,
-                                tagIntent(activity),
-                                arrayOf(IntentFilter(NfcAdapter.ACTION_TECH_DISCOVERED)),
-                                arrayOf(arrayOf(IsoDep::class.java.name)),
-                            )
-                        }
-                    }
                     window?.attributes = window?.attributes?.apply {
                         screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
                     }
                 }
-                Lifecycle.Event.ON_PAUSE -> {
-                    dispatchOff()
-                    viewModel.onPaused()
-                    if (window != null && previousBrightness != null) {
-                        window.attributes = window.attributes.apply { screenBrightness = previousBrightness }
-                    }
-                }
+                Lifecycle.Event.ON_PAUSE -> restore()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            dispatchOff()
-            viewModel.onPaused()
-            if (window != null && previousBrightness != null) {
-                window.attributes = window.attributes.apply { screenBrightness = previousBrightness }
-            }
+            restore()
         }
     }
 
@@ -367,11 +346,3 @@ private fun OutcomeDialog(outcome: VerifyOutcome, name: String, onDismiss: () ->
 }
 
 private data class Quad(val icon: ImageVector, val tint: Color, val title: String, val body: String)
-
-/** Brings a tag found while this screen is in front to MainActivity.onNewIntent. */
-private fun tagIntent(activity: Activity): PendingIntent {
-    val intent = Intent(activity, activity.javaClass).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-    // Mutable: Android adds the tag to it.
-    val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
-    return PendingIntent.getActivity(activity, 0, intent, flags)
-}
