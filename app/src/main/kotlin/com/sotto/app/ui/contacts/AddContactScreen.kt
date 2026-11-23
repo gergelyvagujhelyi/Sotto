@@ -414,13 +414,15 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrConte
             contentPadding = PaddingValues(24.dp),
         ) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Your QR code", style = MaterialTheme.typography.titleLarge)
+                // A Dialog gives its content no text colour of its own: say it, or dark mode shows dark on dark.
+                Text("Your QR code", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(20.dp))
                 QrCodeImage(content = qrContent, size = 240.dp)
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = shareCode,
                     style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(

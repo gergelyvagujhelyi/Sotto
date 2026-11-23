@@ -18,6 +18,7 @@ Update both phones: with 0.7.10 the code for verifying by phone never appeared.
 - **Seven emoji instead of six digits** — Verify by phone now shows seven emoji, each with its name under it ("Dog, Rocket, Key…"), as Element does. They're easier to compare and to say aloud, and harder to guess (about 1 in 4.4 trillion).
 - **Add each other by tapping phones** — Both open New chat and hold the phones back to back: each adds the other, already verified in person. Scanning someone's QR code (New chat → Scan QR code) now does the same, because the QR code in New chat and in Settings holds the full fingerprint. A typed or pasted share code still adds them as "Not verified".
 - **One tap is enough** — With 0.7.10 the first tap often did nothing and a second one was needed: Android checked the other phone as a tag first, and that broke the link. The phones now take turns reading each other directly.
+- **"Your QR code" readable in dark mode** — Its title and the share code under the QR were dark on dark.
 - **Verify by phone from the first-message warning** — The warning before your first message to someone unverified now offers **Verify in person**, **Verify by phone** (it calls them; tap Verify by phone once the call connects) and **Send anyway**.
 
 ## 0.7.10 — 2026-11-23
