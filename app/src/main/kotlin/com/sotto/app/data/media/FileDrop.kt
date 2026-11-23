@@ -27,7 +27,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** A file encrypted for sending: its key, what it's called, and its sizes. */
-data class EncryptedFile(val key: ByteArray, val name: String, val mime: String, val size: Long, val encryptedSize: Long)
+data class EncryptedFile(
+    val key: ByteArray,
+    val name: String,
+    val mime: String,
+    val size: Long,
+    val encryptedSize: Long,
+    val thumbnail: ByteArray? = null,
+    val durationMs: Long = 0,
+)
 
 /**
  * Files sent through the relay's object store (ADR-29). A file is encrypted on the phone
@@ -91,7 +99,47 @@ class FileDrop @Inject constructor(
             tmp.delete()
             throw IOException("Could not store the file")
         }
-        EncryptedFile(key, FileNames.clean(name), mime, size, out.length())
+        val (thumb, ms) = preview(uri, mime)
+        EncryptedFile(key, FileNames.clean(name), mime, size, out.length(), thumb, ms)
+    }
+
+    /** A small JPEG preview of a video (a frame from its first second) or a picture, and a video's length. */
+    private fun preview(uri: Uri, mime: String): Pair<ByteArray?, Long> = runCatching {
+        when {
+            mime.startsWith("video/") -> {
+                val retriever = android.media.MediaMetadataRetriever()
+                try {
+                    retriever.setDataSource(context, uri)
+                    val ms = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    val frame = retriever.getFrameAtTime(minOf(1_000_000L, ms * 500), android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                    Pair(frame?.let { thumbJpeg(it) }, ms)
+                } finally {
+                    runCatching { retriever.release() }
+                }
+            }
+            mime.startsWith("image/") ->
+                Pair(com.sotto.app.media.PhotoShrinker.decodeUpright(context, uri, THUMB_SIDE)?.let { thumbJpeg(it) }, 0L)
+            else -> Pair(null, 0L)
+        }
+    }.getOrDefault(Pair(null, 0L))
+
+    /** [bitmap] at most [THUMB_SIDE] px, as JPEG small enough to travel in the message. */
+    private fun thumbJpeg(bitmap: android.graphics.Bitmap): ByteArray? {
+        val long = maxOf(bitmap.width, bitmap.height)
+        val scaled = if (long > THUMB_SIDE) {
+            val f = THUMB_SIDE.toFloat() / long
+            android.graphics.Bitmap.createScaledBitmap(bitmap, (bitmap.width * f).toInt().coerceAtLeast(1), (bitmap.height * f).toInt().coerceAtLeast(1), true)
+        } else {
+            bitmap
+        }
+        for (quality in intArrayOf(70, 55, 40)) {
+            val bytes = java.io.ByteArrayOutputStream().use { out ->
+                scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality, out)
+                out.toByteArray()
+            }
+            if (bytes.size <= com.sotto.app.domain.model.FilePayload.THUMB_MAX_BYTES) return bytes
+        }
+        return null
     }
 
     /** Encrypts [bytes] (an HD photo, say) into the file [name]; returns its key. */
@@ -321,6 +369,7 @@ class FileDrop @Inject constructor(
 
     companion object {
         const val OPEN_DIR = "open"
+        private const val THUMB_SIDE = 320
         const val OPENED_MAX_AGE_MS = 60 * 60 * 1000L
         private val ID = Regex("^[A-Za-z0-9-]{1,64}$")
     }

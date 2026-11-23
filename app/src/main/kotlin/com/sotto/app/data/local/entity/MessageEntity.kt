@@ -48,6 +48,8 @@ data class MessageEntity(
     val attachmentId: String? = null,
     /** An HD photo's key: its full-size copy goes through the store like a file (attachmentId, mediaSize, mediaState). */
     val hdKey: ByteArray? = null,
+    /** A file's preview (a few KB of JPEG), kept in the (encrypted) database. */
+    val thumbnail: ByteArray? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

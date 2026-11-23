@@ -39,6 +39,8 @@ data class MessageMedia(
     val fileState: FileState? = null,
     /** A photo that also has a full-size copy in the store ([size], [fileState] are that copy's). */
     val hd: Boolean = false,
+    /** A file's small JPEG preview (a video frame, a picture), when it came with one. */
+    val thumbnail: ByteArray? = null,
 )
 
 /** Where a file (MediaKind.FILE) is: on its way up, waiting to be fetched, here, or gone. */
@@ -224,14 +226,41 @@ object FilePayload {
         val size: Long,
         val caption: String,
         val reply: MediaPayload.Reply?,
+        /** A small JPEG preview (a video's frame, a picture shrunk), and a video's length. */
+        val thumbnail: ByteArray? = null,
+        val durationMs: Long = 0,
     ) {
         override fun equals(other: Any?) = other is Decoded && id == other.id && key.contentEquals(other.key) &&
             name == other.name && mime == other.mime && size == other.size && caption == other.caption && reply == other.reply
         override fun hashCode() = id.hashCode()
     }
 
-    fun encode(id: String, key: ByteArray, name: String, mime: String, size: Long, caption: String, reply: MediaPayload.Reply? = null): String =
-        PREFIX + buildJsonObject {
+    /** The largest preview carried: a few KB of JPEG. */
+    const val THUMB_MAX_BYTES = 24_000
+
+    fun encode(
+        id: String,
+        key: ByteArray,
+        name: String,
+        mime: String,
+        size: Long,
+        caption: String,
+        reply: MediaPayload.Reply? = null,
+        thumbnail: ByteArray? = null,
+        durationMs: Long = 0,
+    ): String {
+        val bare = body(id, key, name, mime, size, caption, reply, thumbnail, durationMs, pad = "")
+        // Padded like inline media, so the message's size says little about the name or preview.
+        val bytes = (PREFIX + bare).toByteArray(Charsets.UTF_8).size
+        val target = com.sotto.app.data.media.Padme.padded(bytes.toLong()).toInt()
+        return PREFIX + body(id, key, name, mime, size, caption, reply, thumbnail, durationMs, "0".repeat((target - bytes).coerceAtLeast(0)))
+    }
+
+    private fun body(
+        id: String, key: ByteArray, name: String, mime: String, size: Long, caption: String,
+        reply: MediaPayload.Reply?, thumbnail: ByteArray?, durationMs: Long, pad: String,
+    ): String =
+        buildJsonObject {
             put("id", id)
             put("key", Base64.getEncoder().encodeToString(key))
             put("name", name)
@@ -243,6 +272,9 @@ object FilePayload {
                 put("quote", ReplyPayload.quoteOf(reply.quote))
                 put("mine", reply.mine)
             }
+            if (thumbnail != null && thumbnail.size <= THUMB_MAX_BYTES) put("thumb", Base64.getEncoder().encodeToString(thumbnail))
+            if (durationMs > 0) put("ms", durationMs)
+            put("pad", pad)
         }.toString()
 
     fun isFile(plaintext: String): Boolean = plaintext.startsWith(PREFIX)
@@ -257,7 +289,12 @@ object FilePayload {
             val size = (obj["size"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull?.takeIf { it in 0..MAX_SIZE } ?: return null
             val mime = string("mime")?.lowercase()?.takeIf { MIME.matches(it) } ?: "application/octet-stream"
             val to = string("to")?.takeIf { it.isNotEmpty() && it.length <= 64 }
+            val thumb = string("thumb")?.takeIf { it.length <= (THUMB_MAX_BYTES + 2) / 3 * 4 }
+                ?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
+                ?.takeIf { it.isNotEmpty() && it.size <= THUMB_MAX_BYTES }
             Decoded(
+                thumbnail = thumb,
+                durationMs = ((obj["ms"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull ?: 0L).coerceIn(0L, 48L * 3600 * 1000),
                 id = id,
                 key = key,
                 name = com.sotto.app.data.media.FileNames.clean(string("name").orEmpty()),

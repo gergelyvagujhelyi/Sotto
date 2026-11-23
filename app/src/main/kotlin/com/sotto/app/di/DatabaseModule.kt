@@ -201,6 +201,7 @@ object DatabaseModule {
             db.execSQL("ALTER TABLE messages ADD COLUMN mediaState TEXT")
             db.execSQL("ALTER TABLE messages ADD COLUMN attachmentId TEXT")
             db.execSQL("ALTER TABLE messages ADD COLUMN hdKey BLOB")
+            db.execSQL("ALTER TABLE messages ADD COLUMN thumbnail BLOB")
         }
     }
 

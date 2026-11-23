@@ -137,4 +137,18 @@ class FileDropTest {
         val c = MediaPayload.encode(photo, Random.nextBytes(50_000), "Fika på stugan ☕")
         assertEquals(Padme.padded(c.toByteArray().size.toLong()), c.toByteArray().size.toLong())
     }
+
+    @Test
+    fun `a file message carries its preview and length, and is padded`() {
+        val key = SegmentedCrypto.newKey()
+        val thumb = Random.nextBytes(12_000)
+        val p = FilePayload.encode("0123456789abcdef0123456789abcdef", key, "Stugan.mp4", "video/mp4", 5_000_000, "", thumbnail = thumb, durationMs = 12_000)
+        val d = FilePayload.decode(p)!!
+        assertArrayEquals(thumb, d.thumbnail)
+        assertEquals(12_000L, d.durationMs)
+        assertEquals(Padme.padded(p.toByteArray().size.toLong()), p.toByteArray().size.toLong())
+        // Too big a preview is left out rather than refused.
+        val big = FilePayload.encode("0123456789abcdef0123456789abcdef", key, "a", "video/mp4", 1, "", thumbnail = ByteArray(FilePayload.THUMB_MAX_BYTES + 1))
+        assertNull(FilePayload.decode(big)!!.thumbnail)
+    }
 }

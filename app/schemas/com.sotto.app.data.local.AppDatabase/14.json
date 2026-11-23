@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 14,
-    "identityHash": "8cd800dfc8aeb10efc402ef3c42d6ad5",
+    "identityHash": "c91e0b02027a916a779c313ad61b9700",
     "entities": [
       {
         "tableName": "messages",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderId` TEXT NOT NULL, `recipientId` TEXT NOT NULL, `encryptedBody` BLOB NOT NULL, `nonce` BLOB NOT NULL, `plaintext` TEXT NOT NULL, `state` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `expiresAt` INTEGER, `isOutgoing` INTEGER NOT NULL, `replyToId` TEXT, `replyQuote` TEXT, `replyToOwn` INTEGER NOT NULL, `myReaction` TEXT, `theirReaction` TEXT, `mediaKind` TEXT, `mediaMime` TEXT, `mediaKey` BLOB, `mediaDurationMs` INTEGER NOT NULL, `mediaWidth` INTEGER NOT NULL, `mediaHeight` INTEGER NOT NULL, `mediaName` TEXT, `mediaSize` INTEGER NOT NULL, `mediaState` TEXT, `attachmentId` TEXT, `hdKey` BLOB, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `conversationId` TEXT NOT NULL, `senderId` TEXT NOT NULL, `recipientId` TEXT NOT NULL, `encryptedBody` BLOB NOT NULL, `nonce` BLOB NOT NULL, `plaintext` TEXT NOT NULL, `state` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `expiresAt` INTEGER, `isOutgoing` INTEGER NOT NULL, `replyToId` TEXT, `replyQuote` TEXT, `replyToOwn` INTEGER NOT NULL, `myReaction` TEXT, `theirReaction` TEXT, `mediaKind` TEXT, `mediaMime` TEXT, `mediaKey` BLOB, `mediaDurationMs` INTEGER NOT NULL, `mediaWidth` INTEGER NOT NULL, `mediaHeight` INTEGER NOT NULL, `mediaName` TEXT, `mediaSize` INTEGER NOT NULL, `mediaState` TEXT, `attachmentId` TEXT, `hdKey` BLOB, `thumbnail` BLOB, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -167,6 +167,12 @@
           {
             "fieldPath": "hdKey",
             "columnName": "hdKey",
+            "affinity": "BLOB",
+            "notNull": false
+          },
+          {
+            "fieldPath": "thumbnail",
+            "columnName": "thumbnail",
             "affinity": "BLOB",
             "notNull": false
           }
@@ -406,7 +412,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8cd800dfc8aeb10efc402ef3c42d6ad5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c91e0b02027a916a779c313ad61b9700')"
     ]
   }
 }

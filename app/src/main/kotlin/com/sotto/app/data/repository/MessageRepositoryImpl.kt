@@ -435,13 +435,14 @@ class MessageRepositoryImpl @Inject constructor(
             mediaKind = media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
             mediaMime = media?.mime ?: file?.mime,
             mediaKey = mediaKey ?: file?.key,
-            mediaDurationMs = media?.durationMs ?: 0,
             mediaWidth = media?.width ?: 0,
             mediaHeight = media?.height ?: 0,
             mediaName = file?.name,
             mediaSize = file?.size ?: hdBytes?.size?.toLong() ?: 0,
             mediaState = if (file != null || hdKey != null) com.sotto.app.domain.model.FileState.UPLOADING.wire else null,
             hdKey = hdKey,
+            thumbnail = file?.thumbnail,
+            mediaDurationMs = media?.durationMs ?: file?.durationMs ?: 0,
         )
         try {
             messageDao.insert(entity)
@@ -636,7 +637,7 @@ class MessageRepositoryImpl @Inject constructor(
             val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
             return com.sotto.app.domain.model.FilePayload.encode(
                 id, key, entity.mediaName ?: "file", entity.mediaMime ?: "application/octet-stream",
-                entity.mediaSize, entity.plaintext, reply,
+                entity.mediaSize, entity.plaintext, reply, entity.thumbnail, entity.mediaDurationMs,
             )
         }
         val media = entity.media()
@@ -1016,7 +1017,7 @@ class MessageRepositoryImpl @Inject constructor(
             mediaKind = media?.media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
             mediaMime = media?.media?.mime ?: file?.mime,
             mediaKey = mediaKey ?: file?.key,
-            mediaDurationMs = media?.media?.durationMs ?: 0,
+            mediaDurationMs = media?.media?.durationMs ?: file?.durationMs ?: 0,
             mediaWidth = media?.media?.width ?: 0,
             mediaHeight = media?.media?.height ?: 0,
             mediaName = file?.name,
@@ -1024,6 +1025,7 @@ class MessageRepositoryImpl @Inject constructor(
             mediaState = if (file != null || media?.hd != null) com.sotto.app.domain.model.FileState.REMOTE.wire else null,
             attachmentId = file?.id ?: media?.hd?.id,
             hdKey = media?.hd?.key,
+            thumbnail = file?.thumbnail,
         )
         messageDao.insert(entity)
         receivedIds.add(dto.messageId)
@@ -1484,6 +1486,7 @@ internal fun MessageEntity.media(): MessageMedia? {
         kind, mediaMime.orEmpty(), mediaDurationMs, mediaWidth, mediaHeight,
         name = mediaName.orEmpty(), size = mediaSize, fileState = com.sotto.app.domain.model.FileState.fromWire(mediaState),
         hd = hdKey != null,
+        thumbnail = thumbnail,
     )
 }
 

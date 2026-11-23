@@ -158,6 +158,69 @@ private fun FileCard(message: Message, contentColor: Color) {
         state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
         else -> "Tap to open"
     }
+    val thumb = remember(message.id, media.thumbnail?.size) {
+        media.thumbnail?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
+    }
+    if (thumb != null) {
+        // A video or picture: its preview, with the file's line under it.
+        Box(
+            Modifier
+                .width(FileWidth)
+                .aspectRatio((thumb.width.toFloat() / thumb.height).coerceIn(0.6f, 1.8f))
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
+                    state != com.sotto.app.domain.model.FileState.DOWNLOADING, onClickLabel = status) { host.onFile(message) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(thumb, contentDescription = media.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (progress != null) {
+                    CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(32.dp), strokeWidth = 3.dp, color = Color.White)
+                } else {
+                    Icon(
+                        when {
+                            state == com.sotto.app.domain.model.FileState.REMOTE -> Icons.Rounded.Download
+                            media.mime.startsWith("video/") -> Icons.Rounded.PlayArrow
+                            else -> Icons.Rounded.Image
+                        },
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+            if (media.durationMs > 0) {
+                Text(
+                    clock(media.durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+        }
+        Text(
+            "${media.name.ifBlank { "File" }} · ${byteSize(media.size)} · $status",
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor.copy(alpha = 0.75f),
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier
+                .width(FileWidth)
+                .padding(top = 4.dp, bottom = 2.dp),
+        )
+        return
+    }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
