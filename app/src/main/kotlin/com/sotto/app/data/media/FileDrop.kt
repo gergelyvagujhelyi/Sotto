@@ -78,7 +78,9 @@ class FileDrop @Inject constructor(
         val size = try {
             (resolver.openInputStream(uri) ?: throw IOException("Can't open the file")).use { input ->
                 tmp.outputStream().buffered().use { output ->
-                    SegmentedCrypto.encrypt(LimitedInput(input, maxBytes), output, key)
+                    val source = LimitedInput(input, maxBytes)
+                    SegmentedCrypto.encrypt(PadmeInput(source), output, key)
+                    source.count
                 }
             }
         } catch (e: Exception) {
@@ -98,7 +100,7 @@ class FileDrop @Inject constructor(
         val out = fileFor(name)
         val tmp = File(out.parentFile, out.name + ".tmp")
         try {
-            tmp.outputStream().buffered().use { SegmentedCrypto.encrypt(bytes.inputStream(), it, key) }
+            tmp.outputStream().buffered().use { SegmentedCrypto.encrypt(PadmeInput(bytes.inputStream()), it, key) }
         } catch (e: Exception) {
             tmp.delete()
             throw e
@@ -110,12 +112,12 @@ class FileDrop @Inject constructor(
         key
     }
 
-    /** The file [name] decrypted into memory (an HD photo); null when it isn't here or doesn't decrypt. */
-    suspend fun decryptToMemory(name: String, key: ByteArray): ByteArray? = withContext(Dispatchers.IO) {
+    /** The file [name] decrypted into memory (an HD photo), its padding cut off at [size]; null when it isn't here or doesn't decrypt. */
+    suspend fun decryptToMemory(name: String, key: ByteArray, size: Long): ByteArray? = withContext(Dispatchers.IO) {
         if (!hasFile(name)) return@withContext null
         runCatching {
             java.io.ByteArrayOutputStream().also { out ->
-                fileFor(name).inputStream().buffered().use { SegmentedCrypto.decrypt(it, out, key) }
+                fileFor(name).inputStream().buffered().use { SegmentedCrypto.decrypt(it, TruncatingOutput(out, size), key) }
             }.toByteArray()
         }.getOrNull()
     }
@@ -181,12 +183,12 @@ class FileDrop @Inject constructor(
      * Decrypts this message's file into the cache under its own name, for another app to
      * open it; the copy is removed by [sweepOpened] after a while.
      */
-    suspend fun decryptForOpening(messageId: String, key: ByteArray, name: String): File = withContext(Dispatchers.IO) {
+    suspend fun decryptForOpening(messageId: String, key: ByteArray, name: String, size: Long): File = withContext(Dispatchers.IO) {
         val dir = File(openDir, UUID.randomUUID().toString()).apply { mkdirs() }
         val out = File(dir, FileNames.clean(name))
         try {
             fileFor(messageId).inputStream().buffered().use { input ->
-                out.outputStream().buffered().use { output -> SegmentedCrypto.decrypt(input, output, key) }
+                out.outputStream().buffered().use { output -> SegmentedCrypto.decrypt(input, TruncatingOutput(output, size), key) }
             }
         } catch (e: Exception) {
             dir.deleteRecursively()
@@ -237,7 +239,9 @@ private object NullOutput : OutputStream() {
 
 /** Fails once more than [max] bytes come through. */
 private class LimitedInput(private val input: InputStream, private val max: Long) : InputStream() {
-    private var count = 0L
+    /** How many bytes came through. */
+    var count = 0L
+        private set
     override fun read(): Int {
         val b = input.read()
         if (b >= 0 && ++count > max) throw FileTooLargeException(max)
@@ -254,6 +258,70 @@ private class LimitedInput(private val input: InputStream, private val max: Long
     }
 
     override fun close() = input.close()
+}
+
+/**
+ * Padmé (from the PURB paper): the length a file is padded to so its size gives little
+ * away. Sizes are rounded up to a number whose low bits are zero, keeping only about
+ * log2(log2(length)) significant bits; the overhead is at most about 12%, and less for
+ * larger files.
+ */
+object Padme {
+    fun padded(length: Long): Long {
+        if (length < 2) return length
+        val e = 63 - java.lang.Long.numberOfLeadingZeros(length)
+        val s = 64 - java.lang.Long.numberOfLeadingZeros(e.toLong())
+        val lastBits = e - s
+        if (lastBits <= 0) return length
+        val mask = (1L shl lastBits) - 1
+        return (length + mask) and mask.inv()
+    }
+}
+
+/** [input], then zeros up to its Padmé length (counted once [input] ends). */
+internal class PadmeInput(private val input: InputStream) : InputStream() {
+    private var count = 0L
+    private var padLeft = -1L
+
+    override fun read(): Int {
+        val one = ByteArray(1)
+        return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (padLeft < 0) {
+            val n = input.read(b, off, len)
+            if (n >= 0) {
+                count += n
+                return n
+            }
+            padLeft = Padme.padded(count) - count
+        }
+        if (padLeft == 0L) return -1
+        val n = minOf(len.toLong(), padLeft).toInt()
+        java.util.Arrays.fill(b, off, off + n, 0)
+        padLeft -= n
+        return n
+    }
+
+    override fun close() = input.close()
+}
+
+/** Passes the first [limit] bytes on to [out] and drops the rest (a file's padding). */
+internal class TruncatingOutput(private val out: OutputStream, private val limit: Long) : OutputStream() {
+    private var written = 0L
+    override fun write(b: Int) {
+        if (written < limit) out.write(b)
+        written++
+    }
+
+    override fun write(b: ByteArray, off: Int, len: Int) {
+        val keep = (limit - written).coerceIn(0, len.toLong()).toInt()
+        if (keep > 0) out.write(b, off, keep)
+        written += len
+    }
+
+    override fun flush() = out.flush()
 }
 
 /** File names from other phones are shown and used to save files, so they're tidied first. */

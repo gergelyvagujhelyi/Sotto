@@ -117,7 +117,16 @@ object MediaPayload {
 
     fun encode(media: MessageMedia, bytes: ByteArray, caption: String, reply: Reply? = null, hd: Hd? = null): String {
         require(bytes.size <= MAX_BYTES) { "Media too large: ${bytes.size} bytes" }
-        return PREFIX + buildJsonObject {
+        val bare = body(media, bytes, caption, reply, hd, pad = "")
+        // Padded (Padmé) so a message's size says little about how long the voice message
+        // is or how big the photo; the filler is plain ASCII, one byte per character.
+        val bareBytes = (PREFIX + bare).toByteArray(Charsets.UTF_8).size
+        val target = com.sotto.app.data.media.Padme.padded(bareBytes.toLong()).toInt()
+        return PREFIX + body(media, bytes, caption, reply, hd, pad = "0".repeat((target - bareBytes).coerceAtLeast(0)))
+    }
+
+    private fun body(media: MessageMedia, bytes: ByteArray, caption: String, reply: Reply?, hd: Hd?, pad: String): String =
+        buildJsonObject {
             put("kind", media.kind.wire)
             put("mime", media.mime)
             if (media.durationMs > 0) put("ms", media.durationMs)
@@ -137,8 +146,8 @@ object MediaPayload {
                     put("size", hd.size)
                 })
             }
+            put("pad", pad)
         }.toString()
-    }
 
     fun isMedia(plaintext: String): Boolean = plaintext.startsWith(PREFIX)
 

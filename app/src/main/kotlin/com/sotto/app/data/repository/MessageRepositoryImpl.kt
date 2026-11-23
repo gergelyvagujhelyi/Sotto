@@ -241,7 +241,7 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun loadHd(messageId: String): ByteArray? {
         val entity = messageDao.getById(messageId) ?: return null
         val key = entity.hdKey ?: return null
-        return fileDrop.decryptToMemory(storeName(entity), key)
+        return fileDrop.decryptToMemory(storeName(entity), key, entity.mediaSize)
     }
 
     /**
@@ -293,7 +293,8 @@ class MessageRepositoryImpl @Inject constructor(
             return@withContext
         }
         val download = apiService.attachmentDownload(id)
-        val expected = com.sotto.app.data.media.SegmentedCrypto.encryptedSize(entity.mediaSize)
+        // The size the sender declared, padded the way it pads (Padmé), then encrypted.
+        val expected = com.sotto.app.data.media.SegmentedCrypto.encryptedSize(com.sotto.app.data.media.Padme.padded(entity.mediaSize))
         if (download == null) {
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.GONE.wire)
             return@withContext
@@ -319,7 +320,7 @@ class MessageRepositoryImpl @Inject constructor(
         val entity = messageDao.getById(messageId) ?: return null
         if (entity.mediaKind != MediaKind.FILE.wire || !fileDrop.hasFile(messageId)) return null
         val key = entity.mediaKey ?: return null
-        return fileDrop.decryptForOpening(messageId, key, entity.mediaName ?: "file")
+        return fileDrop.decryptForOpening(messageId, key, entity.mediaName ?: "file", entity.mediaSize)
     }
 
     private suspend fun sendMessageInternal(

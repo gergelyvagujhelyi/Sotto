@@ -8,6 +8,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -97,5 +98,43 @@ class FileDropTest {
         assertEquals("📎 Semester.mp4", previewText(MediaKind.FILE, "", "Semester.mp4"))
         assertEquals("📎 Semester.mp4: Från stugan", previewText(MediaKind.FILE, "Från stugan", "Semester.mp4"))
         assertEquals("📎 File", previewText(MediaKind.FILE, ""))
+    }
+
+    @Test
+    fun `Padme rounds sizes up by at most about 12 percent`() {
+        assertEquals(1024L, Padme.padded(1000))
+        assertEquals(0L, Padme.padded(0))
+        assertEquals(7L, Padme.padded(7))
+        for (n in listOf(100L, 4_095L, 65_537L, 1_000_000L, 7_546_436L, 104_000_000L)) {
+            val p = Padme.padded(n)
+            assertTrue("$n -> $p", p >= n && p <= n * 1.12 + 1)
+            assertEquals("idempotent at $n", p, Padme.padded(p))
+        }
+        // Nearby sizes land on the same padded size: the store can't tell them apart.
+        assertEquals(Padme.padded(7_546_436), Padme.padded(7_500_000))
+    }
+
+    @Test
+    fun `a padded file decrypts back to its real size`() {
+        val key = SegmentedCrypto.newKey()
+        val plain = Random.nextBytes(150_001)
+        val sealed = ByteArrayOutputStream().also { SegmentedCrypto.encrypt(PadmeInput(ByteArrayInputStream(plain)), it, key) }.toByteArray()
+        assertEquals(SegmentedCrypto.encryptedSize(Padme.padded(plain.size.toLong())), sealed.size.toLong())
+        val out = ByteArrayOutputStream()
+        SegmentedCrypto.decrypt(ByteArrayInputStream(sealed), TruncatingOutput(out, plain.size.toLong()), key)
+        assertArrayEquals(plain, out.toByteArray())
+    }
+
+    @Test
+    fun `inline media is padded too, and still decodes`() {
+        val photo = com.sotto.app.domain.model.MessageMedia(MediaKind.PHOTO, "image/jpeg", width = 10, height = 10)
+        val a = MediaPayload.encode(photo, Random.nextBytes(50_000), "Hej")
+        val b = MediaPayload.encode(photo, Random.nextBytes(50_500), "Hej")
+        assertEquals(a.toByteArray().size, b.toByteArray().size)
+        assertEquals(Padme.padded(a.toByteArray().size.toLong()), a.toByteArray().size.toLong())
+        assertEquals("Hej", MediaPayload.decode(a)!!.caption)
+        // Non-ASCII captions are counted in bytes.
+        val c = MediaPayload.encode(photo, Random.nextBytes(50_000), "Fika på stugan ☕")
+        assertEquals(Padme.padded(c.toByteArray().size.toLong()), c.toByteArray().size.toLong())
     }
 }
