@@ -4,6 +4,12 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.8 — 2026-11-23
+
+Update both phones: a file's delivered ticks need the receiver on 0.7.8 too.
+
 - **Photo preview: Send always reachable** — The preview before sending a photo is now drawn in the app's own window instead of a separate one, so its caption and Send button stay above the navigation bar and the keyboard on every phone. On some phones they sat too low to tap.
 - **React to photos, videos and voice messages** — Holding a photo, a file's preview or a voice message now opens the reactions, and double-tapping a photo or file hearts it, like the rest of the bubble. Before, only the thin edge of the bubble around them reacted.
 - **Open your own file while it's sending** — A video or file you sent opens with a tap at once, also while it's still "Sending directly…" or uploading. Before, its preview didn't react until the transfer was done.
