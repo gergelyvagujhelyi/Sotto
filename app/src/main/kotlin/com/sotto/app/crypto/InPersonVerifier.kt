@@ -26,6 +26,12 @@ sealed interface InPersonResult {
      * or not signed by them. A picture of their code, not their phone: not verified in person.
      */
     data object NotLive : InPersonResult
+
+    /**
+     * A QR code without the live part: their Sotto is older than 0.7.11. Their keys match,
+     * but a plain code can't prove it's their phone: not verified in person.
+     */
+    data object OlderApp : InPersonResult
 }
 
 /**
@@ -49,11 +55,19 @@ class InPersonVerifier @Inject constructor(
      * This phone's live QR code ([InPersonCode], version 2): made for [nowMs] and signed with
      * this account's Ed25519 key, so a scanner can tell it's fresh. Shown anew every second.
      */
-    fun myLiveCode(nowMs: Long = System.currentTimeMillis()): InPersonCode? {
-        val code = myCode() ?: return null
-        val at = nowMs / 1000
-        val payload = InPersonCode.livePayload(code.userId, code.fingerprint, at)
-        return code.copy(issuedAt = at, signature = keyManager.sign(payload))
+    fun myLiveCode(nowMs: Long = System.currentTimeMillis()): InPersonCode? = try {
+        val code = myCode()
+        if (code == null) {
+            null
+        } else {
+            val at = nowMs / 1000
+            val payload = InPersonCode.livePayload(code.userId, code.fingerprint, at)
+            code.copy(issuedAt = at, signature = keyManager.sign(payload))
+        }
+    } catch (e: Exception) {
+        // No signing key right now (a key change or a wipe going on): no QR code this second,
+        // rather than a crash in the screen that shows it.
+        null
     }
 
     /** This phone's own code, to show or send; null before the account exists. */
@@ -99,6 +113,7 @@ class InPersonVerifier @Inject constructor(
             }
         }
         if (pinned != code.fingerprintHex) return InPersonResult.KeysDiffer
+        if (requireLive && !code.isLive) return InPersonResult.OlderApp
         if (requireLive && !isLive(code, contact.publicSigningKey, nowMs)) return InPersonResult.NotLive
         return if (contactDao.markVerifiedInPerson(contactId, code.fingerprintHex) > 0) {
             InPersonResult.Verified

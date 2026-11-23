@@ -196,9 +196,13 @@ fun AddContactContent(
         onDispose { nfcLifecycle.lifecycle.removeObserver(observer) }
     }
     var tapping by rememberSaveable { mutableStateOf(false) }
-    // A share code arriving from an invite link opens the field with it.
+    // A tap that ended in an error: close the dialog, so the error under it shows.
+    LaunchedEffect(state) { if (state is AddContactState.Error) tapping = false }
+    // A share code arriving (from an invite link) opens the field with it, once; the user can
+    // still close it afterwards.
     var entering by rememberSaveable { mutableStateOf(false) }
-    if (shareCodeInput.isNotBlank()) entering = true
+    val hasCode = shareCodeInput.isNotBlank()
+    LaunchedEffect(hasCode) { if (hasCode) entering = true }
     val canSubmit = shareCodeInput.isNotBlank() && state !is AddContactState.Loading
     var showMyQr by rememberSaveable { mutableStateOf(false) }
     // Gives the bar its solid colour once content scrolls under it.

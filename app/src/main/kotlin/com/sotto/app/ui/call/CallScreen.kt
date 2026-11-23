@@ -268,7 +268,7 @@ fun CallContent(
     onMinimize: (() -> Unit)? = null,
     onSelectAudioRoute: (AudioRoute) -> Unit = {},
     onToggleLouder: () -> Unit = {},
-    /** Verify by phone: compare six digits with the other person (ADR-31). */
+    /** Verify by phone: compare seven emoji with the other person (ADR-31). */
     onVerify: () -> Unit = {},
     onVerifyAnswer: (matches: Boolean) -> Unit = {},
     onVerifyDismiss: () -> Unit = {},
@@ -897,7 +897,7 @@ private fun statusText(
 }
 
 
-/** Verify by phone: comparing six digits with the other person (CallVerification, ADR-31). */
+/** Verify by phone: comparing seven emoji with the other person (CallVerification, ADR-31). */
 @Composable
 private fun CallVerifyDialog(
     verify: com.sotto.app.domain.model.CallVerifyState,

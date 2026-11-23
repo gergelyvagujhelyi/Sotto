@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -77,28 +78,45 @@ class AddContactViewModel @Inject constructor(
             }
             val shareCode = com.sotto.app.crypto.KeyFingerprint.shareCode(code.fingerprint)
             try {
-                val existed = identityRepository.getContact(code.userId) != null
+                // Who was a contact before: whatever this adds that wasn't is taken back on failure.
+                val before = identityRepository.getContacts().first().map { it.userId }.toSet()
                 val contact = addContact(shareCode).getOrThrow()
-                // A QR code must be live (it changes every second); NFC reaches only a phone held close.
-                val result = inPersonVerifier.verify(contact.userId, code, requireLive = viaQr)
-                if (result == com.sotto.app.crypto.InPersonResult.NotLive) {
-                    // Their keys, but a picture of their code: added like a share code, not verified.
-                    val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
-                    if (!existed) sendMyName(contact.userId)
-                    _state.value = AddContactState.Success(contact, conversationId)
-                    return@launch
-                }
-                if (result != com.sotto.app.crypto.InPersonResult.Verified) {
-                    // The relay answered with keys other than the ones on their phone: don't keep them.
-                    if (!existed) conversationRepository.removeContact(contact.userId)
+                val added = contact.userId !in before
+                if (contact.userId != code.userId) {
+                    // The code names one account and carries another's fingerprint: never keep either.
+                    if (added) conversationRepository.removeContact(contact.userId)
                     _state.value = AddContactState.Error(
-                        "The keys the relay gave for this person don't match their phone. Don't add them this way.",
+                        "That code doesn't add up: its account and its keys don't belong together. Don't add them this way.",
                     )
                     return@launch
                 }
-                val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
-                if (!existed) sendMyName(contact.userId)
-                _state.value = AddContactState.Success(contact.copy(verifiedInPerson = true), conversationId)
+                // A QR code must be live (it changes every second); NFC reaches only a phone held close.
+                val result = inPersonVerifier.verify(contact.userId, code, requireLive = viaQr)
+                when (result) {
+                    com.sotto.app.crypto.InPersonResult.Verified -> {
+                        val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+                        if (added) sendMyName(contact.userId)
+                        _state.value = AddContactState.Success(contact.copy(verifiedInPerson = true), conversationId)
+                    }
+                    com.sotto.app.crypto.InPersonResult.NotLive,
+                    com.sotto.app.crypto.InPersonResult.OlderApp,
+                    com.sotto.app.crypto.InPersonResult.CantCheck -> {
+                        // Their keys (the share code in the fingerprint matched), but not proven in
+                        // person: a picture of their code, an older Sotto, or no connection to check
+                        // a key change. Added like a share code, as not verified.
+                        val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+                        if (added) sendMyName(contact.userId)
+                        _state.value = AddContactState.Success(contact, conversationId)
+                    }
+                    else -> {
+                        // KeysDiffer, OtherAccount, NotAContact: the relay's keys aren't the ones on
+                        // their phone. Don't keep what this added.
+                        if (added) conversationRepository.removeContact(contact.userId)
+                        _state.value = AddContactState.Error(
+                            "The keys the relay gave for this person don't match their phone. Don't add them this way.",
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 android.util.Log.e("AddContactVM", "Failed to add contact in person", e)
                 _state.value = AddContactState.Error("Couldn't add them. Check your connection and try again.")

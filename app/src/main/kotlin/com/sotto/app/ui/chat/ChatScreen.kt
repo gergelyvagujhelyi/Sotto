@@ -284,12 +284,16 @@ fun ChatScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     // Request mic permission before navigating to CallScreen for outgoing calls
+    // A call from the warning's "Verify by phone": arm the check only once the call is placed.
+    var verifyAfterPermission by remember { mutableStateOf(false) }
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
+            if (verifyAfterPermission) com.sotto.app.call.VerifyOnConnect.arm(viewModel.contactId)
             onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: "Unknown")
         }
+        verifyAfterPermission = false
     }
 
     // Only a resumed (visible) chat suppresses notifications / unread for its messages.
@@ -328,12 +332,15 @@ fun ChatScreen(
     val isResumed = { lifecycleOwner.lifecycle.currentState == Lifecycle.State.RESUMED }
 
     // Starts a call to this contact, asking for the microphone first when needed.
-    val startCall: () -> Unit = {
+    // [verify]: open the code check by itself once the call connects (VerifyOnConnect).
+    val startCall: (verify: Boolean) -> Unit = { verify ->
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             == PackageManager.PERMISSION_GRANTED
         ) {
+            if (verify) com.sotto.app.call.VerifyOnConnect.arm(viewModel.contactId)
             onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: "Unknown")
         } else {
+            verifyAfterPermission = verify
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
@@ -355,8 +362,7 @@ fun ChatScreen(
                 // A call to them, and the code check opens by itself once it connects.
                 heldSend = null
                 held.cancel()
-                com.sotto.app.call.VerifyOnConnect.peerId = viewModel.contactId
-                startCall()
+                startCall(true)
             },
             onDismiss = {
                 heldSend = null
@@ -380,7 +386,7 @@ fun ChatScreen(
         isBlocked = isBlocked,
         snackbarHostState = snackbarHostState,
         onBack = { if (isResumed()) onBack() },
-        onCall = { if (isResumed()) startCall() },
+        onCall = { if (isResumed()) startCall(false) },
         onComposerChange = viewModel::updateComposer,
         onSend = { gated { viewModel.send() } },
         onRetry = viewModel::retrySend,

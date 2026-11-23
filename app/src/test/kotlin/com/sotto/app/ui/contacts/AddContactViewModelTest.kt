@@ -158,4 +158,42 @@ class AddContactViewModelTest {
         assertEquals(false, state.contact.verifiedInPerson)
         coVerify(exactly = 0) { conversations.removeContact(any()) }
     }
+
+    @Test
+    fun `a code whose account and keys belong to different people adds nobody`() {
+        val mallory = them.copy(userId = "cccccccccccccccc")
+        coEvery { addContact(theirShareCode) } returns Result.success(mallory)
+        coEvery { conversations.removeContact(mallory.userId) } just Runs
+
+        val vm = viewModel()
+        vm.addInPerson(theirCode, viaQr = false)
+
+        assertTrue(vm.state.value is AddContactState.Error)
+        coVerify(exactly = 1) { conversations.removeContact(mallory.userId) }
+    }
+
+    @Test
+    fun `a contact that was already there is never removed by a failed in-person add`() {
+        every { identities.getContacts() } returns flowOf(listOf(them))
+        coEvery { addContact(theirShareCode) } returns Result.success(them)
+        coEvery { verifier.verify(theirCode.userId, theirCode, any(), any()) } returns com.sotto.app.crypto.InPersonResult.KeysDiffer
+
+        val vm = viewModel()
+        vm.addInPerson(theirCode)
+
+        assertTrue(vm.state.value is AddContactState.Error)
+        coVerify(exactly = 0) { conversations.removeContact(any()) }
+    }
+
+    @Test
+    fun `an older Sotto's QR code adds them, not verified`() {
+        coEvery { addContact(theirShareCode) } returns Result.success(them)
+        coEvery { verifier.verify(theirCode.userId, theirCode, true, any()) } returns com.sotto.app.crypto.InPersonResult.OlderApp
+        coEvery { conversations.getOrCreateConversation(theirCode.userId) } returns "conv-1"
+
+        val vm = viewModel()
+        vm.addInPerson(theirCode, viaQr = true)
+
+        assertEquals(false, (vm.state.value as AddContactState.Success).contact.verifiedInPerson)
+    }
 }

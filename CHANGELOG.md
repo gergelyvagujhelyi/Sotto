@@ -10,7 +10,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## 0.7.11 — 2026-11-23
 
-Update both phones: with 0.7.10 the code for verifying by phone never appeared.
+Update both phones: with 0.7.10 the code for verifying by phone never appeared, and 0.7.10 can't read 0.7.11's QR codes (which now change every second).
 
 - **Verify by phone works** — In 0.7.10 the code never appeared: each phone sent its half, but the other phone's connection to the relay dropped it unread, so both kept waiting. A test now checks that the app takes every kind of call signal the relay forwards. Update both phones.
 - **"Not verified"** — A contact you haven't checked yet now says "Not verified" instead of "Not verified in person", which read as if some other check had happened.

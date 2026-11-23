@@ -145,10 +145,10 @@ class InPersonVerifierTest {
     }
 
     @Test
-    fun `a QR code without a time and signature never counts as in person`() {
+    fun `a QR code without a time and signature, from an older Sotto, never counts as in person`() {
         coEvery { contactDao.getByUserId(contactId) } returns contact(pinned)
 
-        assertEquals(InPersonResult.NotLive, verifyQr(InPersonCode(contactId, pinned)))
+        assertEquals(InPersonResult.OlderApp, verifyQr(InPersonCode(contactId, pinned)))
     }
 
     @Test

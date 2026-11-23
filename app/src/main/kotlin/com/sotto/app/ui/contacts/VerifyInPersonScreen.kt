@@ -338,6 +338,13 @@ private fun OutcomeDialog(outcome: VerifyOutcome, name: String, onDismiss: () ->
             "It's the right person, but the code is a picture of their screen, not the code on their " +
                 "phone right now (it changes every second). Scan the code on their phone while you're together.",
         )
+        InPersonResult.OlderApp -> Quad(
+            Icons.Rounded.GppMaybe,
+            Aurora.colors.warning,
+            "Their Sotto is older",
+            "Their keys match, but their Sotto doesn't make the live code yet, so a scan can't prove " +
+                "it's their phone. Update both phones to the latest Sotto, or hold the phones together.",
+        )
         InPersonResult.NotAContact -> Quad(
             Icons.Rounded.GppMaybe,
             Aurora.colors.warning,

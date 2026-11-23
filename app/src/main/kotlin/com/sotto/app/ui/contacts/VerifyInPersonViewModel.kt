@@ -71,12 +71,12 @@ class VerifyInPersonViewModel @Inject constructor(
         InPersonCode.parse(text)?.let { check(it, viaNfc = false) }
     }
 
-    /** NFC codes need no liveness (NFC reaches only a phone held against this one); QR codes do. */
 
     fun dismissOutcome() {
         _outcome.value = null
     }
 
+    /** NFC codes need no liveness (NFC reaches only a phone held against this one); QR codes do. */
     private fun check(code: InPersonCode, viaNfc: Boolean) {
         viewModelScope.launch {
             _checking.value = true
