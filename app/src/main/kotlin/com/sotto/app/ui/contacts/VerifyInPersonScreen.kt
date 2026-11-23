@@ -112,9 +112,13 @@ fun VerifyInPersonScreen(
     // The QR code changes every second while it's on screen, as BankID's does.
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                viewModel.refreshQr()
-                kotlinx.coroutines.delay(1000)
+            try {
+                while (true) {
+                    viewModel.refreshQr()
+                    kotlinx.coroutines.delay(1000)
+                }
+            } finally {
+                com.sotto.app.ui.contacts.LiveQrWatch.hidden()
             }
         }
     }

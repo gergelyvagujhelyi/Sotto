@@ -118,21 +118,31 @@ fun AddContactScreen(
     var qrTab by rememberSaveable { mutableStateOf<QrTab?>(null) }
     // They scanned ours first and their request came in: this scan answers theirs.
     var scanBack by rememberSaveable { mutableStateOf(false) }
-    // Just verified them from their code: "Your turn" on My code, then the chat.
-    var yourTurn by remember { mutableStateOf<AddContactState.Success?>(null) }
+    // Just verified them from their code: "Your turn" on My code, then the chat. Kept as
+    // plain strings, so it survives a rotation like the tab does.
+    var yourTurnName by rememberSaveable { mutableStateOf<String?>(null) }
+    var yourTurnChat by rememberSaveable { mutableStateOf<String?>(null) }
+    var yourTurnContact by rememberSaveable { mutableStateOf<String?>(null) }
     var liveQr by remember { mutableStateOf<String?>(null) }
     val showingMine = qrTab == QrTab.MINE
     // Our live code changes every second while it's on screen (BankID-style).
     LaunchedEffect(showingMine) {
-        while (showingMine) {
-            liveQr = viewModel.liveQr()
-            kotlinx.coroutines.delay(1000)
+        if (!showingMine) return@LaunchedEffect
+        try {
+            while (true) {
+                liveQr = viewModel.liveQr()
+                kotlinx.coroutines.delay(1000)
+            }
+        } finally {
+            LiveQrWatch.hidden()
         }
     }
     fun closeQr() {
         qrTab = null
         scanBack = false
-        yourTurn = null
+        yourTurnName = null
+        yourTurnChat = null
+        yourTurnContact = null
     }
 
     LaunchedEffect(state) {
@@ -140,7 +150,9 @@ fun AddContactScreen(
             is AddContactState.Success -> {
                 if (s.swapRoles) {
                     // Their side is verified here; now they scan ours.
-                    yourTurn = s
+                    yourTurnName = s.contact.displayName
+                    yourTurnChat = s.conversationId
+                    yourTurnContact = s.contact.userId
                     qrTab = QrTab.MINE
                 } else {
                     closeQr()
@@ -159,7 +171,9 @@ fun AddContactScreen(
         if (scanBackRequest) {
             onScanBackRequestHandled()
             scanBack = true
-            yourTurn = null
+            yourTurnName = null
+            yourTurnChat = null
+            yourTurnContact = null
             qrTab = QrTab.SCAN
         }
     }
@@ -194,14 +208,15 @@ fun AddContactScreen(
             onTab = { qrTab = it },
             liveQr = liveQr,
             myShareCode = myShareCode,
-            yourTurnFor = yourTurn?.contact?.displayName,
+            yourTurnFor = yourTurnName,
             scanBack = scanBack,
             onScanned = onScannedCode,
             onClose = { closeQr() },
             onDone = {
-                val done = yourTurn
+                val chat = yourTurnChat
+                val contact = yourTurnContact
                 closeQr()
-                if (done != null) onContactAdded(done.conversationId, done.contact.userId)
+                if (chat != null && contact != null) onContactAdded(chat, contact)
             },
         )
         return

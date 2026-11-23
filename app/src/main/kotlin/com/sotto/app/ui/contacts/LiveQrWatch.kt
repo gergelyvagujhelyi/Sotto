@@ -19,10 +19,14 @@ object LiveQrWatch {
     /** New chat's SavedStateHandle key: open Scan to answer their scan (QrExchangeScreen). */
     const val SCAN_BACK_REQUEST_KEY = "scan_back_request"
 
-    const val WINDOW_MS = 2 * 60_000L
+    /** How long after the code left the screen a request still counts (it's on its way). */
+    const val GRACE_MS = 15_000L
 
     @Volatile
-    private var shownAt = 0L
+    private var visible = false
+
+    @Volatile
+    private var hiddenAt = 0L
 
     private val _openRequest = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 4)
 
@@ -30,14 +34,23 @@ object LiveQrWatch {
     val openRequest: SharedFlow<Pair<String, String>> = _openRequest.asSharedFlow()
 
     /** A live QR code of ours is on screen right now. */
-    fun shown(nowMs: Long = System.currentTimeMillis()) {
-        shownAt = nowMs
+    fun shown() {
+        visible = true
     }
 
-    /** A new message request arrived: open it if our QR code was on screen just before. */
+    /**
+     * Our code left the screen. A request still counts for [GRACE_MS] (it may be on its way),
+     * not longer: after that, a stranger's request mustn't pull the user into the scanner.
+     */
+    fun hidden(nowMs: Long = System.currentTimeMillis()) {
+        if (visible) hiddenAt = nowMs
+        visible = false
+    }
+
+    /** A new message request arrived: open the scanner if our QR code is (or just was) on screen. */
     fun newRequest(conversationId: String, contactId: String, nowMs: Long = System.currentTimeMillis()): Boolean {
-        val at = shownAt
-        if (at == 0L || nowMs - at > WINDOW_MS) return false
+        val recent = visible || (hiddenAt != 0L && nowMs - hiddenAt <= GRACE_MS)
+        if (!recent) return false
         return _openRequest.tryEmit(conversationId to contactId)
     }
 }

@@ -128,9 +128,13 @@ fun SettingsScreen(
     val qrLifecycle = LocalLifecycleOwner.current
     LaunchedEffect(qrLifecycle) {
         qrLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
-            while (true) {
-                liveQr = viewModel.liveQr()
-                kotlinx.coroutines.delay(1000)
+            try {
+                while (true) {
+                    liveQr = viewModel.liveQr()
+                    kotlinx.coroutines.delay(1000)
+                }
+            } finally {
+                com.sotto.app.ui.contacts.LiveQrWatch.hidden()
             }
         }
     }
