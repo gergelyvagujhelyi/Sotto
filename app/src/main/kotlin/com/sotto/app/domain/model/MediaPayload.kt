@@ -47,8 +47,10 @@ data class MessageMedia(
 enum class FileState(val wire: String) {
     /** Sender: encrypting and uploading. */
     UPLOADING("uploading"),
-    /** Sender: on the relay's store (or already fetched); this phone has its own copy. */
+    /** Sender: on the relay's store, waiting for the contact to download it; this phone has its own copy. */
     SENT("sent"),
+    /** Sender: on the contact's phone (it came directly, or they downloaded it). */
+    RECEIVED("received"),
     /** Receiver: on the relay's store, not downloaded yet. */
     REMOTE("remote"),
     /** Receiver: a download is queued or under way (a background job). */
@@ -61,7 +63,12 @@ enum class FileState(val wire: String) {
     /** On this phone, ready to open. */
     READY("ready"),
     /** Receiver: the store no longer has it (expired or deleted) and it was never downloaded. */
-    GONE("gone");
+    GONE("gone"),
+    /**
+     * Sender: the message went out offering the file directly, that didn't happen, and the
+     * store refused it for good. The message itself stays delivered; a tap tries the file again.
+     */
+    UNSENT("unsent");
 
     companion object {
         fun fromWire(name: String?): FileState? = entries.firstOrNull { it.wire == name }
@@ -359,8 +366,11 @@ object DirectPayload {
 object FileUpdatePayload {
     private const val PREFIX = "\u0001sotto/file-update/v1:"
     private val ID = Regex("^[0-9a-f]{32}$")
-    /** [gone]: the sender couldn't put it anywhere; it won't come (unless they try again). */
-    data class Decoded(val file: String, val id: String, val gone: Boolean = false)
+    /**
+     * [gone]: the sender couldn't put it anywhere; it won't come (unless they try again).
+     * [got]: the other way round, from the receiver: the file is on their phone now.
+     */
+    data class Decoded(val file: String, val id: String, val gone: Boolean = false, val got: Boolean = false)
 
     fun encode(file: String, id: String): String = PREFIX + buildJsonObject {
         put("file", file)
@@ -372,6 +382,12 @@ object FileUpdatePayload {
         put("gone", true)
     }.toString()
 
+    /** From the receiver, naming the file by its message id there: it has the file now. */
+    fun encodeGot(file: String): String = PREFIX + buildJsonObject {
+        put("file", file)
+        put("got", true)
+    }.toString()
+
     fun isUpdate(plaintext: String) = plaintext.startsWith(PREFIX)
 
     fun decode(plaintext: String): Decoded? {
@@ -381,6 +397,7 @@ object FileUpdatePayload {
             fun string(key: String) = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
             val file = string("file")?.takeIf { it.isNotEmpty() && it.length <= 64 } ?: return null
             if ((obj["gone"] as? JsonPrimitive)?.booleanOrNull == true) return Decoded(file, "", gone = true)
+            if ((obj["got"] as? JsonPrimitive)?.booleanOrNull == true) return Decoded(file, "", got = true)
             Decoded(file = file, id = string("id")?.takeIf { ID.matches(it) } ?: return null)
         }.getOrNull()
     }

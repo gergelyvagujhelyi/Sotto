@@ -319,6 +319,63 @@ class MessageSigningAndResetTest {
         coVerify { messageDao.updateState("f2", MessageState.FAILED.name) }
     }
 
+    @Test
+    fun `a delivered file the store refused shows as not sent and a tap retries only the file`() = runTest {
+        val file = MessageEntity(
+            id = "f3", conversationId = "c", senderId = "me", recipientId = "peer",
+            encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "", state = MessageState.DELIVERED.name,
+            timestamp = 1, expiresAt = null, isOutgoing = true, mediaKind = "file", mediaState = "uploading",
+        )
+        every { keyManager.getUserId() } returns "me"
+        coEvery { messageDao.getById("f3") } returns file
+
+        repo.markSendFailed("f3")
+
+        // The message stays delivered (a resend would be dropped as a copy); the file is marked.
+        coVerify(exactly = 0) { messageDao.updateState("f3", any()) }
+        coVerify { messageDao.setMediaState("f3", "unsent") }
+
+        coEvery { messageDao.getById("f3") } returns file.copy(mediaState = "unsent")
+        repo.retryFile("f3")
+
+        coVerify { messageDao.setMediaState("f3", "uploading") }
+        coVerify { transfers.upload("f3") }
+        coVerify(exactly = 0) { apiService.sendMessage(match { it.clientMessageId == "f3" }) }
+    }
+
+    @Test
+    fun `a file whose message never went out isn't treated as only the file missing`() = runTest {
+        val file = MessageEntity(
+            id = "f5", conversationId = "c", senderId = "me", recipientId = "peer",
+            encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "", state = MessageState.FAILED.name,
+            timestamp = 1, expiresAt = null, isOutgoing = true, mediaKind = "file", mediaState = "uploading",
+        )
+        every { keyManager.getUserId() } returns "me"
+        coEvery { messageDao.getById("f5") } returns file
+
+        repo.markSendFailed("f5")
+
+        coVerify(exactly = 0) { messageDao.setMediaState("f5", any()) }
+        coVerify(exactly = 0) { apiService.sendMessage(any()) }
+    }
+
+    @Test
+    fun `a contact's word that they have our file marks it delivered, and only that file`() = runTest {
+        every { keyManager.getUserId() } returns "me"
+        coEvery { contactDao.getByUserId("peer") } returns classicalContact
+        coEvery { messageDao.getOutgoingFilesNotReceived("peer") } returns listOf("other", "f4")
+        val theirId = ReceiptManager.relayMessageId("me", "f4")
+        coEvery { cryptoEngine.decrypt(any(), any(), any()) } returns
+            com.sotto.app.domain.model.FileUpdatePayload.encodeGot(theirId).toByteArray()
+        coEvery { apiService.fetchPendingMessages() } returns listOf(chatDto("u1"))
+
+        repo.fetchPendingAndWait()
+
+        coVerify { messageDao.setMediaState("f4", "received") }
+        coVerify(exactly = 0) { messageDao.setMediaState("other", any()) }
+        coVerify(exactly = 0) { messageDao.insert(any()) }
+    }
+
     // ── The pending queue ───────────────────────────────────────────────────
 
     @Test

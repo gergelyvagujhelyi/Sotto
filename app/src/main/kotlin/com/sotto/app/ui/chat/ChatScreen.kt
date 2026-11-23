@@ -504,19 +504,6 @@ fun ChatContent(
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) pickedPhoto = uri
     }
-    pickedPhoto?.let { uri ->
-        PhotoSendScreen(
-            uri = uri,
-            initialCaption = composerText.trim(),
-            initialHd = lastHd,
-            onSend = { caption, hd ->
-                pickedPhoto = null
-                lastHd = hd
-                onSendPhoto(uri, hd, caption)
-            },
-            onDismiss = { pickedPhoto = null },
-        )
-    }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onSendFile(uri)
     }
@@ -820,6 +807,20 @@ fun ChatContent(
                     SendFlightOverlay(f, entry, composerEmpty = composerText.isEmpty(), onLanded = { if (flight === f) flight = null })
                 }
             }
+        }
+        // Over everything, the chat's top bar included.
+        pickedPhoto?.let { uri ->
+            PhotoSendScreen(
+                uri = uri,
+                initialCaption = composerText.trim(),
+                initialHd = lastHd,
+                onSend = { caption, hd ->
+                    pickedPhoto = null
+                    lastHd = hd
+                    onSendPhoto(uri, hd, caption)
+                },
+                onDismiss = { pickedPhoto = null },
+            )
         }
     }
     }
@@ -1178,12 +1179,12 @@ private fun ChatRowItem(
                         media = message.media?.let { { color -> BubbleMedia(message, color) } },
                         timestamp = time,
                         isOutgoing = message.isOutgoing,
-                        state = message.state,
+                        state = message.shownState,
                         groupedWithPrevious = row.groupedWithPrevious,
                         quote = message.bubbleQuote(contactName),
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },
-                        // Failed sends: tap to retry.
-                        onClick = if (message.isOutgoing && message.state == MessageState.FAILED) {
+                        // Failed sends (or a file that couldn't follow its message): tap to retry.
+                        onClick = if (message.isOutgoing && message.shownState == MessageState.FAILED) {
                             { onRetry(message.id) }
                         } else {
                             null

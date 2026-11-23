@@ -56,6 +56,9 @@ interface MessageRepository {
     /** The background part of sending a message with a file: upload it, then send the message. */
     suspend fun finishSend(messageId: String) {}
 
+    /** Tries again to get our file through whose message went out but the file didn't ([FileState.UNSENT]). */
+    suspend fun retryFile(messageId: String) {}
+
     /** The receiving side of a direct file transfer, in the background. */
     suspend fun receiveDirect(messageId: String) {}
 

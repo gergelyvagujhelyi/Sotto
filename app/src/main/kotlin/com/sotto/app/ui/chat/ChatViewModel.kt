@@ -334,6 +334,10 @@ class ChatViewModel @Inject constructor(
                     messageRepository.requestDownload(message.id)
                     return@launch
                 }
+                if (message.isOutgoing && media.fileState == com.sotto.app.domain.model.FileState.UNSENT) {
+                    messageRepository.retryFile(message.id)
+                    return@launch
+                }
                 val file = messageRepository.decryptFileForOpening(message.id)
                 if (file == null) {
                     _sendError.value = "This file isn't on this phone."

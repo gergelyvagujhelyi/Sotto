@@ -202,4 +202,12 @@ class FileDropTest {
         assertTrue(u.gone)
         assertEquals("relayid", u.file)
     }
+
+    @Test
+    fun `the receiver says it has the file, and that's neither an update nor gone`() {
+        val u = com.sotto.app.domain.model.FileUpdatePayload.decode(com.sotto.app.domain.model.FileUpdatePayload.encodeGot("relayid"))!!
+        assertTrue(u.got)
+        assertTrue(!u.gone && u.id.isEmpty())
+        assertEquals("relayid", u.file)
+    }
 }

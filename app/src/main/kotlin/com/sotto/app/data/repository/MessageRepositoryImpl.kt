@@ -270,7 +270,7 @@ class MessageRepositoryImpl @Inject constructor(
     /** Puts our file on the relay's store, once: reserve, upload, confirm. Returns the row as it is then. */
     private suspend fun ensureUploaded(entity: MessageEntity): MessageEntity {
         val sent = com.sotto.app.domain.model.FileState.SENT.wire
-        if (entity.attachmentId != null && entity.mediaState == sent) return entity
+        if (entity.attachmentId != null && (entity.mediaState == sent || entity.mediaState == com.sotto.app.domain.model.FileState.RECEIVED.wire)) return entity
         messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.UPLOADING.wire)
         val name = storeName(entity)
         val size = fileDrop.fileFor(name).length()
@@ -316,8 +316,7 @@ class MessageRepositoryImpl @Inject constructor(
         val token = ReceiptManager.relayMessageId(me, entity.id)
         // Its message is out (sent, delivered or even seen) but the file isn't through yet.
         val messageOut = entity.state != MessageState.SENDING.name && entity.state != MessageState.FAILED.name
-        val sentDirect = messageOut && entity.mediaKind == MediaKind.FILE.wire &&
-            entity.mediaState != com.sotto.app.domain.model.FileState.SENT.wire
+        val sentDirect = messageOut && entity.mediaKind == MediaKind.FILE.wire && !fileIsOut(entity)
         if (sentDirect) {
             // Its message went out offering the file directly; that didn't happen (or this
             // job was interrupted): the store it is, and the contact hears where.
@@ -423,7 +422,8 @@ class MessageRepositoryImpl @Inject constructor(
                 fileDrop.sendDirect(entity.id, link)
                 val done = kotlinx.coroutines.withTimeout(DIRECT_DONE_MS) { doneWait.await() }
                 if (done.kind == com.sotto.app.domain.model.DirectPayload.Kind.DONE) {
-                    messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.SENT.wire)
+                    // They confirmed every segment: it's on their phone.
+                    messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.RECEIVED.wire)
                     if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.i("MessageRepo", "File ${entity.id.take(8)} went directly")
                     return
                 }
@@ -505,9 +505,30 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    /** The sender put the file in the store after all: it can be downloaded from there. */
-    private suspend fun applyFileUpdate(sender: String, plaintext: String) {
+    /** Our file is in the store or already on the contact's phone. */
+    private fun fileIsOut(entity: MessageEntity): Boolean =
+        entity.mediaState == com.sotto.app.domain.model.FileState.SENT.wire ||
+            entity.mediaState == com.sotto.app.domain.model.FileState.RECEIVED.wire
+
+    /** A file from [entity]'s sender is on this phone now: they hear it, so theirs shows it as delivered. */
+    private suspend fun tellGot(entity: MessageEntity) {
+        if (entity.isOutgoing || entity.mediaKind != MediaKind.FILE.wire) return
+        runCatching { sendUnstored(entity.senderId, com.sotto.app.domain.model.FileUpdatePayload.encodeGot(entity.id)) }
+    }
+
+    /**
+     * The sender put the file in the store after all: it can be downloaded from there. Or,
+     * the other way round, the contact we sent a file to has it now.
+     */
+    private suspend fun applyFileUpdate(sender: String, me: String, plaintext: String) {
         val update = com.sotto.app.domain.model.FileUpdatePayload.decode(plaintext) ?: return
+        if (update.got) {
+            // It names the file by its id on their side, which is derived from ours.
+            val ours = messageDao.getOutgoingFilesNotReceived(sender)
+                .firstOrNull { ReceiptManager.relayMessageId(me, it) == update.file } ?: return
+            messageDao.setMediaState(ours, com.sotto.app.domain.model.FileState.RECEIVED.wire)
+            return
+        }
         val entity = messageDao.getById(update.file) ?: return
         if (entity.isOutgoing || entity.senderId != sender || entity.mediaKind != MediaKind.FILE.wire) return
         if (update.gone) {
@@ -533,17 +554,26 @@ class MessageRepositoryImpl @Inject constructor(
             return
         }
         // A file offered directly whose fallback to the store failed for good: the contact
-        // stops waiting for it, and here it shows as not delivered (a tap tries again).
-        if (entity.isOutgoing && entity.mediaKind == MediaKind.FILE.wire &&
-            entity.mediaState != com.sotto.app.domain.model.FileState.SENT.wire
+        // stops waiting for it. The message itself is out (and stays delivered: resending it
+        // would be dropped as a copy), so only the file shows as not sent; a tap tries the
+        // store again (retryFile) and the contact then hears where it is.
+        // (A message that never went out failed as a whole and retries as a whole.)
+        if (entity.isOutgoing && entity.state != MessageState.FAILED.name &&
+            entity.mediaKind == MediaKind.FILE.wire && !fileIsOut(entity)
         ) {
             val me = keyManager.getUserId() ?: return
             runCatching {
                 sendUnstored(entity.recipientId, com.sotto.app.domain.model.FileUpdatePayload.encodeGone(ReceiptManager.relayMessageId(me, entity.id)))
             }
-            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
-            messageDao.updateState(messageId, MessageState.FAILED.name)
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UNSENT.wire)
         }
+    }
+
+    override suspend fun retryFile(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (!entity.isOutgoing || entity.mediaState != com.sotto.app.domain.model.FileState.UNSENT.wire) return
+        messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
+        transfers.upload(messageId)
     }
 
     override suspend fun requestDownload(messageId: String) {
@@ -571,6 +601,7 @@ class MessageRepositoryImpl @Inject constructor(
         val name = storeName(entity)
         if (fileDrop.hasFile(name)) {
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
+            tellGot(entity)
             return@withContext
         }
         val download = apiService.attachmentDownload(id)
@@ -589,6 +620,7 @@ class MessageRepositoryImpl @Inject constructor(
             return@withContext
         }
         messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
+        tellGot(entity)
         // We have it: it needn't wait on the relay's store any longer.
         try {
             apiService.deleteAttachment(id)
@@ -789,6 +821,11 @@ class MessageRepositoryImpl @Inject constructor(
 
     private suspend fun retryFailedInternal(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
+        // A file whose message is out but that couldn't follow it: only the file goes again.
+        if (entity.isOutgoing && entity.mediaState == com.sotto.app.domain.model.FileState.UNSENT.wire) {
+            retryFile(messageId)
+            return
+        }
         // Only our own failed messages (a double tap must not resend a message
         // that the first tap already got through).
         if (!entity.isOutgoing || entity.state != MessageState.FAILED.name) return
@@ -1175,7 +1212,7 @@ class MessageRepositoryImpl @Inject constructor(
             return
         }
         if (com.sotto.app.domain.model.FileUpdatePayload.isUpdate(plaintextStr)) {
-            applyFileUpdate(dto.senderId, plaintextStr)
+            applyFileUpdate(dto.senderId, localUserId, plaintextStr)
             receivedIds.add(dto.messageId)
             return
         }

@@ -6,6 +6,17 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.8 — 2026-11-23
+
+Update both phones: a file's delivered ticks need the receiver on 0.7.8 too.
+
+- **Photo preview: Send always reachable** — The preview before sending a photo is now drawn in the app's own window instead of a separate one, so its caption and Send button stay above the navigation bar and the keyboard on every phone. On some phones they sat too low to tap.
+- **React to photos, videos and voice messages** — Holding a photo, a file's preview or a voice message now opens the reactions, and double-tapping a photo or file hearts it, like the rest of the bubble. Before, only the thin edge of the bubble around them reacted.
+- **Open your own file while it's sending** — A video or file you sent opens with a tap at once, also while it's still "Sending directly…" or uploading. Before, its preview didn't react until the transfer was done.
+- **A file's ticks follow the file** — For a file or video, the ticks used to say only that its message had arrived, while the file itself could still be on your phone, on its way, or waiting to be downloaded. Now they follow the file: the clock while it hasn't left your phone ("Sending directly…", uploading), one tick and "Not downloaded yet" while it waits in storage, and delivered (or read) with "Delivered" once it's on your contact's phone (it came directly, or they downloaded it). Your contact's Sotto needs this version to tell yours; files sent before it stay at one tick.
+- **Direct calls setting mentions files** — Its description now says that files, too, go phone to phone when it's on.
+- **A file that couldn't follow its message says so** — If a file offered phone to phone can't be stored either, its bubble now shows "Not delivered · Tap to retry", and a tap tries the storage again (your contact then gets it from there). Before, it stayed at "Waiting to upload…" with no way to retry.
+
 ## 0.7.7 — 2026-11-23
 
 Everyone needs this version: 0.7.6 and older show a voice message, photo or file as a line of raw text.
