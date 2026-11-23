@@ -272,7 +272,7 @@ private fun AppUpdateCard(update: AppUpdate, modifier: Modifier = Modifier) {
                 text = "Open SourceDrop",
                 icon = Icons.AutoMirrored.Rounded.OpenInNew,
                 compact = true,
-                onClick = { SourceDrop.open(context) },
+                onClick = { SourceDrop.open(context, update.version) },
             )
         }
     }

@@ -14,14 +14,35 @@ object SourceDrop {
     const val PACKAGE = "dev.sourcedrop.app"
     const val PAGE = "https://github.com/gergelyvagujhelyi/SourceDrop"
 
-    /** SourceDrop itself if it's installed; otherwise its page, where it can be got. */
-    fun intent(context: Context): Intent =
-        (context.packageManager.getLaunchIntentForPackage(PACKAGE) ?: Intent(Intent.ACTION_VIEW, PAGE.toUri()))
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /**
+     * Ask SourceDrop to open Sotto's page and check for [version] right away, instead of
+     * showing what it last saw. Older SourceDrops ignore these and just open.
+     */
+    private const val EXTRA_PACKAGE_NAME = "dev.sourcedrop.app.extra.PACKAGE_NAME"
+    private const val EXTRA_VERSION = "dev.sourcedrop.app.extra.VERSION"
 
-    fun open(context: Context) {
+    /**
+     * SourceDrop itself if it's installed, pointed at Sotto and the [version] that's out;
+     * otherwise its page, where it can be got.
+     */
+    fun intent(context: Context, version: String): Intent {
+        val launch = context.packageManager.getLaunchIntentForPackage(PACKAGE)
+            ?: return Intent(Intent.ACTION_VIEW, PAGE.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return launch
+            .putExtra(EXTRA_PACKAGE_NAME, context.packageName)
+            .putExtra(EXTRA_VERSION, version)
+            // If SourceDrop is already running, hand it this intent (extras included)
+            // rather than just bringing its old screen back.
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+    }
+
+    fun open(context: Context, version: String) {
         try {
-            context.startActivity(intent(context))
+            context.startActivity(intent(context, version))
         } catch (_: ActivityNotFoundException) {
             // Neither SourceDrop nor a browser: nothing to open.
         }

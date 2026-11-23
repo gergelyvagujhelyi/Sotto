@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **SourceDrop opens on the new version** — Tapping the update notification, or "Open SourceDrop" in the chat list, now tells SourceDrop which app and version it's about. SourceDrop opens Sotto's page and checks for the update right away, instead of showing what it saw at its last check. An older SourceDrop just opens as before.
 
 ## 0.7.9 — 2026-11-23
 
