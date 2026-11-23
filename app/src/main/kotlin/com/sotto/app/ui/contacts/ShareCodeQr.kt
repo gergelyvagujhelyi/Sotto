@@ -29,10 +29,16 @@ internal fun decodeQr(
 ): String? {
     val source = PlanarYUVLuminanceSource(luminance, rowStride, height, 0, 0, width, height, false)
     return try {
-        reader.decode(BinaryBitmap(HybridBinarizer(source))).text
+        // Try harder: the live code is denser than a share code.
+        reader.decode(BinaryBitmap(HybridBinarizer(source)), DECODE_HINTS).text
     } catch (_: ReaderException) {
         null
     } finally {
         reader.reset()
     }
 }
+
+private val DECODE_HINTS = mapOf(
+    com.google.zxing.DecodeHintType.TRY_HARDER to true,
+    com.google.zxing.DecodeHintType.POSSIBLE_FORMATS to listOf(com.google.zxing.BarcodeFormat.QR_CODE),
+)

@@ -8,18 +8,16 @@ import kotlinx.coroutines.flow.asSharedFlow
  * Someone who scans our live QR code adds us, and their name arrives here as a message
  * request a moment later. While a live QR code is on screen, [shown] notes the time; a new
  * request within [WINDOW_MS] of it is very likely from whoever scanned it. Their phone now
- * shows its own code ("Your turn"), so the app swaps roles: it opens the scanner (MainActivity),
- * and scanning their live code verifies them and accepts the request in one go.
+ * shows its own code ("Your turn"), so the app swaps roles: New chat's QR code screen turns
+ * to Scan (MainActivity, QrExchangeScreen), and scanning their live code verifies them and
+ * accepts the request in one go.
  *
  * Only navigation: nothing about the request is trusted for it. Backing out of the scanner
  * leaves an ordinary request in the list.
  */
 object LiveQrWatch {
-    /**
-     * Marks a code scanned back (Routes.SCAN_BACK) on its way to New chat: they already
-     * verified us, so no "Your turn" this time (that would go round in circles).
-     */
-    const val SCANNED_BACK_PREFIX = "back:"
+    /** New chat's SavedStateHandle key: open Scan to answer their scan (QrExchangeScreen). */
+    const val SCAN_BACK_REQUEST_KEY = "scan_back_request"
 
     const val WINDOW_MS = 2 * 60_000L
 

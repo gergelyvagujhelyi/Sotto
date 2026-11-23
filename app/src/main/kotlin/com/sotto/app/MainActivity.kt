@@ -175,11 +175,11 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     com.sotto.app.ui.contacts.LiveQrWatch.openRequest.collect {
                         navController.awaitGraph()
-                        if (navController.currentBackStackEntry?.destination?.route == Routes.SCAN_BACK) return@collect
                         if (navController.currentBackStackEntry?.destination?.route != Routes.ADD_CONTACT) {
                             navController.navigate(Routes.ADD_CONTACT) { launchSingleTop = true }
                         }
-                        navController.navigate(Routes.SCAN_BACK) { launchSingleTop = true }
+                        navController.currentBackStackEntry?.savedStateHandle
+                            ?.set(com.sotto.app.ui.contacts.LiveQrWatch.SCAN_BACK_REQUEST_KEY, true)
                     }
                 }
 

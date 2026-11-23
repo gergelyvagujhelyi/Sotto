@@ -50,8 +50,6 @@ object Routes {
     const val CHAT = "chat/{conversationId}/{contactId}"
     const val ADD_CONTACT = "add_contact"
     const val SCAN_QR = "scan_qr"
-    /** Scanning back whoever just scanned our live QR code (LiveQrWatch). */
-    const val SCAN_BACK = "scan_back"
     const val SCAN_INVITE = "scan_invite"
     const val SETTINGS = "settings"
     const val CALL = "call/{contactId}/{displayName}"
@@ -269,6 +267,10 @@ fun ChatNavGraph(
             val scannedShareCode by entry.savedStateHandle
                 .getStateFlow<String?>(SCANNED_SHARE_CODE_KEY, null)
                 .collectAsState()
+            // Their request came in while our live code was on screen (LiveQrWatch, MainActivity).
+            val scanBackRequest by entry.savedStateHandle
+                .getStateFlow(com.sotto.app.ui.contacts.LiveQrWatch.SCAN_BACK_REQUEST_KEY, false)
+                .collectAsState()
             // An opened invite link's sender, filled in for the user to confirm.
             val prefilledShareCode by entry.savedStateHandle
                 .getStateFlow<String?>(PREFILLED_SHARE_CODE_KEY, null)
@@ -284,11 +286,12 @@ fun ChatNavGraph(
                         popUpTo(Routes.CONVERSATIONS)
                     }
                 },
-                onScanQr = { navController.navigate(Routes.SCAN_QR) { launchSingleTop = true } },
                 scannedShareCode = scannedShareCode,
                 onScannedShareCodeHandled = { entry.savedStateHandle[SCANNED_SHARE_CODE_KEY] = null },
                 prefilledShareCode = prefilledShareCode,
                 onPrefilledShareCodeHandled = { entry.savedStateHandle[PREFILLED_SHARE_CODE_KEY] = null },
+                scanBackRequest = scanBackRequest,
+                onScanBackRequestHandled = { entry.savedStateHandle[com.sotto.app.ui.contacts.LiveQrWatch.SCAN_BACK_REQUEST_KEY] = false },
             )
         }
 
@@ -308,31 +311,6 @@ fun ChatNavGraph(
                     com.sotto.app.crypto.InPersonCode.parse(text)?.encode()
                         ?: com.sotto.app.ui.contacts.shareCodeFromQr(text)
                 },
-            )
-        }
-
-        screen(Routes.SCAN_BACK) {
-            ScanQrScreen(
-                onBack = {
-                    if (navController.previousBackStackEntry != null) {
-                        navController.popBackStack()
-                    }
-                },
-                onScanned = { code ->
-                    // Back to New chat, which adds and verifies them (and accepts their request).
-                    navController.previousBackStackEntry?.savedStateHandle?.set(
-                        SCANNED_SHARE_CODE_KEY,
-                        com.sotto.app.ui.contacts.LiveQrWatch.SCANNED_BACK_PREFIX + code,
-                    )
-                    navController.popBackStack()
-                },
-                accept = { text ->
-                    com.sotto.app.crypto.InPersonCode.parse(text)?.encode()
-                        ?: com.sotto.app.ui.contacts.shareCodeFromQr(text)
-                },
-                title = "Now scan their code",
-                hint = "They just scanned yours. Scan the code on their phone, so both phones are verified " +
-                    "and the chat opens. Back leaves their request in your list.",
             )
         }
 
