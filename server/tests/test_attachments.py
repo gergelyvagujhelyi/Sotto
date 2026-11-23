@@ -223,3 +223,19 @@ def test_part_urls_sign_their_part_number_upload_and_size():
     q = parse_qs(urlsplit(url).query)
     assert q["partNumber"] == ["2"] and q["uploadId"] == ["UP 1"]
     assert q["X-Amz-SignedHeaders"] == ["content-length;host"]
+
+
+@pytest.mark.asyncio
+async def test_completing_again_after_the_parts_were_joined_still_works(client: AsyncClient, store: FakeStore, monkeypatch):
+    # The parts were joined, but the size check after it failed: the retry mustn't join again.
+    monkeypatch.setattr(config, "ATTACHMENT_PART_BYTES", 100)
+    alice, bob = await _pair(client)
+    att = (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 250}, headers=_auth(alice))).json()
+    store.objects[f"a/{att['id']}"] = 250  # already joined in the store
+
+    async def refuse(*args, **kwargs):
+        raise AssertionError("joined twice")
+    monkeypatch.setattr(store, "complete_multipart", refuse)
+    r = await client.post(f"/v1/attachments/{att['id']}/complete", json={"etags": ["a", "b", "c"]}, headers=_auth(alice))
+    assert r.status_code == 200, r.text
+    assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200

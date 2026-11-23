@@ -228,7 +228,10 @@ async def complete_upload(
             if len(etags) != parts or any(not t or len(t) > 200 for t in etags):
                 raise HTTPException(status_code=400, detail="attachment_parts_missing")
             try:
-                await store.complete_multipart(client, object_key(attachment_id), row.upload_id, etags)
+                # A retry after the parts were joined (only the check below failed) finds
+                # the object there already; joining again would be refused.
+                if await store.size_of(client, object_key(attachment_id)) is None:
+                    await store.complete_multipart(client, object_key(attachment_id), row.upload_id, etags)
             except httpx.HTTPError:
                 raise HTTPException(status_code=409, detail="attachment_not_uploaded")
         try:
