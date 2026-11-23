@@ -170,17 +170,16 @@ class MainActivity : ComponentActivity() {
                     _deepLinkIntent.value = null
                 }
 
-                // Someone just scanned our live QR code and added us: open their request.
+                // Someone just scanned our live QR code and added us: swap roles. Open the
+                // scanner over New chat; scanning their code verifies them and accepts the request.
                 LaunchedEffect(Unit) {
-                    com.sotto.app.ui.contacts.LiveQrWatch.openRequest.collect { (conversationId, contactId) ->
+                    com.sotto.app.ui.contacts.LiveQrWatch.openRequest.collect {
                         navController.awaitGraph()
-                        val current = navController.currentBackStackEntry
-                        val onChat = current?.destination?.route == Routes.CHAT
-                        if (!onChat || current?.arguments?.getString("conversationId") != conversationId) {
-                            navController.navigate(Routes.chat(conversationId, contactId)) {
-                                if (onChat) popUpTo(Routes.CHAT) { inclusive = true }
-                            }
+                        if (navController.currentBackStackEntry?.destination?.route == Routes.SCAN_BACK) return@collect
+                        if (navController.currentBackStackEntry?.destination?.route != Routes.ADD_CONTACT) {
+                            navController.navigate(Routes.ADD_CONTACT) { launchSingleTop = true }
                         }
+                        navController.navigate(Routes.SCAN_BACK) { launchSingleTop = true }
                     }
                 }
 

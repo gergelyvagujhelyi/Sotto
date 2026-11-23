@@ -114,9 +114,12 @@ fun AddContactScreen(
     com.sotto.app.nfc.InPersonNfcEffect(myCode)
     // While "Show my QR code" is open, its code changes every second (BankID-style).
     var qrShown by remember { mutableStateOf(false) }
+    // Verified them from their QR code: show ours for them to scan back, then open the chat.
+    var swapFor by remember { mutableStateOf<AddContactState.Success?>(null) }
     var liveQr by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(qrShown) {
-        while (qrShown) {
+    val qrLoop = qrShown || swapFor != null
+    LaunchedEffect(qrLoop) {
+        while (qrLoop) {
             liveQr = viewModel.liveQr()
             kotlinx.coroutines.delay(1000)
         }
@@ -125,17 +128,38 @@ fun AddContactScreen(
     LaunchedEffect(state) {
         if (state is AddContactState.Success) {
             val success = state as AddContactState.Success
-            onContactAdded(success.conversationId, success.contact.userId)
+            if (success.swapRoles) {
+                swapFor = success
+            } else {
+                onContactAdded(success.conversationId, success.contact.userId)
+            }
             viewModel.resetState()
         }
     }
 
+    swapFor?.let { done ->
+        YourTurnDialog(
+            name = done.contact.displayName,
+            qrContent = liveQr,
+            onDone = {
+                swapFor = null
+                onContactAdded(done.conversationId, done.contact.userId)
+            },
+        )
+    }
+
     LaunchedEffect(scannedShareCode) {
-        val code = scannedShareCode ?: return@LaunchedEffect
+        val scanned = scannedShareCode ?: return@LaunchedEffect
         onScannedShareCodeHandled()
+        val scannedBack = scanned.startsWith(LiveQrWatch.SCANNED_BACK_PREFIX)
+        val code = scanned.removePrefix(LiveQrWatch.SCANNED_BACK_PREFIX)
         // Their full code, read off their phone: added and verified in person at once.
         val inPerson = com.sotto.app.crypto.InPersonCode.parse(code)
-        if (inPerson != null) viewModel.addInPerson(inPerson, viaQr = true) else viewModel.submitScannedShareCode(code)
+        if (inPerson != null) {
+            viewModel.addInPerson(inPerson, viaQr = true, scannedBack = scannedBack)
+        } else {
+            viewModel.submitScannedShareCode(code)
+        }
     }
 
     LaunchedEffect(prefilledShareCode) {
@@ -668,4 +692,64 @@ private fun TapPhonesDialog(adding: Boolean, onDismiss: () -> Unit) {
         },
         confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+/**
+ * After scanning their live QR code: they're verified on this phone, and it's their turn to
+ * scan ours (their phone opens its scanner by itself when our request arrives, LiveQrWatch).
+ */
+@Composable
+private fun YourTurnDialog(name: String, qrContent: String?, onDone: () -> Unit) {
+    val activity = LocalContext.current as? Activity
+    // Full brightness, as for "Show my QR code".
+    DisposableEffect(activity) {
+        val window = activity?.window
+        val previous = window?.attributes?.screenBrightness
+        window?.attributes = window?.attributes?.apply {
+            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+        }
+        onDispose {
+            if (window != null && previous != null) {
+                window.attributes = window.attributes.apply { screenBrightness = previous }
+            }
+        }
+    }
+    val aurora = Aurora.colors
+    Dialog(onDismissRequest = onDone) {
+        GlassCard(
+            modifier = Modifier.fillMaxWidth(),
+            border = BorderStroke(1.5.dp, Brush.linearGradient(aurora.brand.map { it.copy(alpha = 0.8f) })),
+            fill = MaterialTheme.colorScheme.surface,
+            contentPadding = PaddingValues(24.dp),
+        ) {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.VerifiedUser, contentDescription = null, tint = aurora.success, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "$name is verified",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Your turn: let $name scan your code, so their phone verifies you too.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(16.dp))
+                if (qrContent != null) {
+                    QrCodeImage(content = qrContent, size = 240.dp)
+                } else {
+                    Box(Modifier.size(240.dp), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 3.dp)
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+                SoftButton(text = "Done, open the chat", onClick = onDone, modifier = Modifier.fillMaxWidth())
+            }
+        }
+    }
 }
