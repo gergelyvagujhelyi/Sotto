@@ -83,6 +83,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -121,6 +123,17 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.privacySettings.collectAsState()
     val shareCode by viewModel.shareCode.collectAsState()
+    // The identity QR code changes every second while Settings is in front (BankID-style).
+    var liveQr by remember { mutableStateOf<String?>(null) }
+    val qrLifecycle = LocalLifecycleOwner.current
+    LaunchedEffect(qrLifecycle) {
+        qrLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            while (true) {
+                liveQr = viewModel.liveQr()
+                kotlinx.coroutines.delay(1000)
+            }
+        }
+    }
     val showWipeConfirmation by viewModel.showWipeConfirmation.collectAsState()
     val wipeCompleted by viewModel.wipeCompleted.collectAsState()
     val showRotateConfirmation by viewModel.showRotateConfirmation.collectAsState()
@@ -295,6 +308,7 @@ fun SettingsScreen(
     SettingsContent(
         settings = settings,
         shareCode = shareCode,
+        liveQr = liveQr,
         myName = myName,
         isRotatingKeys = isRotatingKeys,
         onBack = onBack,
@@ -331,6 +345,8 @@ fun SettingsScreen(
 fun SettingsContent(
     settings: PrivacySettings,
     shareCode: String?,
+    /** The live QR code (changes every second); null while it's made, or in previews. */
+    liveQr: String? = null,
     myName: String?,
     isRotatingKeys: Boolean,
     onBack: () -> Unit,
@@ -392,6 +408,7 @@ fun SettingsContent(
                 SectionLabel("Identity", Modifier.padding(start = 4.dp, top = 4.dp))
                 IdentityCard(
                     shareCode = shareCode,
+                    liveQr = liveQr,
                     isRotatingKeys = isRotatingKeys,
                     snackbarHostState = snackbarHostState,
                 )
@@ -628,7 +645,12 @@ fun SettingsContent(
  * so copying and sharing wait until the rotation finishes.
  */
 @Composable
-private fun IdentityCard(shareCode: String?, isRotatingKeys: Boolean, snackbarHostState: SnackbarHostState) {
+private fun IdentityCard(
+    shareCode: String?,
+    isRotatingKeys: Boolean,
+    snackbarHostState: SnackbarHostState,
+    liveQr: String? = null,
+) {
     val aurora = Aurora.colors
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
@@ -636,14 +658,16 @@ private fun IdentityCard(shareCode: String?, isRotatingKeys: Boolean, snackbarHo
         contentPadding = PaddingValues(20.dp),
     ) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            if (shareCode != null) {
+            val qr = liveQr ?: shareCode
+            if (qr != null) {
                 Box(
                     Modifier
                         .clip(RoundedCornerShape(24.dp))
                         .background(Color.White)
                         .padding(6.dp),
                 ) {
-                    QrCodeImage(content = shareCode, size = 184.dp)
+                    // Live: scanned in person it adds and verifies you; a picture of it only adds you.
+                    QrCodeImage(content = qr, size = 184.dp)
                 }
             } else {
                 Box(Modifier.size(196.dp), contentAlignment = Alignment.Center) {
@@ -662,6 +686,16 @@ private fun IdentityCard(shareCode: String?, isRotatingKeys: Boolean, snackbarHo
                 style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
                 textAlign = TextAlign.Center,
             )
+            if (liveQr != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "The QR code changes every second: scanned in person, it adds and verifies you. " +
+                        "The share code, or a picture of the QR code, only adds you.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
             if (shareCode != null) {
                 Spacer(Modifier.height(16.dp))
                 ShareCodeActions(

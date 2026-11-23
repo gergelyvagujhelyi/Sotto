@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PhoneInTalk
+import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,6 +35,8 @@ fun ConversationItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     avatarSeed: String = displayName,
+    /** How far the contact is verified: a shield in place of the lock. Null shows the lock. */
+    trust: com.sotto.app.domain.model.ContactTrust? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val unread = unreadCount > 0
@@ -57,7 +62,18 @@ fun ConversationItem(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (isEncrypted) {
+                    if (trust != null) {
+                        Spacer(Modifier.width(6.dp))
+                        val (icon, tint, said) = when (trust) {
+                            com.sotto.app.domain.model.ContactTrust.IN_PERSON ->
+                                Triple(Icons.Rounded.VerifiedUser, com.sotto.app.ui.theme.Aurora.colors.success, "Verified in person")
+                            com.sotto.app.domain.model.ContactTrust.BY_PHONE ->
+                                Triple(Icons.Rounded.PhoneInTalk, colors.primary, "Verified by phone only")
+                            com.sotto.app.domain.model.ContactTrust.NONE ->
+                                Triple(Icons.Rounded.GppMaybe, com.sotto.app.ui.theme.Aurora.colors.warning, "Not verified")
+                        }
+                        Icon(imageVector = icon, contentDescription = said, modifier = Modifier.size(14.dp), tint = tint)
+                    } else if (isEncrypted) {
                         Spacer(Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Rounded.Lock,

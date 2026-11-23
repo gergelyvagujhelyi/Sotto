@@ -36,11 +36,19 @@ class VerifyInPersonViewModel @Inject constructor(
         identityRepository.observeContact(contactId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val myCode = MutableStateFlow<InPersonCode?>(null)
+    private val _myCode = MutableStateFlow<InPersonCode?>(null)
 
-    /** This phone's code as the QR code shows it; null until loaded. */
+    /** This phone's code: shown as the QR code, and sent on an NFC tap ([com.sotto.app.nfc.InPersonNfcEffect]). */
+    val myCode: StateFlow<InPersonCode?> = _myCode.asStateFlow()
+
+    /** This phone's live QR code, made anew each second (BankID-style); null until made. */
     private val _myQr = MutableStateFlow<String?>(null)
     val myQr: StateFlow<String?> = _myQr.asStateFlow()
+
+    /** Makes a fresh live QR code; the screen calls it every second while it's in front. */
+    suspend fun refreshQr() {
+        _myQr.value = withContext(Dispatchers.IO) { verifier.myLiveCode() }?.encode()
+    }
 
     private val _outcome = MutableStateFlow<VerifyOutcome?>(null)
     val outcome: StateFlow<VerifyOutcome?> = _outcome.asStateFlow()
@@ -48,29 +56,14 @@ class VerifyInPersonViewModel @Inject constructor(
     private val _checking = MutableStateFlow(false)
     val checking: StateFlow<Boolean> = _checking.asStateFlow()
 
-    /** Whether the screen is in front: only then does this phone answer a tap. */
-    private var resumed = false
-
     init {
         viewModelScope.launch {
             val code = withContext(Dispatchers.IO) { verifier.myCode() }
-            myCode.value = code
-            _myQr.value = code?.encode()
-            if (resumed && code != null) InPersonNfc.start(code)
+            _myCode.value = code
         }
         viewModelScope.launch {
             InPersonNfc.received.collect { code -> check(code, viaNfc = true) }
         }
-    }
-
-    fun onResumed() {
-        resumed = true
-        myCode.value?.let(InPersonNfc::start)
-    }
-
-    fun onPaused() {
-        resumed = false
-        InPersonNfc.stop()
     }
 
     /** A QR code the scanner accepted ([InPersonCode.parse] already passed). */
@@ -78,15 +71,17 @@ class VerifyInPersonViewModel @Inject constructor(
         InPersonCode.parse(text)?.let { check(it, viaNfc = false) }
     }
 
+
     fun dismissOutcome() {
         _outcome.value = null
     }
 
+    /** NFC codes need no liveness (NFC reaches only a phone held against this one); QR codes do. */
     private fun check(code: InPersonCode, viaNfc: Boolean) {
         viewModelScope.launch {
             _checking.value = true
             try {
-                _outcome.value = VerifyOutcome(verifier.verify(contactId, code), viaNfc)
+                _outcome.value = VerifyOutcome(verifier.verify(contactId, code, requireLive = !viaNfc), viaNfc)
             } finally {
                 _checking.value = false
             }

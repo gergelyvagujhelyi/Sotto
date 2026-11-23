@@ -27,7 +27,15 @@ class SettingsViewModel @Inject constructor(
     private val messageRepository: com.sotto.app.domain.repository.MessageRepository,
     private val apiService: com.sotto.app.data.remote.ApiService,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
+    private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
 ) : ViewModel() {
+
+    /**
+     * A fresh live QR code (it changes every second, as BankID's): scanned in person it adds
+     * and verifies; a picture of it only adds (InPersonVerifier).
+     */
+    suspend fun liveQr(): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myLiveCode() }?.encode()
 
     /** The relay the account lives on. */
     val relayHost: String? = relayConfig.host

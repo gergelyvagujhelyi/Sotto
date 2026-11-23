@@ -243,17 +243,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        // A phone held against this one while "Verify in person" is open (foreground dispatch,
-        // VerifyInPersonScreen): read its code. Never a deep link.
-        if (intent.action == android.nfc.NfcAdapter.ACTION_TECH_DISCOVERED) {
-            val tag = androidx.core.content.IntentCompat.getParcelableExtra(
-                intent, android.nfc.NfcAdapter.EXTRA_TAG, android.nfc.Tag::class.java,
-            )
-            if (tag != null) {
-                lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) { com.sotto.app.nfc.InPersonNfc.readTag(tag) }
-            }
-            return
-        }
         _deepLinkIntent.value = intent
         offerInvite(intent)
     }

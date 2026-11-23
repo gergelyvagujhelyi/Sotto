@@ -49,3 +49,13 @@ data class Contact(
         return result
     }
 }
+
+/** How far a contact has been checked: shown in the chat list, New chat and the chat header. */
+enum class ContactTrust { IN_PERSON, BY_PHONE, NONE }
+
+val Contact.trust: ContactTrust
+    get() = when {
+        verifiedInPerson -> ContactTrust.IN_PERSON
+        verifiedByCall -> ContactTrust.BY_PHONE
+        else -> ContactTrust.NONE
+    }

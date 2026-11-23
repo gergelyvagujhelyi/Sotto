@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,7 +23,16 @@ class AddContactViewModel @Inject constructor(
     private val conversationRepository: ConversationRepository,
     private val identityRepository: IdentityRepository,
     private val sendMyName: SendMyNameUseCase,
+    private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
 ) : ViewModel() {
+
+    private val _myCode = MutableStateFlow<com.sotto.app.crypto.InPersonCode?>(null)
+
+    /**
+     * This phone's code: "Show my QR code" shows it, and an NFC tap sends it. Someone who reads
+     * it in person adds this phone and verifies it in one step ([addInPerson]).
+     */
+    val myCode: StateFlow<com.sotto.app.crypto.InPersonCode?> = _myCode.asStateFlow()
 
     private val _shareCodeInput = MutableStateFlow("")
     val shareCodeInput: StateFlow<String> = _shareCodeInput.asStateFlow()
@@ -45,6 +55,85 @@ class AddContactViewModel @Inject constructor(
             val identity = identityRepository.getIdentity()
             _myShareCode.value = identity?.shareCode
             _hasMyName.value = identityRepository.getMyName() != null
+            _myCode.value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myCode() }
+        }
+        // Two phones held together on this screen: each adds the other, verified in person.
+        viewModelScope.launch {
+            com.sotto.app.nfc.InPersonNfc.received.collect { addInPerson(it) }
+        }
+    }
+
+    /**
+     * Adds the person whose code was read straight off their phone (NFC tap or their QR code)
+     * and marks them verified in person: the share code inside the fingerprint finds them on
+     * the relay, and their whole fingerprint must match the keys it hands out.
+     */
+    fun addInPerson(code: com.sotto.app.crypto.InPersonCode, viaQr: Boolean = false) {
+        if (_state.value is AddContactState.Loading) return
+        _state.value = AddContactState.Loading
+        viewModelScope.launch {
+            if (code.userId == identityRepository.getIdentity()?.userId) {
+                _state.value = AddContactState.Error(OWN_SHARE_CODE_MESSAGE)
+                return@launch
+            }
+            val shareCode = com.sotto.app.crypto.KeyFingerprint.shareCode(code.fingerprint)
+            try {
+                // Who was a contact before: whatever this adds that wasn't is taken back on failure.
+                val before = identityRepository.getContacts().first().map { it.userId }.toSet()
+                val contact = addContact(shareCode).getOrThrow()
+                val added = contact.userId !in before
+                if (contact.userId != code.userId) {
+                    // The code names one account and carries another's fingerprint: never keep either.
+                    if (added) conversationRepository.removeContact(contact.userId)
+                    _state.value = AddContactState.Error(
+                        "That code doesn't add up: its account and its keys don't belong together. Don't add them this way.",
+                    )
+                    return@launch
+                }
+                // A QR code must be live (it changes every second); NFC reaches only a phone held close.
+                val result = inPersonVerifier.verify(contact.userId, code, requireLive = viaQr)
+                when (result) {
+                    com.sotto.app.crypto.InPersonResult.Verified -> {
+                        val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+                        if (added) sendMyName(contact.userId)
+                        _state.value = AddContactState.Success(contact.copy(verifiedInPerson = true), conversationId)
+                    }
+                    com.sotto.app.crypto.InPersonResult.NotLive,
+                    com.sotto.app.crypto.InPersonResult.OlderApp,
+                    com.sotto.app.crypto.InPersonResult.CantCheck -> {
+                        // Their keys (the share code in the fingerprint matched), but not proven in
+                        // person: a picture of their code, an older Sotto, or no connection to check
+                        // a key change. Added like a share code, as not verified.
+                        val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+                        if (added) sendMyName(contact.userId)
+                        _state.value = AddContactState.Success(contact, conversationId)
+                    }
+                    else -> {
+                        // KeysDiffer, OtherAccount, NotAContact: the relay's keys aren't the ones on
+                        // their phone. Don't keep what this added.
+                        if (added) conversationRepository.removeContact(contact.userId)
+                        _state.value = AddContactState.Error(
+                            "The keys the relay gave for this person don't match their phone. Don't add them this way.",
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AddContactVM", "Failed to add contact in person", e)
+                _state.value = AddContactState.Error("Couldn't add them. Check your connection and try again.")
+            }
+        }
+    }
+
+    /** A fresh live QR code for "Show my QR code" (it changes every second, as BankID's does). */
+    suspend fun liveQr(): String? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myLiveCode() }?.encode()
+
+    /** Opens the chat with someone already added (started now if there's none yet). */
+    fun openChat(contact: Contact) {
+        if (_state.value is AddContactState.Loading) return
+        viewModelScope.launch {
+            val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+            _state.value = AddContactState.Success(contact, conversationId)
         }
     }
 

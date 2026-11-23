@@ -3,6 +3,7 @@ package com.sotto.app.ui.contacts
 import android.app.Activity
 import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,6 +28,9 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Nfc
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.QrCode2
@@ -105,6 +109,18 @@ fun AddContactScreen(
     val myShareCode by viewModel.myShareCode.collectAsState()
     val contacts by viewModel.contacts.collectAsState()
     val hasMyName by viewModel.hasMyName.collectAsState()
+    val myCode by viewModel.myCode.collectAsState()
+    // Two phones held together here add each other, verified in person.
+    com.sotto.app.nfc.InPersonNfcEffect(myCode)
+    // While "Show my QR code" is open, its code changes every second (BankID-style).
+    var qrShown by remember { mutableStateOf(false) }
+    var liveQr by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(qrShown) {
+        while (qrShown) {
+            liveQr = viewModel.liveQr()
+            kotlinx.coroutines.delay(1000)
+        }
+    }
 
     LaunchedEffect(state) {
         if (state is AddContactState.Success) {
@@ -117,7 +133,9 @@ fun AddContactScreen(
     LaunchedEffect(scannedShareCode) {
         val code = scannedShareCode ?: return@LaunchedEffect
         onScannedShareCodeHandled()
-        viewModel.submitScannedShareCode(code)
+        // Their full code, read off their phone: added and verified in person at once.
+        val inPerson = com.sotto.app.crypto.InPersonCode.parse(code)
+        if (inPerson != null) viewModel.addInPerson(inPerson, viaQr = true) else viewModel.submitScannedShareCode(code)
     }
 
     LaunchedEffect(prefilledShareCode) {
@@ -137,6 +155,9 @@ fun AddContactScreen(
         onScanQr = onScanQr,
         showNameHint = !hasMyName,
         onRemoveContact = { viewModel.removeContact(it.userId) },
+        myQr = liveQr,
+        onOpenChat = viewModel::openChat,
+        onQrShownChange = { qrShown = it },
     )
 }
 
@@ -153,9 +174,35 @@ fun AddContactContent(
     onScanQr: () -> Unit,
     showNameHint: Boolean = false,
     onRemoveContact: (Contact) -> Unit = {},
+    /** This phone's in-person code for "Show my QR code"; the share code when not loaded yet. */
+    myQr: String? = null,
+    /** Opens the chat with someone already added. */
+    onOpenChat: (Contact) -> Unit = {},
+    /** "Show my QR code" opened or closed: its live code is made only while it's open. */
+    onQrShownChange: (Boolean) -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<Contact?>(null) }
+    val nfcContext = LocalContext.current
+    val nfcAdapter = remember { android.nfc.NfcAdapter.getDefaultAdapter(nfcContext) }
+    var nfcOn by remember { mutableStateOf(nfcAdapter?.isEnabled == true) }
+    // NFC may have been turned on in Settings meanwhile.
+    val nfcLifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(nfcLifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) nfcOn = nfcAdapter?.isEnabled == true
+        }
+        nfcLifecycle.lifecycle.addObserver(observer)
+        onDispose { nfcLifecycle.lifecycle.removeObserver(observer) }
+    }
+    var tapping by rememberSaveable { mutableStateOf(false) }
+    // A tap that ended in an error: close the dialog, so the error under it shows.
+    LaunchedEffect(state) { if (state is AddContactState.Error) tapping = false }
+    // A share code arriving (from an invite link) opens the field with it, once; the user can
+    // still close it afterwards.
+    var entering by rememberSaveable { mutableStateOf(false) }
+    val hasCode = shareCodeInput.isNotBlank()
+    LaunchedEffect(hasCode) { if (hasCode) entering = true }
     val canSubmit = shareCodeInput.isNotBlank() && state !is AddContactState.Loading
     var showMyQr by rememberSaveable { mutableStateOf(false) }
     // Gives the bar its solid colour once content scrolls under it.
@@ -174,7 +221,7 @@ fun AddContactContent(
                             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
                         }
                     },
-                    title = { Text("Add contact") },
+                    title = { Text("New chat") },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = MaterialTheme.colorScheme.background,
@@ -198,30 +245,81 @@ fun AddContactContent(
                     bottom = padding.calculateBottomPadding() + 24.dp,
                 ),
             ) {
-                item(key = "my_code") {
-                    MyShareCodeCard(myShareCode, snackbarHostState, showNameHint, onShowQr = { showMyQr = true })
-                }
-
-                item(key = "enter_code") {
+                // How to add someone: the two in-person ways first, since only they verify.
+                item(key = "ways") {
                     SectionLabel("Add someone", Modifier.padding(start = 4.dp))
-                    SoftButton(
-                        text = "Scan QR code",
-                        onClick = onScanQr,
-                        icon = Icons.Rounded.QrCodeScanner,
-                        tone = SoftButtonTone.Accent,
-                        enabled = state !is AddContactState.Loading,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    ShareCodeField(
-                        value = shareCodeInput,
-                        onValueChange = onShareCodeChange,
-                        errorMessage = (state as? AddContactState.Error)?.message,
-                        onSubmit = { if (canSubmit) onSubmit() },
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        val busy = state is AddContactState.Loading
+                        if (nfcAdapter != null) {
+                            WayRow(
+                                icon = Icons.Rounded.Nfc,
+                                title = "Tap phones",
+                                subtitle = if (nfcOn) {
+                                    "Both open New chat and hold the phones back to back."
+                                } else {
+                                    "NFC is off. Tap to turn it on."
+                                },
+                                verifies = true,
+                                position = RowPosition.FIRST,
+                                enabled = !busy,
+                                onClick = {
+                                    if (nfcOn) {
+                                        tapping = true
+                                    } else {
+                                        runCatching {
+                                            nfcContext.startActivity(android.content.Intent(android.provider.Settings.ACTION_NFC_SETTINGS))
+                                        }
+                                    }
+                                },
+                            )
+                        }
+                        WayRow(
+                            icon = Icons.Rounded.QrCodeScanner,
+                            title = "Scan their QR code",
+                            subtitle = "Point your camera at the code on their phone.",
+                            verifies = true,
+                            position = if (nfcAdapter != null) RowPosition.MIDDLE else RowPosition.FIRST,
+                            enabled = !busy,
+                            onClick = onScanQr,
+                        )
+                        WayRow(
+                            icon = Icons.Rounded.QrCode2,
+                            title = "Show my QR code",
+                            subtitle = "For them to scan with their phone.",
+                            position = RowPosition.MIDDLE,
+                            enabled = myShareCode != null,
+                            onClick = { showMyQr = true },
+                        )
+                        WayRow(
+                            icon = Icons.Rounded.Keyboard,
+                            title = "Enter a share code",
+                            subtitle = "Typed or pasted. They're added as not verified.",
+                            position = RowPosition.LAST,
+                            enabled = !busy,
+                            onClick = { entering = !entering },
+                        )
+                    }
+                    if (entering) {
+                        Spacer(Modifier.height(12.dp))
+                        ShareCodeField(
+                            value = shareCodeInput,
+                            onValueChange = onShareCodeChange,
+                            errorMessage = (state as? AddContactState.Error)?.message,
+                            onSubmit = { if (canSubmit) onSubmit() },
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        GradientButton(
+                            text = "Add contact",
+                            icon = Icons.Rounded.PersonAdd,
+                            onClick = onSubmit,
+                            enabled = shareCodeInput.isNotBlank(),
+                            loading = state is AddContactState.Loading,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     if (state is AddContactState.Error) {
                         Row(
-                            modifier = Modifier.padding(start = 8.dp, top = 8.dp),
+                            modifier = Modifier.padding(start = 8.dp, top = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
@@ -238,23 +336,14 @@ fun AddContactContent(
                             )
                         }
                     }
-                    Spacer(Modifier.height(16.dp))
-                    GradientButton(
-                        text = "Add contact",
-                        icon = Icons.Rounded.PersonAdd,
-                        onClick = onSubmit,
-                        enabled = shareCodeInput.isNotBlank(),
-                        loading = state is AddContactState.Loading,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
 
-                // Existing contacts
+                // People already added: tap to open the chat.
                 if (contacts.isNotEmpty()) {
                     item(key = "contacts_header") {
                         SectionLabel(
-                            "Contacts",
-                            Modifier.padding(start = 4.dp, top = 12.dp),
+                            "Your contacts",
+                            Modifier.padding(start = 4.dp, top = 16.dp),
                             trailing = {
                                 Text(
                                     contacts.size.toString(),
@@ -271,16 +360,28 @@ fun AddContactContent(
                             contact,
                             first = index == 0,
                             last = index == contacts.lastIndex,
+                            onOpen = { onOpenChat(contact) },
                             onRemove = { removing = contact },
                         )
                     }
+                }
+
+                item(key = "my_code") {
+                    Spacer(Modifier.height(16.dp))
+                    MyShareCodeCard(myShareCode, snackbarHostState, showNameHint)
                 }
             }
         }
     }
 
+    if (tapping) {
+        TapPhonesDialog(adding = state is AddContactState.Loading, onDismiss = { tapping = false })
+    }
+
+    LaunchedEffect(showMyQr) { onQrShownChange(showMyQr) }
+
     if (showMyQr && myShareCode != null) {
-        ShareCodeQrDialog(shareCode = myShareCode, onDismiss = { showMyQr = false })
+        ShareCodeQrDialog(shareCode = myShareCode, qrContent = myQr, onDismiss = { showMyQr = false })
     }
 
     removing?.let { contact ->
@@ -300,7 +401,6 @@ private fun MyShareCodeCard(
     myShareCode: String?,
     snackbarHostState: SnackbarHostState,
     showNameHint: Boolean,
-    onShowQr: () -> Unit,
 ) {
     val aurora = Aurora.colors
     GlassCard(
@@ -329,7 +429,7 @@ private fun MyShareCodeCard(
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Share this code with others so they can message you.",
+            text = "Someone can add you with it from anywhere, but then you're not verified until you meet.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -344,22 +444,13 @@ private fun MyShareCodeCard(
         if (myShareCode != null) {
             Spacer(Modifier.height(16.dp))
             ShareCodeActions(shareCode = myShareCode, snackbarHostState = snackbarHostState)
-            Spacer(Modifier.height(10.dp))
-            SoftButton(
-                text = "Show my QR code",
-                onClick = onShowQr,
-                icon = Icons.Rounded.QrCode2,
-                tone = SoftButtonTone.Accent,
-                compact = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
         }
     }
 }
 
 /** The user's own share code as a large QR, for someone to scan with "Scan QR code". */
 @Composable
-internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit) {
+internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrContent: String? = shareCode) {
     val activity = LocalContext.current as? Activity
     // Full brightness makes the code easier to read from another phone's camera.
     DisposableEffect(activity) {
@@ -383,17 +474,26 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit) {
             contentPadding = PaddingValues(24.dp),
         ) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Your QR code", style = MaterialTheme.typography.titleLarge)
+                // A Dialog gives its content no text colour of its own: say it, or dark mode shows dark on dark.
+                Text("Your QR code", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(20.dp))
-                QrCodeImage(content = shareCode, size = 240.dp)
+                if (qrContent != null) {
+                    QrCodeImage(content = qrContent, size = 240.dp)
+                } else {
+                    Box(Modifier.size(240.dp), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.CircularProgressIndicator(strokeWidth = 3.dp)
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
                 Text(
                     text = shareCode,
                     style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "On their phone: New chat → Scan QR code.",
+                    text = "On their phone: New chat → Scan their QR code. It changes every second, so only " +
+                        "scanning it here, in person, verifies you. A picture of it just adds you.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -442,7 +542,7 @@ private fun ShareCodeField(
 }
 
 @Composable
-private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onRemove: () -> Unit) {
+private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onOpen: () -> Unit = {}, onRemove: () -> Unit) {
     val aurora = Aurora.colors
     val radius = 26.dp
     val small = 6.dp
@@ -458,19 +558,27 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onRemove
             .padding(bottom = if (last) 0.dp else 2.dp),
         shape = shape,
         fill = aurora.glass,
+        onClick = onOpen,
         // The ⋮ button is 48 dp tall: less padding keeps the row its old height.
         contentPadding = PaddingValues(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             GradientAvatar(name = contact.displayName, seed = contact.userId, size = 40.dp)
             Spacer(Modifier.width(14.dp))
-            Text(
-                text = contact.displayName,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = contact.displayName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val (label, tint) = when {
+                    contact.verifiedInPerson -> "Verified in person" to aurora.success
+                    contact.verifiedByCall -> "Verified by phone only" to MaterialTheme.colorScheme.primary
+                    else -> "Not verified" to aurora.warning
+                }
+                Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+            }
             Box {
                 var menu by remember { mutableStateOf(false) }
                 IconButton(onClick = { menu = true }) {
@@ -495,4 +603,69 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onRemove
             }
         }
     }
+}
+
+private enum class RowPosition { FIRST, MIDDLE, LAST }
+
+/** One way to add someone: an icon, what it is, and whether it verifies them in person. */
+@Composable
+private fun WayRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    position: RowPosition,
+    onClick: () -> Unit,
+    verifies: Boolean = false,
+    enabled: Boolean = true,
+) {
+    val radius = 26.dp
+    val small = 6.dp
+    val top = if (position == RowPosition.FIRST) radius else small
+    val bottom = if (position == RowPosition.LAST) radius else small
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom),
+        onClick = if (enabled) onClick else null,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(16.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (verifies) {
+                Spacer(Modifier.width(8.dp))
+                Icon(
+                    Icons.Rounded.VerifiedUser,
+                    contentDescription = "Verifies in person",
+                    tint = Aurora.colors.success,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+/** "Tap phones": what to do, while this screen answers and reads taps (InPersonNfcEffect). */
+@Composable
+private fun TapPhonesDialog(adding: Boolean, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.Nfc, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        title = { Text(if (adding) "Adding…" else "Hold your phones together") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    "Ask them to open New chat too. Then hold the backs of the phones together for a " +
+                        "moment. You'll be added to each other, verified in person.",
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.height(20.dp))
+                androidx.compose.material3.CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
+            }
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

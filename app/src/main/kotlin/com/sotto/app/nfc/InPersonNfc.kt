@@ -14,9 +14,9 @@ import java.io.IOException
  * Verifying a contact in person by holding the two phones together: one tap swaps both
  * phones' [InPersonCode]s, so each checks the other at once.
  *
- * Both phones have "Verify in person" open. Android keeps listening as a card (host card
- * emulation, [InPersonApduService]) while it also polls for cards, so whichever phone's poll
- * finds the other reads it ([readTag]):
+ * Both phones have "Verify in person" (or "Add contact") open. Each answers as a card (host card
+ * emulation, [InPersonApduService]) and, now and then, reads in reader mode
+ * ([InPersonNfcEffect]), so one finds the other and reads it ([readTag]):
  *
  *     reader → SELECT our AID                      ← 90 00
  *     reader → EXCHANGE with the reader's code     ← the card's code + 90 00
@@ -37,12 +37,35 @@ object InPersonNfc {
     private val SW_CONDITIONS = byteArrayOf(0x69, 0x85.toByte())
     private val SW_UNKNOWN = byteArrayOf(0x6D, 0x00)
     private const val TIMEOUT_MS = 3_000
+    private const val REPEAT_QUIET_MS = 5_000L
+    private const val CARD_BUSY_MS = 1_500L
 
     /** This phone's code while a verify screen is open; null otherwise (the card stays silent). */
     @Volatile
     private var myCode: InPersonCode? = null
 
     private val _received = MutableSharedFlow<InPersonCode>(extraBufferCapacity = 4)
+
+    /** Reading, or being read: don't switch roles now ([InPersonNfcEffect]). */
+    @Volatile
+    private var reading = false
+
+    @Volatile
+    private var cardActiveUntil = 0L
+
+    val isBusy: Boolean get() = reading || System.currentTimeMillis() < cardActiveUntil
+
+    /** The last code passed on, and when: phones left together swap again and again. */
+    @Volatile
+    private var lastDelivered: Pair<InPersonCode, Long>? = null
+
+    private fun deliver(code: InPersonCode) {
+        val now = System.currentTimeMillis()
+        val last = lastDelivered
+        if (last != null && last.first == code && now - last.second < REPEAT_QUIET_MS) return
+        lastDelivered = code to now
+        _received.tryEmit(code)
+    }
 
     /** Codes that came from a phone held against this one, as reader or as card. */
     val received: SharedFlow<InPersonCode> = _received.asSharedFlow()
@@ -55,6 +78,7 @@ object InPersonNfc {
 
     fun stop() {
         myCode = null
+        lastDelivered = null
     }
 
     fun selectCommand(): ByteArray =
@@ -73,12 +97,18 @@ object InPersonNfc {
     fun respond(command: ByteArray): ByteArray {
         val code = myCode
         return when {
-            isSelect(command) -> if (code != null) SW_OK else SW_NOT_FOUND
+            isSelect(command) -> if (code != null) {
+                cardActiveUntil = System.currentTimeMillis() + CARD_BUSY_MS
+                SW_OK
+            } else {
+                SW_NOT_FOUND
+            }
             command.size >= 5 && command[0] == CLA_PROPRIETARY && command[1] == INS_EXCHANGE -> {
                 if (code == null) return SW_CONDITIONS
                 val length = command[4].toInt() and 0xFF
                 if (command.size < 5 + length) return SW_CONDITIONS
-                InPersonCode.parse(command.copyOfRange(5, 5 + length))?.let { _received.tryEmit(it) }
+                InPersonCode.parse(command.copyOfRange(5, 5 + length))?.let(::deliver)
+                cardActiveUntil = 0L
                 code.toBytes() + SW_OK
             }
             else -> SW_UNKNOWN
@@ -98,13 +128,14 @@ object InPersonNfc {
     fun readTag(tag: Tag) {
         val code = myCode ?: return
         val isoDep = IsoDep.get(tag) ?: return
+        reading = true
         try {
             isoDep.connect()
             isoDep.timeout = TIMEOUT_MS
             if (!isoDep.transceive(selectCommand()).endsWithOk()) return
             val answer = isoDep.transceive(exchangeCommand(code))
             if (!answer.endsWithOk()) return
-            InPersonCode.parse(answer.copyOfRange(0, answer.size - 2))?.let { _received.tryEmit(it) }
+            InPersonCode.parse(answer.copyOfRange(0, answer.size - 2))?.let(::deliver)
         } catch (e: IOException) {
             // The phones moved apart mid-exchange: the user taps again.
             if (BuildConfig.DEBUG) Log.d("InPersonNfc", "Tap broke off: ${e.message}")
@@ -113,6 +144,7 @@ object InPersonNfc {
             if (BuildConfig.DEBUG) Log.d("InPersonNfc", "Tag gone: ${e.message}")
         } finally {
             runCatching { isoDep.close() }
+            reading = false
         }
     }
 

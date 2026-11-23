@@ -101,7 +101,8 @@ class KtorApiService @Inject constructor(
             // A retry needs a new token: the relay refuses one it has already seen.
             modifyRequest { request ->
                 if (request.headers.contains(HttpHeaders.Authorization)) {
-                    request.headers[HttpHeaders.Authorization] = "Bearer ${authToken()}"
+                    val staged = request.attributes.getOrNull(STAGED_TOKEN) == true
+                    request.headers[HttpHeaders.Authorization] = "Bearer ${keyManager.generateAuthToken(pqcProvider, staged)}"
                 }
             }
         }
@@ -132,6 +133,8 @@ class KtorApiService @Inject constructor(
     }
 
     private companion object {
+        /** Marks a request signed with staged keys, so a retry signs it the same way. */
+        val STAGED_TOKEN = io.ktor.util.AttributeKey<Boolean>("SottoStagedToken")
         const val MAX_RETRIES = 2
         /** Relay errors that pass: a crash, or a restart behind the proxy. Not 507 (queue full). */
         val RETRY_STATUSES = setOf(500, 502, 503, 504)
@@ -193,20 +196,29 @@ class KtorApiService @Inject constructor(
         Json.parseToJsonElement(response.bodyAsText()).jsonObject["detail"]?.jsonPrimitive?.contentOrNull
     }.getOrNull()
 
-    override suspend fun fetchKeyBundle(userId: String): KeyBundleDto? {
-        // No auth header — this endpoint is unauthenticated (IP rate-limited only)
-        val response: HttpResponse = client.get("/v1/identity/$userId/keys")
+    override suspend fun fetchKeyBundle(userId: String, signWithStagedKeys: Boolean): KeyBundleDto? {
+        // Signed in (since 0.7.11), so only members can look keys up; the relay requires it
+        // once KEY_LOOKUP_AUTH is on.
+        val response: HttpResponse = client.get("/v1/identity/$userId/keys") {
+            signInIfMember(staged = signWithStagedKeys)
+        }
         if (response.status.value == 404) return null
-        check(response.status.isSuccess()) { "Fetch key bundle failed: ${response.status}" }
+        if (!response.status.isSuccess()) throw ApiHttpException(response.status.value, "Fetch key bundle failed: ${response.status}")
         return response.body()
     }
 
     override suspend fun resolveShareCode(shareCode: String): ResolveShareCodeResponse? {
-        // No auth header — this endpoint is unauthenticated (IP rate-limited only)
-        val response: HttpResponse = client.get("/v1/identity/resolve/$shareCode")
+        val response: HttpResponse = client.get("/v1/identity/resolve/$shareCode") { signInIfMember() }
         if (response.status.value == 404) return null
-        check(response.status.isSuccess()) { "Resolve share code failed: ${response.status}" }
+        if (!response.status.isSuccess()) throw ApiHttpException(response.status.value, "Resolve share code failed: ${response.status}")
         return response.body()
+    }
+
+    /** Signs a key lookup in, once this phone has an account (before it, there's nobody to be). */
+    private fun io.ktor.client.request.HttpRequestBuilder.signInIfMember(staged: Boolean = false) {
+        if (keyManager.getUserId() == null) return
+        if (staged) attributes.put(STAGED_TOKEN, true)
+        header(HttpHeaders.Authorization, "Bearer ${keyManager.generateAuthToken(pqcProvider, staged)}")
     }
 
     override suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse {
@@ -298,13 +310,6 @@ class KtorApiService @Inject constructor(
             setBody(request)
         }
         check(response.status.isSuccess()) { "Register push token failed: ${response.status}" }
-    }
-
-    override suspend fun unregisterPushToken() {
-        val response: HttpResponse = client.delete("/v1/push/register") {
-            header("Authorization", "Bearer ${authToken()}")
-        }
-        check(response.status.isSuccess()) { "Unregister push token failed: ${response.status}" }
     }
 
     override suspend fun sendCallSignal(request: CallSignalRequest): CallSignalResponse {

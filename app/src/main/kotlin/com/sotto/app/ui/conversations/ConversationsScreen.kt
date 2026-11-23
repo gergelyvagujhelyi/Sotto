@@ -78,6 +78,7 @@ fun ConversationsScreen(
     val conversations by viewModel.conversations.collectAsState()
     val messageRequests by viewModel.messageRequests.collectAsState()
     val appUpdate by viewModel.appUpdate.collectAsState()
+    val trust by viewModel.trust.collectAsState()
     val pollLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(pollLifecycleOwner) {
         pollLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -95,6 +96,7 @@ fun ConversationsScreen(
         onRejectRequest = viewModel::rejectMessageRequest,
         onBlockRequest = { request -> viewModel.blockRequest(request.contactId, request.contactDisplayName) },
         appUpdate = appUpdate,
+        trust = trust,
     )
 }
 
@@ -110,6 +112,8 @@ fun ConversationsContent(
     onRejectRequest: (conversationId: String) -> Unit,
     onBlockRequest: (request: Conversation) -> Unit,
     appUpdate: AppUpdate = AppUpdate.None,
+    /** Each contact's verification, by user id; a chat whose contact isn't listed shows the lock. */
+    trust: Map<String, com.sotto.app.domain.model.ContactTrust> = emptyMap(),
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
@@ -213,6 +217,7 @@ fun ConversationsContent(
                             timestamp = conversation.lastMessageTimestamp?.let { listTimestamp(it, today) },
                             unreadCount = conversation.unreadCount,
                             isEncrypted = conversation.isEncrypted,
+                            trust = trust[conversation.contactId],
                             onClick = {
                                 onConversationClick(conversation.id, conversation.contactId)
                             },

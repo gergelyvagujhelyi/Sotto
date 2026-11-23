@@ -86,7 +86,15 @@ class IdentityRepositoryImpl @Inject constructor(
             keyManager.clearStagedKeys()
             return@withContext true
         }
-        val bundle = apiService.fetchKeyBundle(userId) // throws on network error: keep staged keys
+        // Throws on a network error: keep the staged keys. Once the relay requires sign-in for
+        // lookups, a relay that took the new keys refuses a token from the old ones (401): ask
+        // again signed with the staged keys, which it then accepts.
+        val bundle = try {
+            apiService.fetchKeyBundle(userId)
+        } catch (e: com.sotto.app.data.remote.ApiHttpException) {
+            if (e.status != 401) throw e
+            apiService.fetchKeyBundle(userId, signWithStagedKeys = true)
+        }
         val serverSigningKey = bundle?.publicSigningKey?.let {
             try { Base64.decode(it, Base64.NO_WRAP) } catch (_: IllegalArgumentException) { null }
         }

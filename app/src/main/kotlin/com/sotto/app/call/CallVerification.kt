@@ -14,7 +14,7 @@ data class CallVerifyPayload(val kind: String, val value: String) {
 }
 
 /**
- * Verifying a contact by call: both phones show a six-digit code and the two people read it to
+ * Verify by phone: both phones show seven emoji (VerifyEmoji) and the two people read them to
  * each other (ADR-31). It's weaker than meeting, so a contact checked this way is only "verified
  * by call", never "verified in person".
  *
@@ -22,11 +22,11 @@ data class CallVerifyPayload(val kind: String, val value: String) {
  * middle (the relay, say) gave each phone other keys, each phone sees another pair of
  * fingerprints and the codes differ, even if every message of this exchange is passed through.
  *
- * Six digits are only about 20 bits, so the random values that go into the code are committed
+ * Seven emoji are 42 bits, and the random values that go into the code are committed anyway
  * before they're revealed (as ZRTP does): a phone sends the hash of its value, and reveals the
  * value only once it has the other phone's hash. Someone in the middle has to commit to each
  * side before it learns that side's value, so it can't search for keys or values that make the
- * two codes match: it gets one guess, about one in a million.
+ * two codes match: it gets one guess, about one in 4.4 trillion.
  *
  * Not thread-safe: CallManager calls it under its own lock.
  */
@@ -61,8 +61,8 @@ class CallVerification(
     var phase: Phase = Phase.IDLE
         private set
 
-    /** The six digits, as "123 456", once [phase] is [Phase.CODE]. */
-    var code: String? = null
+    /** The seven emoji, once [phase] is [Phase.CODE]. */
+    var code: List<com.sotto.app.domain.model.VerifyEmoji>? = null
         private set
 
     /** The user asked to compare a code: what to send. */
@@ -124,17 +124,14 @@ class CallVerification(
         }
     }
 
-    private fun computeCode(theirNonce: ByteArray): String {
+    private fun computeCode(theirNonce: ByteArray): List<com.sotto.app.domain.model.VerifyEmoji> {
         // The caller's parts first, so both phones hash the same thing.
         val (callerFp, calleeFp) = if (isCaller) myFingerprint to peerFingerprint else peerFingerprint to myFingerprint
         val (callerNonce, calleeNonce) = if (isCaller) myNonce to theirNonce else theirNonce to myNonce
         val digest = sha256(
             DOMAIN + lp(callId.toByteArray(Charsets.UTF_8)) + lp(callerFp) + lp(calleeFp) + lp(callerNonce) + lp(calleeNonce),
         )
-        val number = ((digest[0].toLong() and 0xFF) shl 24 or ((digest[1].toLong() and 0xFF) shl 16) or
-            ((digest[2].toLong() and 0xFF) shl 8) or (digest[3].toLong() and 0xFF)) % 1_000_000
-        val digits = number.toString().padStart(6, '0')
-        return digits.substring(0, 3) + " " + digits.substring(3)
+        return com.sotto.app.domain.model.VerifyEmoji.fromDigest(digest)
     }
 
     /** The fingerprint this phone used for the other person, to mark them verified with. */

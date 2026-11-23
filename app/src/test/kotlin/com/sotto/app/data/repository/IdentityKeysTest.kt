@@ -104,4 +104,31 @@ class IdentityKeysTest {
         }
         coVerify(exactly = 0) { contactDao.upsert(any()) }
     }
+
+    @Test
+    fun `after a crash mid-rotation, a relay that refuses the old keys is asked with the staged ones`() = runTest {
+        val staged = ByteArray(32) { 7 }
+        every { android.util.Base64.decode(any<String>(), any()) } answers { Base64.getDecoder().decode(firstArg<String>()) }
+        every { android.util.Log.w(any(), any<String>()) } returns 0
+        every { android.util.Log.w(any(), any<String>(), any()) } returns 0
+        every { android.util.Log.i(any(), any()) } returns 0
+        every { android.util.Log.d(any(), any()) } returns 0
+        every { keyManager.hasStagedKeys() } returns true
+        every { keyManager.isRotationConfirmedByServer() } returns false
+        every { keyManager.getStagedPublicSigningKey() } returns staged
+        every { keyManager.getUserId() } returns "me"
+        // Signed in with the old keys: the relay already holds the new ones and refuses (401).
+        coEvery { apiService.fetchKeyBundle("me", false) } throws com.sotto.app.data.remote.ApiHttpException(401, "no")
+        coEvery { apiService.fetchKeyBundle("me", true) } returns com.sotto.app.data.remote.dto.KeyBundleDto(
+            userId = "me",
+            publicSigningKey = Base64.getEncoder().encodeToString(staged),
+            publicIdentityKey = "",
+            pqcEncapsulationKey = "",
+        )
+
+        repo.resolvePendingRotation()
+
+        coVerify { apiService.fetchKeyBundle("me", true) }
+        io.mockk.verify { keyManager.markRotationConfirmedByServer() }
+    }
 }

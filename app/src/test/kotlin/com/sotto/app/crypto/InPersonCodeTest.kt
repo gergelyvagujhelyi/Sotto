@@ -34,4 +34,21 @@ class InPersonCodeTest {
         assertNull(InPersonCode.parse("sotto-verify:1:0123456789abcdef:$fp:extra"))
         assertNull(InPersonCode.parse(""))
     }
+
+    @Test
+    fun `a live code carries its time and signature and reads back`() {
+        val live = code.copy(issuedAt = 1_800_000_000, signature = ByteArray(64) { 7 })
+        assertTrue(live.encode().startsWith("sotto-verify:2:0123456789abcdef:"))
+        assertEquals(live, InPersonCode.parse(live.encode()))
+        assertTrue(InPersonCode.parse(live.encode())!!.isLive)
+    }
+
+    @Test
+    fun `a live code with a missing or broken part is no code`() {
+        val fp = code.encode().substringAfterLast(':')
+        val sig = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(64))
+        assertNull(InPersonCode.parse("sotto-verify:2:0123456789abcdef:$fp:1800000000"))
+        assertNull(InPersonCode.parse("sotto-verify:2:0123456789abcdef:$fp:soon:$sig"))
+        assertNull(InPersonCode.parse("sotto-verify:2:0123456789abcdef:$fp:1800000000:${sig.dropLast(4)}"))
+    }
 }

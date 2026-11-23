@@ -28,13 +28,12 @@ import com.sotto.app.data.remote.dto.SendMessageResponse
  *
  * Endpoints:
  * POST   /v1/identity/bootstrap         — register a guest identity
- * GET    /v1/identity/{userId}/keys      — fetch a user's public key bundle
- * POST   /v1/identity/resolve            — resolve a share code to a key bundle
+ * GET    /v1/identity/{userId}/keys      — fetch a user's public key bundle (signed in, since 0.7.11)
+ * GET    /v1/identity/resolve/{code}     — resolve a share code to a key bundle (signed in, since 0.7.11)
  * POST   /v1/messages/send               — submit an encrypted envelope for relay
  * GET    /v1/messages/pending             — fetch pending envelopes
  * POST   /v1/messages/ack                — acknowledge receipt of messages
  * POST   /v1/push/register               — register the push target (installation ID)
- * DELETE /v1/push/register               — unregister it
  * PUT    /v1/identity/me/keys            — rotate public keys
  */
 interface ApiService {
@@ -45,13 +44,16 @@ interface ApiService {
 
     /** Whether [baseUrl] is a Sotto relay, and whether it wants an invite. */
     suspend fun relayHealth(baseUrl: String): RelayHealthDto
-    suspend fun fetchKeyBundle(userId: String): KeyBundleDto?
+    /**
+     * [signWithStagedKeys]: sign in with the keys of an unconfirmed rotation, to learn after a
+     * crash whether the relay took them (IdentityRepositoryImpl's recovery).
+     */
+    suspend fun fetchKeyBundle(userId: String, signWithStagedKeys: Boolean = false): KeyBundleDto?
     suspend fun resolveShareCode(shareCode: String): ResolveShareCodeResponse?
     suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse
     suspend fun fetchPendingMessages(): List<PendingMessageDto>
     suspend fun acknowledgeMessages(request: AckRequest)
     suspend fun registerPushToken(request: PushTokenRequest)
-    suspend fun unregisterPushToken()
     suspend fun sendCallSignal(request: CallSignalRequest): CallSignalResponse
     suspend fun getIceServers(): IceServersResponse
     suspend fun rotateKeys(request: KeyRotationRequest): KeyRotationResponse

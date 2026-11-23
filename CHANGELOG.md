@@ -4,6 +4,25 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.11 — 2026-11-23
+
+Update both phones: with 0.7.10 the code for verifying by phone never appeared, and 0.7.10 can't read 0.7.11's QR codes (which now change every second).
+
+- **Verify by phone works** — In 0.7.10 the code never appeared: each phone sent its half, but the other phone's connection to the relay dropped it unread, so both kept waiting. A test now checks that the app takes every kind of call signal the relay forwards. Update both phones.
+- **"Not verified"** — A contact you haven't checked yet now says "Not verified" instead of "Not verified in person", which read as if some other check had happened.
+- **"Verify by phone"** — The call screen's "123" button is now a labelled **Verify by phone** button under the call's details, and the dialog says what it's for. A contact checked this way says **"Verified by phone only"**.
+- **Seven emoji instead of six digits** — Verify by phone now shows seven emoji, each with its name under it ("Dog, Rocket, Key…"), as Element does. They're easier to compare and to say aloud, and harder to guess (about 1 in 4.4 trillion).
+- **Add each other by tapping phones** — Both open New chat and hold the phones back to back: each adds the other, already verified in person. Scanning someone's QR code (New chat → Scan their QR code) does the same. A typed or pasted share code still adds them as "Not verified".
+- **The QR code changes every second, as in BankID** — So a screenshot passed on can't stand in for meeting: scanning it later still adds the person, but as "Not verified". That goes for every QR code of yours: Verify in person, New chat → Show my QR code, and Settings, which keeps your share code as text below it.
+- **The chat list shows who's verified** — A green shield next to the name for verified in person, a purple phone for verified by phone only, a yellow shield for not verified.
+- **One tap is enough** — With 0.7.10 the first tap often did nothing and a second one was needed: Android checked the other phone as a tag first, and that broke the link. The phones now take turns reading each other directly.
+- **New chat starts with the ways to add someone** — Tap phones, Scan their QR code, Show my QR code, Enter a share code (the two that verify in person carry a green shield), then your contacts, each saying whether they're verified in person, by phone, or not at all. Tapping a contact opens your chat with them. Your share code, with Copy and Share, is at the bottom.
+- **Verify by phone opens by itself** — Choosing Verify by phone in the first-message warning calls them, and the code check opens as soon as the call connects.
+- **Key lookups are signed in** — Looking up someone's keys (adding a contact, checking keys before a message or call) now signs in to the relay like every other request, so the relay can later refuse lookups from non-members. A phone that crashed in the middle of changing its keys still recovers once the relay requires this: it asks again signed with the new keys.
+- **"Your QR code" readable in dark mode** — Its title and the share code under the QR were dark on dark.
+- **Verify by phone from the first-message warning** — The warning before your first message to someone unverified now offers **Verify in person**, **Verify by phone** (it calls them; tap Verify by phone once the call connects) and **Send anyway**.
 - **Relay: key lookups by members only, when switched on** — With `KEY_LOOKUP_AUTH=true` in `.env`, looking up someone's keys by share code or user id needs a member's sign-in, so an outsider can't confirm an account exists or watch its key changes. Off by default: turn it on once every phone runs 0.7.11, which signs lookups in.
 - **Relay: unused routes gone** — `DELETE /v1/push/register` and call signals sent over the WebSocket; no app ever used them. nginx no longer passes `/metrics` through (it's read inside the container).
 - **Relay README: the endpoint table is complete** — With receipts, attachments, the release call, the invite page and App Links, and who may call each.
