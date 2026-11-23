@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.GppBad
 import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Nfc
+import androidx.compose.material.icons.rounded.PhoneInTalk
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.WifiOff
@@ -179,7 +180,12 @@ fun VerifyInPersonScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                StatusCard(name = name, seed = viewModel.contactId, verified = contact?.verifiedInPerson == true)
+                StatusCard(
+                    name = name,
+                    seed = viewModel.contactId,
+                    verified = contact?.verifiedInPerson == true,
+                    byCall = contact?.verifiedByCall == true,
+                )
 
                 Column {
                     SectionLabel("Hold your phones together", Modifier.padding(start = 4.dp))
@@ -248,8 +254,12 @@ fun VerifyInPersonScreen(
 }
 
 @Composable
-private fun StatusCard(name: String, seed: String, verified: Boolean) {
-    val tint = if (verified) Aurora.colors.success else Aurora.colors.warning
+private fun StatusCard(name: String, seed: String, verified: Boolean, byCall: Boolean) {
+    val tint = when {
+        verified -> Aurora.colors.success
+        byCall -> MaterialTheme.colorScheme.primary
+        else -> Aurora.colors.warning
+    }
     GlassCard(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             GradientAvatar(name = name, seed = seed, size = 48.dp)
@@ -258,24 +268,36 @@ private fun StatusCard(name: String, seed: String, verified: Boolean) {
                 Text(name, style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        if (verified) Icons.Rounded.VerifiedUser else Icons.Rounded.GppMaybe,
+                        when {
+                            verified -> Icons.Rounded.VerifiedUser
+                            byCall -> Icons.Rounded.PhoneInTalk
+                            else -> Icons.Rounded.GppMaybe
+                        },
                         contentDescription = null,
                         tint = tint,
                         modifier = Modifier.size(16.dp),
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        if (verified) "Verified in person" else "Not verified in person",
+                        when {
+                            verified -> "Verified in person"
+                            byCall -> "Verified by call only"
+                            else -> "Not verified in person"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = tint,
                     )
                 }
             }
         }
-        if (verified) {
+        if (verified || byCall) {
             Spacer(Modifier.height(10.dp))
             Text(
-                "You've checked $name's keys face to face. You can check again any time.",
+                if (verified) {
+                    "You've checked $name's keys face to face. You can check again any time."
+                } else {
+                    "You compared a code with $name in a call. Meeting is stronger proof: verify in person when you can."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

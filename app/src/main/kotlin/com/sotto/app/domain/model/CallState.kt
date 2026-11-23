@@ -36,6 +36,26 @@ enum class CallStatus {
         get() = this != RINGING && this != CONNECTING && this != CONNECTED
 }
 
+/** Where comparing a code in this call stands (CallVerification, ADR-31). */
+data class CallVerifyState(val step: Step, val code: String? = null) {
+    enum class Step {
+        /** We asked; waiting for the other phone to ask too. */
+        WAITING,
+        /** The other person asked to compare a code. */
+        ASKED,
+        /** Both asked; the code is being worked out. */
+        EXCHANGING,
+        /** Read [code] to each other. */
+        CODE,
+        /** The user said the codes match: marked verified by call. */
+        MATCHED,
+        /** The user said they differ, or the other phone broke the exchange. */
+        DIFFERENT,
+        /** This call can't be verified (not a saved contact, or keys unknown). */
+        UNAVAILABLE,
+    }
+}
+
 data class CallState(
     val callId: String,
     val peerId: String,
@@ -71,6 +91,8 @@ data class CallState(
     val highQuality: Boolean = false,
     /** Louder is on: the other person's voice is lifted more than levelling alone does (ADR-23). */
     val louder: Boolean = false,
+    /** Comparing a code to verify the contact by call; null when nobody asked. */
+    val verify: CallVerifyState? = null,
 ) {
     val isSpeakerOn: Boolean get() = audioRoute?.kind == AudioRouteKind.SPEAKER
 }

@@ -28,6 +28,7 @@ import com.sotto.app.data.local.entity.MessageEntity
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallPath
 import com.sotto.app.domain.model.CallState
+import com.sotto.app.domain.model.CallVerifyState
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.repository.CryptoEngine
@@ -85,8 +86,13 @@ class CallManager @Inject constructor(
     private val networkMonitor: DefaultNetworkMonitor,
     private val settingsRepository: SettingsRepository,
     private val ringer: IncomingRinger,
+    private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
+    /** Comparing a code in the current call (ADR-31); guarded by [verifyMutex]. */
+    private var verification: CallVerification? = null
+    private val verifyMutex = Mutex()
 
     init {
         scope.launch {
@@ -625,12 +631,12 @@ class CallManager @Inject constructor(
                         }
                         return@launch
                     }
-                    "call_ice_restart" -> {
+                    "call_ice_restart", "call_verify" -> {
                         val state = _callState.value
                         if (state == null || signal.senderId != state.peerId || signal.callId != state.callId ||
                             state.status in TERMINAL_STATUSES
                         ) {
-                            logDebug("Ignoring call_ice_restart: no matching active call")
+                            logDebug("Ignoring ${signal.signalType}: no matching active call")
                             return@launch
                         }
                     }
@@ -692,6 +698,7 @@ class CallManager @Inject constructor(
                     "call_answer" -> processAnswerPayload(signal)
                     "call_ice_candidate" -> processIceCandidatePayload(signal)
                     "call_ice_restart" -> processRestartSignal(signal)
+                    "call_verify" -> processVerifySignal(signal)
                 }
             } catch (e: Exception) {
                 logError("Failed to process ${signal.signalType} payload", e)
@@ -989,6 +996,105 @@ class CallManager @Inject constructor(
                 contactDao.setLouderVoice(state.peerId, louder)
             } catch (e: Exception) {
                 logWarn("Could not remember Louder for this contact: ${e.message}")
+            }
+        }
+    }
+
+    /** The user asked to compare a code with the other person (ADR-31). */
+    fun startVerification() {
+        val state = _callState.value ?: return
+        if (state.status != CallStatus.CONNECTED) return
+        scope.launch {
+            val toSend = verifyMutex.withLock {
+                val v = verificationFor(state) ?: run {
+                    setVerify(state.callId, CallVerifyState(CallVerifyState.Step.UNAVAILABLE))
+                    return@launch
+                }
+                v.start().also { showVerification(v) }
+            }
+            sendVerify(state, toSend)
+        }
+    }
+
+    /** The user compared the codes: [matches] marks the contact verified by call. */
+    fun answerVerification(matches: Boolean) {
+        val state = _callState.value ?: return
+        scope.launch {
+            val v = verifyMutex.withLock { verification?.takeIf { it.callId == state.callId } }
+            if (v == null || v.phase != CallVerification.Phase.CODE) return@launch
+            if (!matches) {
+                logWarn("Call verification: the user says the codes differ")
+                setVerify(state.callId, CallVerifyState(CallVerifyState.Step.DIFFERENT, v.code))
+                return@launch
+            }
+            val marked = try {
+                contactDao.markVerifiedByCall(state.peerId, v.peerFingerprintHex) > 0
+            } catch (e: Exception) {
+                logWarn("Could not mark the contact verified by call: ${e.message}")
+                false
+            }
+            setVerify(
+                state.callId,
+                CallVerifyState(if (marked) CallVerifyState.Step.MATCHED else CallVerifyState.Step.UNAVAILABLE, v.code),
+            )
+        }
+    }
+
+    /** Closes the verification panel; asking again starts over in a new call only. */
+    fun dismissVerification() {
+        _callState.update { it?.copy(verify = null) }
+    }
+
+    /** A step of the other phone's verification. */
+    private suspend fun processVerifySignal(signal: CallSignalDto) {
+        val state = _callState.value?.takeIf { it.callId == signal.callId } ?: return
+        val payload = json.decodeFromString<CallVerifyPayload>(
+            decryptPayload(signal.senderId, signal.callId, signal.encryptedPayload),
+        )
+        val toSend = verifyMutex.withLock {
+            val v = verificationFor(state) ?: return
+            v.onPeer(payload).also { showVerification(v) }
+        }
+        sendVerify(state, toSend)
+    }
+
+    /** This call's verification, made on first use; null when the contact's keys aren't known. */
+    private suspend fun verificationFor(state: CallState): CallVerification? {
+        verification?.takeIf { it.callId == state.callId }?.let { return it }
+        if (state.isNewContact) return null
+        val peerFp = contactDao.getByUserId(state.peerId)?.keyFingerprint ?: return null
+        val myFp = withContext(Dispatchers.IO) { inPersonVerifier.myCode() }?.fingerprint ?: return null
+        return CallVerification(
+            callId = state.callId,
+            isCaller = state.direction == CallDirection.OUTGOING,
+            myFingerprint = myFp,
+            peerFingerprint = com.sotto.app.crypto.KeyFingerprint.fromHex(peerFp),
+        ).also { verification = it }
+    }
+
+    private fun showVerification(v: CallVerification) {
+        val step = when (v.phase) {
+            CallVerification.Phase.IDLE -> return
+            CallVerification.Phase.WAITING -> CallVerifyState.Step.WAITING
+            CallVerification.Phase.ASKED -> CallVerifyState.Step.ASKED
+            CallVerification.Phase.EXCHANGING -> CallVerifyState.Step.EXCHANGING
+            CallVerification.Phase.CODE -> CallVerifyState.Step.CODE
+            CallVerification.Phase.BROKEN -> CallVerifyState.Step.DIFFERENT
+        }
+        // A result the user already gave stays on screen.
+        val shown = _callState.value?.verify?.step
+        if (shown == CallVerifyState.Step.MATCHED || shown == CallVerifyState.Step.DIFFERENT) return
+        setVerify(v.callId, CallVerifyState(step, v.code))
+    }
+
+    private fun setVerify(callId: String, verify: CallVerifyState) {
+        _callState.update { if (it?.callId == callId) it.copy(verify = verify) else it }
+    }
+
+    private suspend fun sendVerify(state: CallState, payloads: List<CallVerifyPayload>) {
+        for (payload in payloads) {
+            if (sendSignal(state.peerId, "call_verify", state.callId, json.encodeToString(payload)) == null) {
+                logWarn("Call verification: a ${payload.kind} couldn't be sent")
             }
         }
     }

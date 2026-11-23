@@ -30,6 +30,12 @@ data class ContactEntity(
     val verifiedInPerson: Boolean = false,
     /** The user was told once, before their first message, that this contact isn't verified in person. */
     val inPersonWarned: Boolean = false,
+    /**
+     * The user compared a code with this contact in a Sotto call and it matched (CallVerification).
+     * Weaker than [verifiedInPerson]: the chat says "Verified by call only". Kept and cleared
+     * like [verifiedInPerson].
+     */
+    val verifiedByCall: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -47,7 +53,8 @@ data class ContactEntity(
             profileName == other.profileName &&
             louderVoice == other.louderVoice &&
             verifiedInPerson == other.verifiedInPerson &&
-            inPersonWarned == other.inPersonWarned
+            inPersonWarned == other.inPersonWarned &&
+            verifiedByCall == other.verifiedByCall
     }
 
     override fun hashCode(): Int {
@@ -65,6 +72,7 @@ data class ContactEntity(
         result = 31 * result + louderVoice.hashCode()
         result = 31 * result + verifiedInPerson.hashCode()
         result = 31 * result + inPersonWarned.hashCode()
+        result = 31 * result + verifiedByCall.hashCode()
         return result
     }
 }

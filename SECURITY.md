@@ -36,6 +36,7 @@ messages from the losing session are still decrypted.
   - The contact is marked only when that fingerprint equals the one pinned for them, after following a rotation their old keys endorsed. A code from another account, or other keys, shows a warning not to trust the chat.
   - NFC: one tap swaps both phones' codes (host card emulation on one, a reader on the other), and a phone answers only while its verify screen is open and it's unlocked. QR: each phone checks what it scanned, so both scan.
   - An endorsed rotation keeps the mark; keys replaced by a share code without an endorsement clear it. The relay never learns who verified whom.
+- **Verified by call (since 0.7.10, weaker)**: in a Sotto call, both people tap the code button and read six digits to each other (ADR-31). The digits come from both fingerprints as each phone has them pinned and from a random value per phone, committed (SHA-256) before it's revealed, all inside the call's encrypted signals. Keys swapped by someone in the middle give the two phones different digits, and the commitments leave such an attacker one guess in a million. A match marks the contact "Verified by call only", never verified in person, because it rests on recognising the other person's voice.
 
 ### Identity
 - **Classical signing**: Ed25519 (identity assertions, message authentication, auth tokens).

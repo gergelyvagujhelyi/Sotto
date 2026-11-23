@@ -84,6 +84,9 @@ class CallViewModel @Inject constructor(
     fun toggleMute() = callManager.toggleMute()
     fun toggleSpeaker() = callManager.toggleSpeaker()
     fun toggleLouder() = callManager.toggleLouder()
+    fun startVerification() = callManager.startVerification()
+    fun answerVerification(matches: Boolean) = callManager.answerVerification(matches)
+    fun dismissVerification() = callManager.dismissVerification()
     fun selectAudioRoute(route: com.sotto.app.domain.model.AudioRoute) = callManager.selectAudioRoute(route)
     fun clearCallError() = callManager.clearCallError()
 }

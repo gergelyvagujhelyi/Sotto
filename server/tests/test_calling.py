@@ -223,6 +223,36 @@ async def test_ice_restart_is_buffered_for_an_offline_peer_and_never_pushed(clie
 
 
 @pytest.mark.asyncio
+async def test_call_verify_is_forwarded_and_never_pushed(client: AsyncClient, monkeypatch):
+    """A code compared in a call (ADR-31): the relay passes it on like any in-call signal."""
+    import json
+
+    import app.routers.calling as calling
+    from app.services.websocket_manager import ws_manager
+
+    pushed = []
+
+    async def fake_push(**kwargs):
+        pushed.append(kwargs)
+
+    monkeypatch.setattr(calling, "send_push_notification", fake_push)
+    _clear_signal_buffer()
+    alice = await _bootstrap_user(client, "verify_alice")
+    bob = await _bootstrap_user(client, "verify_bob")
+    await client.post("/v1/push/register", json={"token": "bob-token"}, headers=_auth(bob))
+
+    resp = await client.post("/v1/calls/signal", headers=_auth(alice), json={
+        "recipient_id": bob["user_id"], "signal_type": "call_verify",
+        "call_id": "c1", "encrypted_payload": "commit",
+    })
+    assert resp.status_code == 200
+    buffered = [json.loads(p)["type"] for _, p in ws_manager._pending_call_signals[bob["user_id"]]]
+    assert buffered == ["call_verify"]
+    assert pushed == []
+    _clear_signal_buffer()
+
+
+@pytest.mark.asyncio
 async def test_a_call_offer_wakes_an_offline_phone_with_a_call_push(client: AsyncClient, monkeypatch):
     import app.routers.calling as calling
 
