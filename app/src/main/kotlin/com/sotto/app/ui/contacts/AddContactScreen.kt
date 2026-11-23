@@ -699,7 +699,7 @@ private fun TapPhonesDialog(adding: Boolean, onDismiss: () -> Unit) {
  * scan ours (their phone opens its scanner by itself when our request arrives, LiveQrWatch).
  */
 @Composable
-private fun YourTurnDialog(name: String, qrContent: String?, onDone: () -> Unit) {
+internal fun YourTurnDialog(name: String, qrContent: String?, onDone: () -> Unit) {
     val activity = LocalContext.current as? Activity
     // Full brightness, as for "Show my QR code".
     DisposableEffect(activity) {
