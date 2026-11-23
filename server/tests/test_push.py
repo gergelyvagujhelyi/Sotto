@@ -43,26 +43,6 @@ async def test_register_push_token(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_unregister_push_token(client: AsyncClient):
-    """DELETE /v1/push/register should remove the FCM token."""
-    user = await _bootstrap_user(client, "push_unreg")
-
-    # Register
-    await client.post(
-        "/v1/push/register",
-        json={"token": "fcm_token_xyz"},
-        headers=_auth(user),
-    )
-
-    # Unregister
-    resp = await client.delete(
-        "/v1/push/register",
-        headers=_auth(user),
-    )
-    assert resp.status_code == 200
-
-
-@pytest.mark.asyncio
 async def test_register_unknown_user(client: AsyncClient):
     """Auth rejects unknown users before the endpoint runs."""
     private_key, _ = generate_ed25519_keypair()
@@ -128,11 +108,8 @@ async def test_register_needs_exactly_one_valid_target(client: AsyncClient, body
 
 
 @pytest.mark.asyncio
-async def test_unregister_clears_both_targets(client: AsyncClient):
-    user = await _bootstrap_user(client, "push_unreg_fid")
-    await client.post("/v1/push/register", json={"fid": FID}, headers=_auth(user))
-    assert await _push_targets(user["user_id"]) == (None, FID)
-
+async def test_unregistering_is_gone(client: AsyncClient):
+    """No app ever called DELETE /v1/push/register; deleting the account clears the target."""
+    user = await _bootstrap_user(client, "push_no_unreg")
     resp = await client.delete("/v1/push/register", headers=_auth(user))
-    assert resp.status_code == 200
-    assert await _push_targets(user["user_id"]) == (None, None)
+    assert resp.status_code == 405

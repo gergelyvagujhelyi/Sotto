@@ -170,6 +170,23 @@ def verify_token(
     return user_id
 
 
+async def key_lookup_auth(
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[str]:
+    """Key lookups by members only, once KEY_LOOKUP_AUTH is on (config.py).
+
+    Off, anyone may look keys up, as before 0.7.11 (IP rate-limited only). On, a valid
+    sign-in token is required, so someone outside the relay can't confirm an account exists
+    from a share code or user id, or watch when its keys change.
+    """
+    if not config.KEY_LOOKUP_AUTH:
+        return None
+    if authorization is None:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    return await verify_auth_token(authorization=authorization, db=db)
+
+
 async def verify_auth_token(
     authorization: str = Header(..., alias="Authorization"),
     db: AsyncSession = Depends(get_db),

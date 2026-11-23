@@ -43,22 +43,3 @@ async def register_push_token(
         identity.fcm_fid = None
     await db.commit()
     return {"status": "ok"}
-
-
-@router.delete("/register")
-async def unregister_push_token(
-    x_user_id: str = Depends(verify_auth_token),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Remove the push target for the authenticated user."""
-    result = await db.execute(
-        select(Identity).where(Identity.user_id == x_user_id)
-    )
-    identity = result.scalar_one_or_none()
-    if identity is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    identity.fcm_token = None
-    identity.fcm_fid = None
-    await db.commit()
-    return {"status": "ok"}

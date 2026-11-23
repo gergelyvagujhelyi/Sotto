@@ -41,12 +41,11 @@ async def relay_signal(
     if request.recipient_id == x_user_id:
         raise HTTPException(status_code=400, detail="Cannot signal self")
 
-    # Per-user rate limit, shared with the WebSocket path.
+    # Per-user rate limit.
     if not await allow_call_signal(x_user_id):
         raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-    # Offers wake the recipient with a high-priority push: limit them separately
-    # (shared with the WebSocket path).
+    # Offers wake the recipient with a high-priority push: limit them separately.
     if request.signal_type == "call_offer" and not await allow_call_offer(x_user_id):
         raise HTTPException(status_code=429, detail="Too many calls")
 

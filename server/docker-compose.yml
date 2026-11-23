@@ -68,6 +68,8 @@ services:
       TURN_CREDENTIAL_TTL: ${TURN_CREDENTIAL_TTL:-3600}
       # New accounts need a member's invite (the relay's first account doesn't).
       INVITE_ONLY: ${INVITE_ONLY:-true}
+      # Key lookups by members only (needs every phone on 0.7.11 or later).
+      KEY_LOOKUP_AUTH: ${KEY_LOOKUP_AUTH:-false}
       APP_LINK_PACKAGE: ${APP_LINK_PACKAGE:-}
       APP_LINK_CERT_FINGERPRINTS: ${APP_LINK_CERT_FINGERPRINTS:-}
       APP_DOWNLOAD_URL: ${APP_DOWNLOAD_URL:-}

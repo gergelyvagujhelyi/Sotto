@@ -26,16 +26,13 @@ from app.auth import verify_token
 from app.config import WS_IDLE_TIMEOUT_SECONDS
 from app.database import get_db
 from app.models.db import Identity
-from app.services.call_rate_limiter import allow_call_offer, allow_call_signal
 from app.services import app_release as app_release_service
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(tags=["websocket"])
 logger = logging.getLogger(__name__)
 
-from app.services.call_signals import ALLOWED_SIGNAL_TYPES as _ALLOWED_SIGNAL_TYPES
-_MAX_AUTH_MESSAGE_BYTES = 8192      # Auth/ping messages are small
-_MAX_SIGNAL_MESSAGE_BYTES = 81920   # Call signals can carry large encrypted payloads
+_MAX_AUTH_MESSAGE_BYTES = 8192      # Auth and ping, the only messages the socket takes
 
 
 
@@ -160,7 +157,7 @@ async def websocket_endpoint(
             except asyncio.TimeoutError:
                 await websocket.close(code=4008, reason="Idle timeout")
                 break
-            if len(raw) > _MAX_SIGNAL_MESSAGE_BYTES:
+            if len(raw) > _MAX_AUTH_MESSAGE_BYTES:
                 await websocket.send_text(
                     json.dumps({"type": "error", "message": "Message too large"})
                 )
@@ -177,76 +174,12 @@ async def websocket_endpoint(
 
             if msg_type == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
-
-            elif msg_type in _ALLOWED_SIGNAL_TYPES:
-                recipient_id = msg.get("recipient_id", "")
-                call_id = msg.get("call_id", "")
-                encrypted_payload = msg.get("encrypted_payload", "")
-                signature = msg.get("signature", "")
-                pqc_signature = msg.get("pqc_signature", "")
-                kem_ciphertext = msg.get("kem_ciphertext", "")
-
-                # Validate types and lengths (match REST schema constraints)
-                if (
-                    not isinstance(recipient_id, str)
-                    or not isinstance(call_id, str)
-                    or not isinstance(encrypted_payload, str)
-                    or not isinstance(signature, str)
-                    or not isinstance(pqc_signature, str)
-                    or not isinstance(kem_ciphertext, str)
-                    or not recipient_id
-                    or not call_id
-                    or len(recipient_id) > 64
-                    or len(call_id) > 128
-                    or len(encrypted_payload) > 65536
-                    or len(signature) > 512
-                    or len(pqc_signature) > 4608
-                    or len(kem_ciphertext) > 2048
-                ):
-                    await websocket.send_text(
-                        json.dumps({"type": "error", "message": "Invalid call signal"})
-                    )
-                    continue
-
-                # Prevent self-calls
-                if recipient_id == user_id:
-                    await websocket.send_text(
-                        json.dumps({"type": "error", "message": "Invalid call signal"})
-                    )
-                    continue
-
-                # Per-user signal rate limit, shared with the REST path.
-                rate_limited = not await allow_call_signal(user_id)
-                # Per-user call_offer limit, shared with the REST path.
-                if not rate_limited and msg_type == "call_offer":
-                    rate_limited = not await allow_call_offer(user_id)
-
-                if rate_limited:
-                    await websocket.send_text(
-                        json.dumps({"type": "error", "message": "Rate limit exceeded"})
-                    )
-                    continue
-
-                async def recipient_exists(rid: str = recipient_id) -> bool:
-                    # Short lookup; never keep the session open for the socket's life.
-                    try:
-                        found = (await db.execute(
-                            select(Identity.user_id).where(Identity.user_id == rid)
-                        )).scalar_one_or_none()
-                    finally:
-                        await db.close()
-                    return found is not None
-
-                await ws_manager.relay_call_signal(
-                    recipient_exists=recipient_exists,
-                    sender_id=user_id,
-                    recipient_id=recipient_id,
-                    signal_type=msg_type,
-                    call_id=call_id,
-                    encrypted_payload=encrypted_payload,
-                    signature=signature,
-                    pqc_signature=pqc_signature,
-                    kem_ciphertext=kem_ciphertext,
+            else:
+                # Nothing else is taken from the socket: call signals go through
+                # POST /v1/calls/signal (no app ever sent them here). Say so, rather
+                # than leave a caller waiting for a ring that never comes.
+                await websocket.send_text(
+                    json.dumps({"type": "error", "message": "Unsupported message type"})
                 )
 
     except WebSocketDisconnect:
@@ -256,5 +189,3 @@ async def websocket_endpoint(
     finally:
         if user_id:
             await ws_manager.disconnect(user_id, websocket)
-            # Rate limit state is preserved for the TTL duration even after disconnect
-            # to prevent quota reset via reconnect. Stale entries are pruned periodically.
