@@ -929,7 +929,7 @@ private fun CallVerifyDialog(
             Text(
                 when (step) {
                     com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> "$name wants to verify by phone"
-                    com.sotto.app.domain.model.CallVerifyState.Step.CODE -> "Read these digits to $name"
+                    com.sotto.app.domain.model.CallVerifyState.Step.CODE -> "Read these to $name"
                     com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> "$name is verified by phone"
                     com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> "The codes don't match"
                     com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE -> "Can't verify by phone now"
@@ -941,12 +941,30 @@ private fun CallVerifyDialog(
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 if (step == com.sotto.app.domain.model.CallVerifyState.Step.CODE && verify.code != null) {
-                    Text(
-                        verify.code,
-                        style = MaterialTheme.typography.displayMedium.copy(
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-                        ),
-                    )
+                    // Seven emoji in two rows (4 + 3), each with its name to read out.
+                    verify.code.chunked(4).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            row.forEach { emoji ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.width(64.dp).semantics(mergeDescendants = true) {},
+                                ) {
+                                    Text(emoji.symbol, style = MaterialTheme.typography.headlineLarge)
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        emoji.name,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = colors.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 2,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(12.dp))
                 }
                 Text(
@@ -954,10 +972,10 @@ private fun CallVerifyDialog(
                         com.sotto.app.domain.model.CallVerifyState.Step.WAITING ->
                             "Waiting for $name to tap Verify by phone too. If nothing happens, their Sotto may be too old."
                         com.sotto.app.domain.model.CallVerifyState.Step.ASKED ->
-                            "You'll both see the same six digits if nobody is listening in on this call. Read them to each other to check."
+                            "You'll both see the same seven pictures if nobody is listening in on this call. Read them to each other to check."
                         com.sotto.app.domain.model.CallVerifyState.Step.EXCHANGING -> "Working out the code…"
                         com.sotto.app.domain.model.CallVerifyState.Step.CODE ->
-                            "Is it the same on $name's phone? Only say yes if you're sure it's $name's voice."
+                            "Are they the same, in the same order, on $name's phone? Only say yes if you're sure it's $name's voice."
                         com.sotto.app.domain.model.CallVerifyState.Step.MATCHED ->
                             "The chat says \"Verified by phone only\": a call is weaker proof than meeting. " +
                                 "When you meet, verify in person too."

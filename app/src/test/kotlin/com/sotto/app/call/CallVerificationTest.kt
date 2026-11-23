@@ -41,7 +41,7 @@ class CallVerificationTest {
         assertEquals(Phase.CODE, caller.phase)
         assertEquals(Phase.CODE, callee.phase)
         assertEquals(caller.code, callee.code)
-        assertTrue(caller.code!!.matches(Regex("\\d{3} \\d{3}")))
+        assertEquals(7, caller.code!!.size)
     }
 
     @Test

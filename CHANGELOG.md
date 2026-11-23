@@ -15,6 +15,8 @@ Update both phones: with 0.7.10 the code for verifying by phone never appeared.
 - **Verify by phone works** — In 0.7.10 the code never appeared: each phone sent its half, but the other phone's connection to the relay dropped it unread, so both kept waiting. A test now checks that the app takes every kind of call signal the relay forwards. Update both phones.
 - **"Not verified"** — A contact you haven't checked yet now says "Not verified" instead of "Not verified in person", which read as if some other check had happened.
 - **"Verify by phone"** — The call screen's "123" button is now a labelled **Verify by phone** button under the call's details, and the dialog says what it's for. A contact checked this way says **"Verified by phone only"**.
+- **Seven emoji instead of six digits** — Verify by phone now shows seven emoji, each with its name under it ("Dog, Rocket, Key…"), as Element does. They're easier to compare and to say aloud, and harder to guess (about 1 in 4.4 trillion).
+- **Verify by phone from the first-message warning** — The warning before your first message to someone unverified now offers **Verify in person**, **Verify by phone** (it calls them; tap Verify by phone once the call connects) and **Send anyway**.
 
 ## 0.7.10 — 2026-11-23
 

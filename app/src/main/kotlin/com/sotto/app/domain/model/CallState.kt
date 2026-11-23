@@ -37,7 +37,7 @@ enum class CallStatus {
 }
 
 /** Where comparing a code in this call stands (CallVerification, ADR-31). */
-data class CallVerifyState(val step: Step, val code: String? = null) {
+data class CallVerifyState(val step: Step, val code: List<VerifyEmoji>? = null) {
     enum class Step {
         /** We asked; waiting for the other phone to ask too. */
         WAITING,
@@ -45,7 +45,7 @@ data class CallVerifyState(val step: Step, val code: String? = null) {
         ASKED,
         /** Both asked; the code is being worked out. */
         EXCHANGING,
-        /** Read [code] to each other. */
+        /** Read [code], seven emoji, to each other. */
         CODE,
         /** The user said the codes match: marked verified by call. */
         MATCHED,

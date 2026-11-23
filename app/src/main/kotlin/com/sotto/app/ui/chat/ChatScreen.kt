@@ -233,25 +233,6 @@ fun ChatScreen(
     fun gated(onCancel: () -> Unit = {}, send: () -> Unit) {
         if (warnBeforeSending) heldSend = HeldSend(send, onCancel) else send()
     }
-    heldSend?.let { held ->
-        NotVerifiedWarningDialog(
-            name = conversation?.contactDisplayName,
-            onSendAnyway = {
-                heldSend = null
-                viewModel.markInPersonWarned()
-                held.send()
-            },
-            onVerify = {
-                heldSend = null
-                held.cancel()
-                onVerifyClick(viewModel.contactId)
-            },
-            onDismiss = {
-                heldSend = null
-                held.cancel()
-            },
-        )
-    }
 
     if (renaming) {
         RenameContactDialog(
@@ -346,6 +327,43 @@ fun ChatScreen(
     // its place; ignore them to prevent ghost clicks.
     val isResumed = { lifecycleOwner.lifecycle.currentState == Lifecycle.State.RESUMED }
 
+    // Starts a call to this contact, asking for the microphone first when needed.
+    val startCall: () -> Unit = {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: "Unknown")
+        } else {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    heldSend?.let { held ->
+        NotVerifiedWarningDialog(
+            name = conversation?.contactDisplayName,
+            onSendAnyway = {
+                heldSend = null
+                viewModel.markInPersonWarned()
+                held.send()
+            },
+            onVerify = {
+                heldSend = null
+                held.cancel()
+                onVerifyClick(viewModel.contactId)
+            },
+            onVerifyByPhone = {
+                // A call to them: "Verify by phone" is on the call screen once it connects.
+                heldSend = null
+                held.cancel()
+                startCall()
+            },
+            onDismiss = {
+                heldSend = null
+                held.cancel()
+            },
+        )
+    }
+
     ChatContent(
         contactName = conversation?.contactDisplayName,
         avatarSeed = viewModel.contactId,
@@ -361,17 +379,7 @@ fun ChatScreen(
         isBlocked = isBlocked,
         snackbarHostState = snackbarHostState,
         onBack = { if (isResumed()) onBack() },
-        onCall = {
-            if (isResumed()) {
-                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
-                    == PackageManager.PERMISSION_GRANTED
-                ) {
-                    onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: "Unknown")
-                } else {
-                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                }
-            }
-        },
+        onCall = { if (isResumed()) startCall() },
         onComposerChange = viewModel::updateComposer,
         onSend = { gated { viewModel.send() } },
         onRetry = viewModel::retrySend,
@@ -411,6 +419,8 @@ internal fun NotVerifiedWarningDialog(
     onSendAnyway: () -> Unit,
     onVerify: () -> Unit,
     onDismiss: () -> Unit,
+    /** Calls them, to verify by phone once the call connects. */
+    onVerifyByPhone: () -> Unit = {},
 ) {
     val who = name ?: "this contact"
     AlertDialog(
@@ -419,13 +429,18 @@ internal fun NotVerifiedWarningDialog(
         title = { Text("$who isn't verified") },
         text = {
             Text(
-                "You haven't checked $who's keys face to face, so you can't be sure this chat is really " +
-                    "with them. When you meet, open Verify in person on both phones and hold them together, " +
-                    "or scan each other's codes.\n\nThis warning shows once for $who.",
+                "You haven't checked $who's keys, so you can't be sure this chat is really with them. " +
+                    "Verify in person when you meet, or verify by phone in a call now (weaker: it relies on " +
+                    "knowing their voice).\n\nThis warning shows once for $who.",
             )
         },
-        confirmButton = { TextButton(onClick = onSendAnyway) { Text("Send anyway") } },
-        dismissButton = { TextButton(onClick = onVerify) { Text("Verify in person") } },
+        confirmButton = {
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onVerify) { Text("Verify in person") }
+                TextButton(onClick = onVerifyByPhone) { Text("Verify by phone") }
+                TextButton(onClick = onSendAnyway) { Text("Send anyway") }
+            }
+        },
     )
 }
 
