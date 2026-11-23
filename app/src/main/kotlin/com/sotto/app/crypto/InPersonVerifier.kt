@@ -73,14 +73,15 @@ class InPersonVerifier @Inject constructor(
     /** This phone's own code, to show or send; null before the account exists. */
     fun myCode(): InPersonCode? {
         val userId = keyManager.getUserId() ?: return null
-        val fingerprint = keyManager.withIdentityKeyPair { keys ->
-            KeyFingerprint.compute(
-                keys.publicIdentityKey,
-                keys.publicSigningKey,
-                keyManager.getPqcEncapsulationKey() ?: ByteArray(0),
-                keyManager.getMlDsaPublicKey() ?: ByteArray(0),
-            )
-        } ?: return null
+        // Public keys only: decrypting the private ones (as withIdentityKeyPair does) took the
+        // live QR code most of a second on the Note 9, every second.
+        val (publicSigning, publicIdentity) = keyManager.publicIdentityKeys() ?: return null
+        val fingerprint = KeyFingerprint.compute(
+            publicIdentity,
+            publicSigning,
+            keyManager.getPqcEncapsulationKey() ?: ByteArray(0),
+            keyManager.getMlDsaPublicKey() ?: ByteArray(0),
+        )
         return InPersonCode(userId, fingerprint)
     }
 

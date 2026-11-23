@@ -125,12 +125,25 @@ fun SettingsScreen(
     val shareCode by viewModel.shareCode.collectAsState()
     // The identity QR code changes every second while Settings is in front (BankID-style).
     var liveQr by remember { mutableStateOf<String?>(null) }
+    // No live code for a few seconds in a row (no signing key right now): the share code's QR
+    // stands in, rather than a spinner that never ends.
+    var noLiveQr by remember { mutableStateOf(false) }
     val qrLifecycle = LocalLifecycleOwner.current
     LaunchedEffect(qrLifecycle) {
         qrLifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
             try {
+                var misses = 0
                 while (true) {
-                    liveQr = viewModel.liveQr()
+                    val code = viewModel.liveQr()
+                    if (code != null) {
+                        liveQr = code
+                        misses = 0
+                        noLiveQr = false
+                    } else if (++misses >= 3) {
+                        // A code from seconds ago still verifies (60 s), but don't show one for long.
+                        liveQr = null
+                        noLiveQr = true
+                    }
                     kotlinx.coroutines.delay(1000)
                 }
             } finally {
@@ -313,6 +326,7 @@ fun SettingsScreen(
         settings = settings,
         shareCode = shareCode,
         liveQr = liveQr,
+        noLiveQr = noLiveQr,
         myName = myName,
         isRotatingKeys = isRotatingKeys,
         onBack = onBack,
@@ -351,6 +365,7 @@ fun SettingsContent(
     shareCode: String?,
     /** The live QR code (changes every second); null while it's made, or in previews. */
     liveQr: String? = null,
+    noLiveQr: Boolean = false,
     myName: String?,
     isRotatingKeys: Boolean,
     onBack: () -> Unit,
@@ -413,6 +428,7 @@ fun SettingsContent(
                 IdentityCard(
                     shareCode = shareCode,
                     liveQr = liveQr,
+                    noLiveQr = noLiveQr,
                     isRotatingKeys = isRotatingKeys,
                     snackbarHostState = snackbarHostState,
                 )
@@ -654,6 +670,7 @@ private fun IdentityCard(
     isRotatingKeys: Boolean,
     snackbarHostState: SnackbarHostState,
     liveQr: String? = null,
+    noLiveQr: Boolean = false,
 ) {
     val aurora = Aurora.colors
     GlassCard(
@@ -662,20 +679,23 @@ private fun IdentityCard(
         contentPadding = PaddingValues(20.dp),
     ) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            val qr = liveQr ?: shareCode
-            if (qr != null) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White)
-                        .padding(6.dp),
-                ) {
+            // Only the live code: the share code's QR (shown here until the first live code was
+            // ready) is a different code, and swapping one for the other looked like a glitch.
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White)
+                    .padding(6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                val qr = liveQr ?: shareCode?.takeIf { noLiveQr }
+                if (qr != null) {
                     // Live: scanned in person it adds and verifies you; a picture of it only adds you.
                     QrCodeImage(content = qr, size = 184.dp)
-                }
-            } else {
-                Box(Modifier.size(196.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(strokeWidth = 2.dp)
+                } else {
+                    Box(Modifier.size(184.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, color = Color(0xFF6B6B80))
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))

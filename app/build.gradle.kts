@@ -123,8 +123,8 @@ android {
         manifestPlaceholders["inviteHost"] = ownerRelayHost.ifEmpty { "relay.invalid" }
         minSdk = 26
         targetSdk = 35
-        versionCode = 63
-        versionName = "0.7.21"
+        versionCode = 64
+        versionName = "0.7.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
