@@ -533,7 +533,9 @@ class MessageRepositoryImpl @Inject constructor(
             return
         }
         // A file offered directly whose fallback to the store failed for good: the contact
-        // stops waiting for it, and here it shows as not delivered (a tap tries again).
+        // stops waiting for it. The message itself is out (and stays delivered: resending it
+        // would be dropped as a copy), so only the file shows as not sent; a tap tries the
+        // store again (retryFile) and the contact then hears where it is.
         if (entity.isOutgoing && entity.mediaKind == MediaKind.FILE.wire &&
             entity.mediaState != com.sotto.app.domain.model.FileState.SENT.wire
         ) {
@@ -541,9 +543,15 @@ class MessageRepositoryImpl @Inject constructor(
             runCatching {
                 sendUnstored(entity.recipientId, com.sotto.app.domain.model.FileUpdatePayload.encodeGone(ReceiptManager.relayMessageId(me, entity.id)))
             }
-            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
-            messageDao.updateState(messageId, MessageState.FAILED.name)
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UNSENT.wire)
         }
+    }
+
+    override suspend fun retryFile(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (!entity.isOutgoing || entity.mediaState != com.sotto.app.domain.model.FileState.UNSENT.wire) return
+        messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
+        transfers.upload(messageId)
     }
 
     override suspend fun requestDownload(messageId: String) {

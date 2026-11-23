@@ -319,6 +319,30 @@ class MessageSigningAndResetTest {
         coVerify { messageDao.updateState("f2", MessageState.FAILED.name) }
     }
 
+    @Test
+    fun `a delivered file the store refused shows as not sent and a tap retries only the file`() = runTest {
+        val file = MessageEntity(
+            id = "f3", conversationId = "c", senderId = "me", recipientId = "peer",
+            encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "", state = MessageState.DELIVERED.name,
+            timestamp = 1, expiresAt = null, isOutgoing = true, mediaKind = "file", mediaState = "uploading",
+        )
+        every { keyManager.getUserId() } returns "me"
+        coEvery { messageDao.getById("f3") } returns file
+
+        repo.markSendFailed("f3")
+
+        // The message stays delivered (a resend would be dropped as a copy); the file is marked.
+        coVerify(exactly = 0) { messageDao.updateState("f3", any()) }
+        coVerify { messageDao.setMediaState("f3", "unsent") }
+
+        coEvery { messageDao.getById("f3") } returns file.copy(mediaState = "unsent")
+        repo.retryFile("f3")
+
+        coVerify { messageDao.setMediaState("f3", "uploading") }
+        coVerify { transfers.upload("f3") }
+        coVerify(exactly = 0) { apiService.sendMessage(match { it.clientMessageId == "f3" }) }
+    }
+
     // ── The pending queue ───────────────────────────────────────────────────
 
     @Test

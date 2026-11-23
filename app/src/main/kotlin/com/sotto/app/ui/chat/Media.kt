@@ -5,7 +5,9 @@ import android.util.LruCache
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -83,12 +85,20 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.Message
 import com.sotto.app.media.VoicePlayer
+import com.sotto.app.ui.components.LocalBubbleGestures
 import com.sotto.app.ui.theme.Aurora
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -128,6 +138,31 @@ internal fun BubbleMedia(message: Message, contentColor: Color) {
     }
 }
 
+/**
+ * A tap on media in a bubble does [onClick]; holding it reacts and (with [doubleTap])
+ * double-tapping hearts it, as on the rest of the bubble.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun Modifier.mediaClickable(
+    enabled: Boolean = true,
+    onClickLabel: String? = null,
+    role: Role? = null,
+    doubleTap: Boolean = true,
+    onClick: () -> Unit,
+): Modifier {
+    val gestures = LocalBubbleGestures.current
+    return combinedClickable(
+        enabled = enabled,
+        onClickLabel = onClickLabel,
+        role = role,
+        onLongClickLabel = if (gestures.onLongClick != null) "React" else null,
+        onLongClick = gestures.onLongClick,
+        onDoubleClick = if (doubleTap) gestures.onDoubleClick else null,
+        onClick = onClick,
+    )
+}
+
 /** "1.4 MB" */
 internal fun byteSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
@@ -157,8 +192,15 @@ private fun FileCard(message: Message, contentColor: Color) {
         state == com.sotto.app.domain.model.FileState.DIRECT -> if (message.isOutgoing) "Sending directly…" else "Coming directly…"
         state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
         state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
+        state == com.sotto.app.domain.model.FileState.UNSENT -> "Not sent · Tap to retry"
         else -> "Tap to open"
     }
+    // Our own file is on this phone from the start: it opens while it's still being sent.
+    val tappable = message.isOutgoing || (
+        progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
+            state != com.sotto.app.domain.model.FileState.DOWNLOADING &&
+            state != com.sotto.app.domain.model.FileState.DIRECT
+        )
     val thumb = remember(message.id, media.thumbnail?.size) {
         media.thumbnail?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap() }.getOrNull() }
     }
@@ -169,9 +211,7 @@ private fun FileCard(message: Message, contentColor: Color) {
                 .width(FileWidth)
                 .aspectRatio((thumb.width.toFloat() / thumb.height).coerceIn(0.6f, 1.8f))
                 .clip(RoundedCornerShape(14.dp))
-                .clickable(enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
-                    state != com.sotto.app.domain.model.FileState.DOWNLOADING &&
-                    state != com.sotto.app.domain.model.FileState.DIRECT, onClickLabel = status) { host.onFile(message) },
+                .mediaClickable(enabled = tappable, onClickLabel = status) { host.onFile(message) },
             contentAlignment = Alignment.Center,
         ) {
             Image(thumb, contentDescription = media.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -229,14 +269,7 @@ private fun FileCard(message: Message, contentColor: Color) {
             .width(FileWidth)
             .clip(RoundedCornerShape(14.dp))
             .background(contentColor.copy(alpha = 0.08f))
-            .clickable(
-                enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
-                    state != com.sotto.app.domain.model.FileState.DOWNLOADING &&
-                    state != com.sotto.app.domain.model.FileState.DIRECT,
-                onClickLabel = status,
-            ) {
-                host.onFile(message)
-            }
+            .mediaClickable(enabled = tappable, onClickLabel = status) { host.onFile(message) }
             .padding(10.dp),
     ) {
         Box(
@@ -315,8 +348,9 @@ private fun VoiceMessage(message: Message, contentColor: Color) {
                 .size(40.dp)
                 .clip(CircleShape)
                 .background(contentColor.copy(alpha = 0.14f))
-                .clickable(role = Role.Button, onClickLabel = if (playing) "Pause" else "Play") {
-                    if (loading) return@clickable
+                // No double tap here: play starts at once.
+                .mediaClickable(role = Role.Button, onClickLabel = if (playing) "Pause" else "Play", doubleTap = false) {
+                    if (loading) return@mediaClickable
                     scope.launch {
                         loading = true
                         try {
@@ -433,7 +467,7 @@ private fun PhotoThumb(message: Message) {
             .aspectRatio(ratio)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            .clickable(onClickLabel = "Open photo") { host.openPhoto(message.id) }
+            .mediaClickable(onClickLabel = "Open photo") { host.openPhoto(message.id) }
             .semantics { contentDescription = "Photo" },
         contentAlignment = Alignment.Center,
     ) {
@@ -733,6 +767,8 @@ internal fun RecordingBar(
 /**
  * A picked photo before it's sent, as in WhatsApp: the photo, an HD switch at the top
  * (off: the shrunk photo only; on: also its full-size copy), and the caption with Send.
+ * Drawn over the chat in the app's own window (not a dialog), so the system bars and the
+ * keyboard are kept clear the same way the composer keeps them clear.
  */
 @Composable
 fun PhotoSendScreen(
@@ -741,6 +777,7 @@ fun PhotoSendScreen(
     initialHd: Boolean,
     onSend: (caption: String, hd: Boolean) -> Unit,
     onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var caption by remember { mutableStateOf(initialCaption) }
@@ -750,77 +787,83 @@ fun PhotoSendScreen(
             runCatching { com.sotto.app.media.PhotoShrinker.decodeUpright(context, uri, 2048)?.asImageBitmap() }.getOrNull()
         }
     }
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    androidx.activity.compose.BackHandler(onBack = onDismiss)
+    Column(
+        modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            // Touches stop here: nothing reaches the chat underneath.
+            .pointerInput(Unit) { awaitEachGesture { awaitFirstDown().consume() } }
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Top))
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Rounded.Close, contentDescription = "Don't send", tint = Color.White)
+            }
+            Spacer(Modifier.weight(1f))
+            // The quality switch: HD sends the full-size copy too.
+            val hdColors = if (hd) Color.White to Color.Black else Color.White.copy(alpha = 0.16f) to Color.White
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(hdColors.first)
+                    .clickable(role = Role.Switch, onClickLabel = if (hd) "Send in standard quality" else "Send in HD") { hd = !hd }
+                    .semantics { contentDescription = if (hd) "HD on" else "HD off" }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+                Icon(Icons.Rounded.Hd, contentDescription = null, tint = hdColors.second, modifier = Modifier.size(26.dp))
+            }
+        }
+        // The photo takes whatever room is left between the two bars.
         Box(
             Modifier
-                .fillMaxSize()
-                .background(Color.Black)
-                .imePadding(),
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
         ) {
             val p = preview
             if (p != null) {
                 Image(p, contentDescription = "Photo to send", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
             } else {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
+                CircularProgressIndicator(color = Color.White)
             }
-            Row(
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime).only(WindowInsetsSides.Bottom))
+                .padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            androidx.compose.material3.TextField(
+                value = caption,
+                onValueChange = { caption = it },
+                placeholder = { Text("Add a caption") },
+                maxLines = 4,
+                shape = RoundedCornerShape(24.dp),
+                colors = androidx.compose.material3.TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(10.dp))
+            Box(
                 Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopStart)
-                    .statusBarsPadding()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .size(52.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(Aurora.colors.brand))
+                    .clickable(role = Role.Button, onClickLabel = "Send photo") { onSend(caption.trim(), hd) },
+                contentAlignment = Alignment.Center,
             ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(androidx.compose.material.icons.Icons.Rounded.Close, contentDescription = "Don't send", tint = Color.White)
-                }
-                Spacer(Modifier.weight(1f))
-                // The quality switch: HD sends the full-size copy too.
-                val hdColors = if (hd) Color.White to Color.Black else Color.White.copy(alpha = 0.16f) to Color.White
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(hdColors.first)
-                        .clickable(role = Role.Switch, onClickLabel = if (hd) "Send in standard quality" else "Send in HD") { hd = !hd }
-                        .semantics { contentDescription = if (hd) "HD on" else "HD off" }
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                ) {
-                    Icon(Icons.Rounded.Hd, contentDescription = null, tint = hdColors.second, modifier = Modifier.size(26.dp))
-                }
-            }
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.TextField(
-                    value = caption,
-                    onValueChange = { caption = it },
-                    placeholder = { Text("Add a caption") },
-                    maxLines = 4,
-                    shape = RoundedCornerShape(24.dp),
-                    colors = androidx.compose.material3.TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                    ),
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.width(10.dp))
-                Box(
-                    Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(Brush.linearGradient(Aurora.colors.brand))
-                        .clickable(role = Role.Button, onClickLabel = "Send photo") { onSend(caption.trim(), hd) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(androidx.compose.material.icons.Icons.Rounded.ArrowUpward, contentDescription = "Send photo", tint = Color.White)
-                }
+                Icon(Icons.Rounded.ArrowUpward, contentDescription = "Send photo", tint = Color.White)
             }
         }
     }

@@ -61,7 +61,12 @@ enum class FileState(val wire: String) {
     /** On this phone, ready to open. */
     READY("ready"),
     /** Receiver: the store no longer has it (expired or deleted) and it was never downloaded. */
-    GONE("gone");
+    GONE("gone"),
+    /**
+     * Sender: the message went out offering the file directly, that didn't happen, and the
+     * store refused it for good. The message itself stays delivered; a tap tries the file again.
+     */
+    UNSENT("unsent");
 
     companion object {
         fun fromWire(name: String?): FileState? = entries.firstOrNull { it.wire == name }

@@ -32,6 +32,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -326,7 +328,13 @@ internal fun BubbleSurface(
         ) {
             // Media alone (no caption): its time and ticks sit at the bottom end, as on WhatsApp.
             Column(horizontalAlignment = if (media != null && text.isEmpty()) Alignment.End else Alignment.Start) {
-            media?.invoke(bubbleTextColor)
+            if (media != null) {
+                // Media that takes its own taps (open a photo, play) passes holding and
+                // double-tapping on to the bubble.
+                CompositionLocalProvider(LocalBubbleGestures provides BubbleGestures(onLongClick, onDoubleClick)) {
+                    media(bubbleTextColor)
+                }
+            }
             TextWithTrailingMeta(
                 text = text,
                 style = if (unreadable) {
@@ -354,6 +362,11 @@ internal fun BubbleSurface(
         }
     }
 }
+
+/** What holding and double-tapping a bubble do, for media in it that handles its own taps. */
+class BubbleGestures(val onLongClick: (() -> Unit)?, val onDoubleClick: (() -> Unit)?)
+
+val LocalBubbleGestures = compositionLocalOf { BubbleGestures(null, null) }
 
 /** The reactions on a bubble: the contact's emoji and the user's, each null when they gave none. */
 data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String = "Them") {
