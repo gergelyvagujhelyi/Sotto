@@ -30,7 +30,12 @@ class MediaStore @Inject constructor(
         val key = MediaCrypto.newKey()
         val file = fileFor(messageId)
         val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(MediaCrypto.seal(key, bytes, aad(messageId)))
+        try {
+            tmp.writeBytes(MediaCrypto.seal(key, bytes, aad(messageId)))
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
         if (!tmp.renameTo(file)) {
             tmp.delete()
             error("Could not store media")
