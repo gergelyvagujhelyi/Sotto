@@ -51,7 +51,8 @@ PENDING_MESSAGE_TTL_DAYS: int = int(os.getenv("PENDING_MESSAGE_TTL_DAYS", "30"))
 INVITE_ONLY: bool = os.getenv("INVITE_ONLY", "true").lower() == "true"
 # Key lookups (GET /v1/identity/{id}/keys and /resolve/{code}) need a member's sign-in token.
 # Apps sign them in since 0.7.11; turn this on once every phone runs 0.7.11 or later, or older
-# apps can no longer add contacts or check keys.
+# apps can no longer add contacts or check keys. Only meaningful with INVITE_ONLY: on an open
+# relay anyone can make an account and then look keys up.
 KEY_LOOKUP_AUTH: bool = os.getenv("KEY_LOOKUP_AUTH", "false").lower() == "true"
 INVITE_TTL_DAYS: int = int(os.getenv("INVITE_TTL_DAYS", "7"))
 MAX_OPEN_INVITES_PER_MEMBER: int = int(os.getenv("MAX_OPEN_INVITES_PER_MEMBER", "5"))

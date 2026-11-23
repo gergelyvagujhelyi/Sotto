@@ -1,8 +1,8 @@
 """Per-user sliding-window limits kept in memory.
 
-``allow_call_offer`` is shared by the REST and WebSocket call-signal paths:
-every offer to an offline user triggers a high-priority FCM push, so offers
-need a much tighter limit than other call signals, whichever path they use.
+Call signals come only through ``POST /v1/calls/signal``. Every offer to an
+offline user triggers a high-priority FCM push, so ``allow_call_offer`` limits
+offers much more tightly than ``allow_call_signal`` limits the rest.
 """
 
 import asyncio
@@ -43,8 +43,7 @@ class SlidingWindowLimiter:
 
 
 _call_offers = SlidingWindowLimiter(MAX_CALL_OFFERS_PER_MINUTE)
-# All call signals, REST and WebSocket together (separate counters would let
-# each account send twice the limit).
+# All call signals of an account.
 _call_signals = SlidingWindowLimiter(MAX_CALL_SIGNALS_PER_MINUTE)
 
 

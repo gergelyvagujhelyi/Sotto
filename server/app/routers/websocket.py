@@ -32,8 +32,7 @@ from app.services.websocket_manager import ws_manager
 router = APIRouter(tags=["websocket"])
 logger = logging.getLogger(__name__)
 
-_MAX_AUTH_MESSAGE_BYTES = 8192      # Auth/ping messages are small
-_MAX_SIGNAL_MESSAGE_BYTES = 81920   # Call signals can carry large encrypted payloads
+_MAX_AUTH_MESSAGE_BYTES = 8192      # Auth and ping, the only messages the socket takes
 
 
 
@@ -158,7 +157,7 @@ async def websocket_endpoint(
             except asyncio.TimeoutError:
                 await websocket.close(code=4008, reason="Idle timeout")
                 break
-            if len(raw) > _MAX_SIGNAL_MESSAGE_BYTES:
+            if len(raw) > _MAX_AUTH_MESSAGE_BYTES:
                 await websocket.send_text(
                     json.dumps({"type": "error", "message": "Message too large"})
                 )
@@ -175,9 +174,13 @@ async def websocket_endpoint(
 
             if msg_type == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
-
-            # Nothing else is taken from the socket: call signals go through
-            # POST /v1/calls/signal (no app ever sent them here).
+            else:
+                # Nothing else is taken from the socket: call signals go through
+                # POST /v1/calls/signal (no app ever sent them here). Say so, rather
+                # than leave a caller waiting for a ring that never comes.
+                await websocket.send_text(
+                    json.dumps({"type": "error", "message": "Unsupported message type"})
+                )
 
     except WebSocketDisconnect:
         pass
@@ -186,5 +189,3 @@ async def websocket_endpoint(
     finally:
         if user_id:
             await ws_manager.disconnect(user_id, websocket)
-            # Rate limit state is preserved for the TTL duration even after disconnect
-            # to prevent quota reset via reconnect. Stale entries are pruned periodically.

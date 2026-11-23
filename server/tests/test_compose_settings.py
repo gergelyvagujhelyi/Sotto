@@ -19,6 +19,13 @@ def test_single_use_tokens_reach_the_relay_and_stay_off_by_default():
     assert line.group(1) == "${AUTH_SINGLE_USE_TOKENS:-false}"
 
 
+def test_key_lookup_auth_reaches_the_relay_and_stays_off_by_default():
+    # Without this line, KEY_LOOKUP_AUTH=true in .env would leave lookups open, silently.
+    line = re.search(r"KEY_LOOKUP_AUTH:\s*(\S+)", _server_environment())
+    assert line, "docker-compose.yml must forward KEY_LOOKUP_AUTH to the server"
+    assert line.group(1) == "${KEY_LOOKUP_AUTH:-false}"
+
+
 def test_attachment_settings_reach_the_relay():
     # .env alone does nothing: docker-compose.yml must pass each one on.
     env = _server_environment()
