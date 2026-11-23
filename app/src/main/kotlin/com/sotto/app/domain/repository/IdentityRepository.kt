@@ -25,6 +25,9 @@ interface IdentityRepository {
      */
     suspend fun renameContact(userId: String, nickname: String?)
 
+    /** Remembers that the user was warned once that [userId] isn't verified in person. */
+    suspend fun markInPersonWarned(userId: String)
+
     /** Store the name a contact chose for themselves (received end-to-end encrypted). A nickname still wins. */
     suspend fun applyProfileName(userId: String, name: String)
 

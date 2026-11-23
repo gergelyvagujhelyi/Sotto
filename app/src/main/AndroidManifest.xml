@@ -35,6 +35,11 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
+    <!-- Verifying a contact in person by holding the phones together (nfc/InPersonNfc.kt): one
+         phone reads the other, which answers as a card. Optional: without NFC, the QR code works. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
     <!-- The update notice opens SourceDrop when it is installed (update/SourceDrop.kt). -->
     <queries>
         <package android:name="dev.sourcedrop.app" />
@@ -103,6 +108,18 @@
             android:name="firebase_messaging_installation_id_enabled"
             android:value="true" />
 
+        <!-- The card side of an in-person NFC tap; it answers only while a verify screen is open. -->
+        <service
+            android:name=".nfc.InPersonApduService"
+            android:exported="true"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/in_person_apdu_service" />
+        </service>
         <service
             android:name=".call.CallService"
             android:exported="false"

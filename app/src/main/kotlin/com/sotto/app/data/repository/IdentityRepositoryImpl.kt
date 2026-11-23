@@ -291,8 +291,11 @@ class IdentityRepositoryImpl @Inject constructor(
                 keysReplacedByShareCode = true
             }
             // Out-of-band share code matches the keys: verified.
-            (contactDao.getByUserId(keys.userId) ?: existing).copy(
+            val stored = contactDao.getByUserId(keys.userId) ?: existing
+            stored.copy(
                 verified = true,
+                // Keys their old ones never endorsed aren't the ones checked in person.
+                verifiedInPerson = stored.verifiedInPerson && !keysReplacedByShareCode,
                 publicIdentityKey = keys.publicIdentityKey,
                 publicSigningKey = keys.publicSigningKey,
                 pqcSigningKey = keys.pqcSigningKey,
@@ -603,6 +606,10 @@ class IdentityRepositoryImpl @Inject constructor(
     override suspend fun renameContact(userId: String, nickname: String?) =
         contactNames.setNickname(userId, nickname)
 
+    override suspend fun markInPersonWarned(userId: String) {
+        contactDao.setInPersonWarned(userId)
+    }
+
     override suspend fun applyProfileName(userId: String, name: String) =
         contactNames.setProfileName(userId, name)
 
@@ -621,5 +628,7 @@ class IdentityRepositoryImpl @Inject constructor(
         verified = verified,
         nickname = nickname,
         profileName = profileName,
+        verifiedInPerson = verifiedInPerson,
+        inPersonWarned = inPersonWarned,
     )
 }

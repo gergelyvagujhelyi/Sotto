@@ -11,6 +11,10 @@ data class Contact(
     val nickname: String? = null,
     /** Name the contact chose and sent end-to-end encrypted. */
     val profileName: String? = null,
+    /** Checked face to face, by QR code or NFC from their phone (see ContactEntity). */
+    val verifiedInPerson: Boolean = false,
+    /** Already told once that they aren't verified in person, before a first message. */
+    val inPersonWarned: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -22,7 +26,9 @@ data class Contact(
             pqcSigningKey.contentEquals(other.pqcSigningKey) &&
             verified == other.verified &&
             nickname == other.nickname &&
-            profileName == other.profileName
+            profileName == other.profileName &&
+            verifiedInPerson == other.verifiedInPerson &&
+            inPersonWarned == other.inPersonWarned
     }
 
     override fun hashCode(): Int {
@@ -34,6 +40,8 @@ data class Contact(
         result = 31 * result + verified.hashCode()
         result = 31 * result + (nickname?.hashCode() ?: 0)
         result = 31 * result + (profileName?.hashCode() ?: 0)
+        result = 31 * result + verifiedInPerson.hashCode()
+        result = 31 * result + inPersonWarned.hashCode()
         return result
     }
 }

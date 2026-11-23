@@ -38,6 +38,8 @@ import com.sotto.app.ui.contacts.PREFILLED_SHARE_CODE_KEY
 import com.sotto.app.ui.contacts.SCANNED_INVITE_KEY
 import com.sotto.app.ui.contacts.SCANNED_SHARE_CODE_KEY
 import com.sotto.app.ui.contacts.ScanQrScreen
+import com.sotto.app.ui.contacts.SCANNED_VERIFY_CODE_KEY
+import com.sotto.app.ui.contacts.VerifyInPersonScreen
 import com.sotto.app.ui.conversations.ConversationsScreen
 import com.sotto.app.ui.onboarding.OnboardingScreen
 import com.sotto.app.ui.settings.SettingsScreen
@@ -51,6 +53,10 @@ object Routes {
     const val SCAN_INVITE = "scan_invite"
     const val SETTINGS = "settings"
     const val CALL = "call/{contactId}/{displayName}"
+    const val VERIFY = "verify/{contactId}"
+    const val SCAN_VERIFY = "scan_verify"
+
+    fun verify(contactId: String) = "verify/$contactId"
 
     fun chat(conversationId: String, contactId: String) =
         "chat/$conversationId/$contactId"
@@ -178,6 +184,49 @@ fun ChatNavGraph(
                         launchSingleTop = true
                     }
                 },
+                onVerifyClick = { contactId ->
+                    navController.navigate(Routes.verify(contactId)) { launchSingleTop = true }
+                },
+            )
+        }
+
+        screen(
+            route = Routes.VERIFY,
+            arguments = listOf(navArgument("contactId") { type = NavType.StringType }),
+        ) { entry ->
+            // The scanner hands its result back through this entry's SavedStateHandle.
+            val scannedCode by entry.savedStateHandle
+                .getStateFlow<String?>(SCANNED_VERIFY_CODE_KEY, null)
+                .collectAsState()
+            VerifyInPersonScreen(
+                onBack = {
+                    if (navController.currentBackStackEntry?.destination?.route == Routes.VERIFY &&
+                        navController.previousBackStackEntry != null
+                    ) {
+                        navController.popBackStack()
+                    }
+                },
+                onScan = { navController.navigate(Routes.SCAN_VERIFY) { launchSingleTop = true } },
+                scannedCode = scannedCode,
+                onScannedCodeHandled = { entry.savedStateHandle[SCANNED_VERIFY_CODE_KEY] = null },
+            )
+        }
+
+        screen(Routes.SCAN_VERIFY) {
+            ScanQrScreen(
+                onBack = {
+                    if (navController.previousBackStackEntry != null) {
+                        navController.popBackStack()
+                    }
+                },
+                onScanned = { code ->
+                    navController.previousBackStackEntry?.savedStateHandle?.set(SCANNED_VERIFY_CODE_KEY, code)
+                    navController.popBackStack()
+                },
+                accept = { text -> com.sotto.app.crypto.InPersonCode.parse(text)?.encode() },
+                title = "Scan their code",
+                hint = "Point the camera at the code on their Verify in person screen.",
+                rejectMessage = "That isn't a Verify in person code. On their phone: open your chat, then ⋮ → Verify in person.",
             )
         }
 

@@ -318,3 +318,17 @@
 
 **Tradeoff**: A third party (Tigris) sees the phones' addresses, file sizes and timing, though never content or keys. Inline media makes a message as large as about 190 KB, so it shows its kind by size. Sotto 0.7.6 and older show the new payloads as raw text, so everyone updates together. Files go phone to phone first when both sides consent (as for direct calls), with the drop as the fallback.
 
+---
+
+## ADR-30: Trust comes only from meeting in person
+
+**Decision**: Every contact shows "Not verified in person" until the user checks their keys face to face: holding the two phones together (NFC) or scanning the QR code on the other phone's "Verify in person" screen. Both carry an `InPersonCode`, `sotto-verify:1:<user id>:<base64url fingerprint>`: the full 256-bit fingerprint over all four public keys, not the share code's 96 bits. `InPersonVerifier` compares it with the fingerprint pinned for the contact (following a rotation their old keys endorsed first) and only then sets `contacts.verifiedInPerson`. Before the first message to a contact who isn't verified in person, the chat warns once (`contacts.inPersonWarned`). The existing `verified` flag keeps its meaning (the relay's keys matched a share code) and still decides direct calls (ADR-17).
+
+- **NFC**: both phones have the screen open. Android listens as a card (host card emulation, `InPersonApduService`, proprietary AID `F0534F54544F01`, category "other", only when unlocked) and polls at the same time (foreground dispatch on `MainActivity`), so whichever phone finds the other reads it. One exchange APDU carries the reader's code and the answer carries the card's, so a single tap checks both phones. The card answers only while a verify screen is in front.
+- **QR**: each phone checks only the code it scanned, so both scan.
+- **Kept and cleared**: a rotation endorsed by the old keys keeps the mark; keys replaced by a share code without an endorsement clear it. Existing contacts start unverified.
+
+**Why**: The owner asked that "a new contact even if accepted should be flagged as not trusted until we scan qr or nfc somehow in person". A share code proves the relay didn't swap the keys, but not who sent the code: one pasted into another messenger is only as trustworthy as that messenger. A message request has no check at all (trust on first use). A code read off the phone in front of you can only have come from that phone. The full fingerprint also keeps the check at 128-bit strength against a quantum attacker (Grover), which 96 bits wouldn't.
+
+**Tradeoff**: Nothing proves the phone is physically there: someone can pass on a screenshot of the QR code. The screen says to verify only with the person in front of you. NFC reaches a few centimetres and is the better proof. Phones without NFC use the QR code. The mark is local: the relay never learns who verified whom.
+

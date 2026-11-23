@@ -44,6 +44,16 @@ interface ContactDao {
     @Query("UPDATE contacts SET louderVoice = :louder WHERE userId = :userId")
     suspend fun setLouderVoice(userId: String, louder: Boolean): Int
 
+    /**
+     * Marks the contact verified in person, only while [fingerprint] is still the one it's
+     * pinned to; returns the rows changed (0 when the keys moved on meanwhile).
+     */
+    @Query("UPDATE contacts SET verifiedInPerson = 1 WHERE userId = :userId AND keyFingerprint = :fingerprint")
+    suspend fun markVerifiedInPerson(userId: String, fingerprint: String): Int
+
+    @Query("UPDATE contacts SET inPersonWarned = 1 WHERE userId = :userId")
+    suspend fun setInPersonWarned(userId: String): Int
+
     @Query("DELETE FROM contacts WHERE userId = :userId")
     suspend fun delete(userId: String)
 

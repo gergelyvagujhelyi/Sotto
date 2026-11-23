@@ -20,7 +20,7 @@ import com.sotto.app.data.local.entity.MessageEntity
         ContactEntity::class,
         BlockedUserEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

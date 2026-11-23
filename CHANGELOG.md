@@ -4,7 +4,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Verify contacts in person** — Every contact now shows "Not verified in person" under their name until you've checked their keys face to face. Open ⋮ → **Verify in person** on both phones and hold them back to back: one tap checks both phones. Or scan the code on each other's screen (each phone checks the one it scanned). A share code or an accepted message request no longer counts as enough, because it may have come through another app or, for a request, wasn't checked at all.
+  - The check uses the full fingerprint of all four of their keys, not the share code's shorter part, and compares it with the keys your chat really uses. If the code is another account's, or the keys differ, Sotto tells you not to trust the chat.
+  - Before your first message to someone who isn't verified in person, Sotto warns you once, with a button to verify.
+  - Contacts you already have start unverified: meet up to verify them. A key change their old keys signed off on keeps them verified.
+  - NFC is optional: phones without it use the QR code. Sotto answers a tap only while its Verify in person screen is open and the phone is unlocked.
 
 ## 0.7.8 — 2026-11-23
 
