@@ -557,7 +557,10 @@ class MessageRepositoryImpl @Inject constructor(
         // stops waiting for it. The message itself is out (and stays delivered: resending it
         // would be dropped as a copy), so only the file shows as not sent; a tap tries the
         // store again (retryFile) and the contact then hears where it is.
-        if (entity.isOutgoing && entity.mediaKind == MediaKind.FILE.wire && !fileIsOut(entity)) {
+        // (A message that never went out failed as a whole and retries as a whole.)
+        if (entity.isOutgoing && entity.state != MessageState.FAILED.name &&
+            entity.mediaKind == MediaKind.FILE.wire && !fileIsOut(entity)
+        ) {
             val me = keyManager.getUserId() ?: return
             runCatching {
                 sendUnstored(entity.recipientId, com.sotto.app.domain.model.FileUpdatePayload.encodeGone(ReceiptManager.relayMessageId(me, entity.id)))

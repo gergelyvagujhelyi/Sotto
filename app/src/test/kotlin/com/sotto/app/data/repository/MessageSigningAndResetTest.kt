@@ -344,6 +344,22 @@ class MessageSigningAndResetTest {
     }
 
     @Test
+    fun `a file whose message never went out isn't treated as only the file missing`() = runTest {
+        val file = MessageEntity(
+            id = "f5", conversationId = "c", senderId = "me", recipientId = "peer",
+            encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "", state = MessageState.FAILED.name,
+            timestamp = 1, expiresAt = null, isOutgoing = true, mediaKind = "file", mediaState = "uploading",
+        )
+        every { keyManager.getUserId() } returns "me"
+        coEvery { messageDao.getById("f5") } returns file
+
+        repo.markSendFailed("f5")
+
+        coVerify(exactly = 0) { messageDao.setMediaState("f5", any()) }
+        coVerify(exactly = 0) { apiService.sendMessage(any()) }
+    }
+
+    @Test
     fun `a contact's word that they have our file marks it delivered, and only that file`() = runTest {
         every { keyManager.getUserId() } returns "me"
         coEvery { contactDao.getByUserId("peer") } returns classicalContact
