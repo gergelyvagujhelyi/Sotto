@@ -83,6 +83,8 @@ fun VerifyInPersonScreen(
     onScan: () -> Unit,
     scannedCode: String?,
     onScannedCodeHandled: () -> Unit,
+    /** Can't meet: call them, and the emoji check opens once the call connects (ADR-31). */
+    onVerifyByPhone: (contactId: String, name: String) -> Unit = { _, _ -> },
     viewModel: VerifyInPersonViewModel = hiltViewModel(),
 ) {
     val contact by viewModel.contact.collectAsState()
@@ -223,6 +225,35 @@ fun VerifyInPersonScreen(
                                 icon = Icons.Rounded.QrCodeScanner,
                                 tone = SoftButtonTone.Accent,
                                 enabled = !checking,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+
+                if (contact?.verifiedInPerson != true) {
+                    Column {
+                        SectionLabel("Can't meet?", Modifier.padding(start = 4.dp))
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Rounded.PhoneInTalk,
+                                    contentDescription = null,
+                                    tint = colors.primary,
+                                    modifier = Modifier.size(28.dp),
+                                )
+                                Spacer(Modifier.width(14.dp))
+                                Text(
+                                    "Call $name and read seven emoji to each other. It's weaker than meeting: " +
+                                        "the chat will say \"Verified by phone only\".",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                            Spacer(Modifier.height(12.dp))
+                            SoftButton(
+                                text = "Verify $name by phone",
+                                onClick = { onVerifyByPhone(viewModel.contactId, name) },
+                                icon = Icons.Rounded.PhoneInTalk,
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }

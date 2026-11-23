@@ -6,6 +6,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.12 — 2026-11-23
+
+- **Verify by phone, easy to find** — It was only on the call screen, once a call was connected, and in the warning before a first message. Now it's also in the chat's ⋮ menu, under Verify in person, and on the Verify in person screen ("Can't meet?"). Both call the contact, and the seven emoji open as soon as the call connects.
+
 ## 0.7.11 — 2026-11-23
 
 Update both phones: with 0.7.10 the code for verifying by phone never appeared, and 0.7.10 can't read 0.7.11's QR codes (which now change every second).

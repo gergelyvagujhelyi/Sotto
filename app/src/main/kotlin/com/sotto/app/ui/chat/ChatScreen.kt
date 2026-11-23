@@ -413,6 +413,7 @@ fun ChatScreen(
         verifiedInPerson = contact?.verifiedInPerson,
         verifiedByCall = contact?.verifiedByCall == true,
         onVerify = { if (isResumed()) onVerifyClick(viewModel.contactId) },
+        onVerifyByPhone = { if (isResumed()) startCall(true) },
     )
 }
 
@@ -504,6 +505,8 @@ fun ChatContent(
     /** Checked by a code compared in a call only: the header says so (ADR-31). */
     verifiedByCall: Boolean = false,
     onVerify: () -> Unit = {},
+    /** Call them and open the emoji check once the call connects. */
+    onVerifyByPhone: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -700,6 +703,7 @@ fun ChatContent(
                     verifiedInPerson = verifiedInPerson,
                     verifiedByCall = verifiedByCall,
                     onVerify = onVerify,
+                    onVerifyByPhone = onVerifyByPhone,
                 )
             },
         ) { padding ->
@@ -937,6 +941,7 @@ private fun ChatTopBar(
     verifiedInPerson: Boolean? = null,
     verifiedByCall: Boolean = false,
     onVerify: () -> Unit = {},
+    onVerifyByPhone: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     var showMenu by remember { mutableStateOf(false) }
@@ -1037,6 +1042,19 @@ private fun ChatTopBar(
                                 onVerify()
                             },
                         )
+                        // Can't meet: a call, and the emoji check opens once it connects (ADR-31).
+                        if (verifiedInPerson == false && !isBlocked) {
+                            DropdownMenuItem(
+                                text = { Text(if (verifiedByCall) "Verified by phone only" else "Verify by phone") },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.PhoneInTalk, contentDescription = null, tint = colors.primary)
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onVerifyByPhone()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Rename") },
                             leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },

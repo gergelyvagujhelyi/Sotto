@@ -207,6 +207,12 @@ fun ChatNavGraph(
                     }
                 },
                 onScan = { navController.navigate(Routes.SCAN_VERIFY) { launchSingleTop = true } },
+                onVerifyByPhone = { contactId, name ->
+                    // The call screen asks for the microphone and dials; the check opens once
+                    // the call connects (and the request lapses if it never does).
+                    com.sotto.app.call.VerifyOnConnect.arm(contactId)
+                    navController.navigate(Routes.call(contactId, name)) { launchSingleTop = true }
+                },
                 scannedCode = scannedCode,
                 onScannedCodeHandled = { entry.savedStateHandle[SCANNED_VERIFY_CODE_KEY] = null },
             )
