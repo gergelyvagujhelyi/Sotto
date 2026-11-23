@@ -333,7 +333,7 @@ class KeyManager @Inject constructor(
      *
      * Centralised here so KtorApiService and WebSocketClient stay in sync.
      */
-    fun generateAuthToken(pqcProvider: PqcProvider): String {
+    fun generateAuthToken(pqcProvider: PqcProvider, staged: Boolean = false): String {
         val uid = getUserId() ?: throw IllegalStateException("No identity — bootstrap first")
         // Every token gets its own timestamp, so no two are alike and the relay can
         // refuse one it has already seen (a replay). Two in the same millisecond take
@@ -341,11 +341,15 @@ class KeyManager @Inject constructor(
         val ts = lastTokenMs.updateAndGet { last -> maxOf(System.currentTimeMillis(), last + 1) }.toString()
         val payload = "$uid.$ts"
         val payloadBytes = payload.toByteArray(Charsets.UTF_8)
-        val signature = sign(payloadBytes)
+        // [staged]: signed with the keys of a rotation not yet confirmed, to ask the relay, after
+        // a crash, whether it took them (it accepts a token only from the keys it holds).
+        val signature = if (staged) signWith(PENDING_PRIVATE_SIGNING, payloadBytes) else sign(payloadBytes)
         val sigB64 = android.util.Base64.encodeToString(signature, android.util.Base64.NO_WRAP)
         // With ML-DSA keys the relay requires the ML-DSA signature too: a failure
-        // throws here rather than sending a token it would only refuse.
-        val pqcSig = getMlDsaPrivateKey()?.let { mlDsaPrivKey ->
+        // throws here rather than sending a token it would only refuse. A rotation that kept
+        // the ML-DSA key has no staged one: the active one signs.
+        val mlDsaKey = (if (staged) privateKey(PENDING_MLDSA_PRIVATE) else null) ?: getMlDsaPrivateKey()
+        val pqcSig = mlDsaKey?.let { mlDsaPrivKey ->
             try {
                 "." + android.util.Base64.encodeToString(
                     pqcProvider.sign(payloadBytes, mlDsaPrivKey), android.util.Base64.NO_WRAP)
@@ -356,8 +360,10 @@ class KeyManager @Inject constructor(
         return "$payload.$sigB64$pqcSig"
     }
 
-    fun sign(data: ByteArray): ByteArray {
-        val privKeyBytes = privateKey(KEY_PRIVATE_SIGNING)
+    fun sign(data: ByteArray): ByteArray = signWith(KEY_PRIVATE_SIGNING, data)
+
+    private fun signWith(keyName: String, data: ByteArray): ByteArray {
+        val privKeyBytes = privateKey(keyName)
             ?: throw IllegalStateException("No signing key available")
         try {
             // Straight on the key bytes, leaving no copies of the private key (RawKeyCrypto.kt).

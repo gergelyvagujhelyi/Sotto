@@ -1172,6 +1172,7 @@ class CallManager @Inject constructor(
             logDebug("Not ending the current call for a stale call's $status")
             return
         }
+        VerifyOnConnect.peerId = null
         // Only the first concurrent invocation proceeds — prevents double-dispose
         // of native WebRTC resources and double-zeroization of session keys.
         if (!endCallGuard.compareAndSet(false, true)) return
@@ -1501,6 +1502,11 @@ class CallManager @Inject constructor(
                     scheduleCredentialRenewal(callLink)
                     logAudioRateLater(callLink)
                     watchPeer(callLink)
+                    // Called from the first-message warning's "Verify by phone": open the check now.
+                    if (VerifyOnConnect.peerId == state.peerId) {
+                        VerifyOnConnect.peerId = null
+                        startVerification()
+                    }
                 }
             }
             PeerConnection.IceConnectionState.DISCONNECTED,

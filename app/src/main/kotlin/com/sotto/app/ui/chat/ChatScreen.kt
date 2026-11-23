@@ -352,9 +352,10 @@ fun ChatScreen(
                 onVerifyClick(viewModel.contactId)
             },
             onVerifyByPhone = {
-                // A call to them: "Verify by phone" is on the call screen once it connects.
+                // A call to them, and the code check opens by itself once it connects.
                 heldSend = null
                 held.cancel()
+                com.sotto.app.call.VerifyOnConnect.peerId = viewModel.contactId
                 startCall()
             },
             onDismiss = {

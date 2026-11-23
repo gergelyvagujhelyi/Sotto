@@ -64,7 +64,7 @@ class MockApiService @Inject constructor() : ApiService {
         BootstrapResponse(userId = userId, shareCode = shareCode)
     }
 
-    override suspend fun fetchKeyBundle(userId: String): KeyBundleDto? = mutex.withLock {
+    override suspend fun fetchKeyBundle(userId: String, signWithStagedKeys: Boolean): KeyBundleDto? = mutex.withLock {
         keyBundles[userId]
     }
 
@@ -112,11 +112,6 @@ class MockApiService @Inject constructor() : ApiService {
     override suspend fun registerPushToken(request: PushTokenRequest): Unit = mutex.withLock {
         val userId = currentUserId ?: return@withLock
         pushTokens[userId] = request.fid ?: request.token ?: return@withLock
-    }
-
-    override suspend fun unregisterPushToken(): Unit = mutex.withLock {
-        val userId = currentUserId ?: return@withLock
-        pushTokens.remove(userId)
     }
 
     override suspend fun sendCallSignal(request: com.sotto.app.data.remote.dto.CallSignalRequest): com.sotto.app.data.remote.dto.CallSignalResponse {
