@@ -50,6 +50,16 @@ interface MessageRepository {
     /** Downloads a file a contact sent; its state says how it went (READY, or GONE). */
     suspend fun downloadFile(messageId: String)
 
+    /** Queues a file's (or HD copy's) download in the background. */
+    suspend fun requestDownload(messageId: String) = downloadFile(messageId)
+
+    /** The background part of sending a message with a file: upload it, then send the message. */
+    suspend fun finishSend(messageId: String) {}
+
+    /** A background send or download gave up. */
+    suspend fun markSendFailed(messageId: String) {}
+    suspend fun markDownloadFailed(messageId: String) {}
+
     /** A decrypted copy of a file, in the cache, for another app to open; null when it isn't here. */
     suspend fun decryptFileForOpening(messageId: String): java.io.File?
 

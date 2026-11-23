@@ -122,6 +122,83 @@ class FileDrop @Inject constructor(
         }.getOrNull()
     }
 
+    /** Where an upload in parts keeps the ETags of the parts already up, to resume after a break. */
+    private fun partsFile(name: String): File = File(File(context.filesDir, "transfers").apply { mkdirs() }, "$name.json")
+
+    /**
+     * Uploads the encrypted file [name] in parts of [partSize] bytes, one presigned URL
+     * each (in order), skipping parts that went up before (as recorded for [uploadId]).
+     * Returns every part's ETag, for the relay to join them.
+     */
+    suspend fun uploadParts(name: String, uploadId: String, partSize: Long, urls: List<String>): List<String> = withContext(Dispatchers.IO) {
+        val file = fileFor(name)
+        val total = file.length()
+        require(urls.size.toLong() == (total + partSize - 1) / partSize) { "Wrong number of parts" }
+        val state = partsFile(name)
+        val etags = HashMap<Int, String>()
+        runCatching {
+            val saved = org.json.JSONObject(state.readText())
+            if (saved.optString("upload") == uploadId) {
+                val tags = saved.getJSONObject("etags")
+                tags.keys().forEach { etags[it.toInt()] = tags.getString(it) }
+            }
+        }
+        fun save() {
+            val tags = org.json.JSONObject()
+            etags.forEach { (k, v) -> tags.put(k.toString(), v) }
+            state.writeText(org.json.JSONObject().put("upload", uploadId).put("etags", tags).toString())
+        }
+        report(name, 0f)
+        try {
+            java.io.RandomAccessFile(file, "r").use { raf ->
+                val buffer = ByteArray(64 * 1024)
+                urls.forEachIndexed { index, url ->
+                    val number = index + 1
+                    val offset = index * partSize
+                    val length = minOf(partSize, total - offset)
+                    if (etags.containsKey(number)) {
+                        if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.d("FileDrop", "Part $number of ${urls.size} already up")
+                        report(name, (offset + length).toFloat() / total)
+                        return@forEachIndexed
+                    }
+                    val connection = URL(url).openConnection() as HttpURLConnection
+                    try {
+                        connection.requestMethod = "PUT"
+                        connection.doOutput = true
+                        connection.connectTimeout = 20_000
+                        connection.readTimeout = 60_000
+                        connection.setFixedLengthStreamingMode(length)
+                        raf.seek(offset)
+                        connection.outputStream.use { out ->
+                            var left = length
+                            while (left > 0) {
+                                val n = raf.read(buffer, 0, minOf(buffer.size.toLong(), left).toInt())
+                                if (n < 0) throw IOException("File shorter than expected")
+                                out.write(buffer, 0, n)
+                                left -= n
+                                report(name, (offset + length - left).toFloat() / total)
+                            }
+                        }
+                        val code = connection.responseCode
+                        if (code !in 200..299) throw IOException("Part $number refused ($code)")
+                        etags[number] = connection.getHeaderField("ETag") ?: throw IOException("No ETag for part $number")
+                        save()
+                    } finally {
+                        connection.disconnect()
+                    }
+                }
+            }
+        } finally {
+            report(name, null)
+        }
+        (1..urls.size).map { etags.getValue(it) }
+    }
+
+    /** The upload of [name] is done (or abandoned): its part record goes. */
+    fun forgetParts(name: String) {
+        partsFile(name).delete()
+    }
+
     /** PUTs this message's encrypted file to [url] (presigned, with its size signed). */
     suspend fun upload(messageId: String, url: String) = withContext(Dispatchers.IO) {
         val file = fileFor(messageId)
@@ -154,23 +231,37 @@ class FileDrop @Inject constructor(
     suspend fun download(messageId: String, url: String, key: ByteArray, expectedSize: Long) = withContext(Dispatchers.IO) {
         val out = fileFor(messageId)
         val tmp = File(out.parentFile, out.name + ".tmp")
+        // What came down before a break is kept, and the download goes on from there.
+        val have = tmp.length().takeIf { it in 1 until expectedSize } ?: 0L
+        if (have == 0L) tmp.delete()
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 20_000
             connection.readTimeout = 60_000
-            report(messageId, 0f)
+            if (have > 0) connection.setRequestProperty("Range", "bytes=$have-")
+            report(messageId, have.toFloat() / expectedSize)
             val code = connection.responseCode
             if (code == 404) throw FileGoneException()
             if (code !in 200..299) throw IOException("Download refused ($code)")
+            // 206: the rest, after what we have; 200: the whole file again.
+            val start = if (code == 206) have else 0L
             connection.inputStream.use { input ->
-                tmp.outputStream().buffered().use { output ->
-                    copy(LimitedInput(input, expectedSize), output) { done -> report(messageId, done.toFloat() / expectedSize) }
+                java.io.FileOutputStream(tmp, start > 0).buffered().use { output ->
+                    copy(LimitedInput(input, expectedSize - start), output) { done ->
+                        report(messageId, (start + done).toFloat() / expectedSize)
+                    }
                 }
             }
             if (tmp.length() != expectedSize) throw IOException("Incomplete download")
-            tmp.inputStream().buffered().use { SegmentedCrypto.decrypt(it, NullOutput, key) }
+            try {
+                tmp.inputStream().buffered().use { SegmentedCrypto.decrypt(it, NullOutput, key) }
+            } catch (e: Exception) {
+                // Damaged: start over next time rather than resume it.
+                tmp.delete()
+                throw e
+            }
             if (!tmp.renameTo(out)) throw IOException("Could not store the file")
-        } catch (e: Exception) {
+        } catch (e: FileGoneException) {
             tmp.delete()
             throw e
         } finally {
@@ -203,6 +294,9 @@ class FileDrop @Inject constructor(
     fun sweepOpened(maxAgeMs: Long = OPENED_MAX_AGE_MS) {
         val cutoff = System.currentTimeMillis() - maxAgeMs
         File(context.cacheDir, OPEN_DIR).listFiles()?.forEach { if (it.lastModified() < cutoff) it.deleteRecursively() }
+        // Records of uploads in parts that never finished; the relay dropped them by now.
+        val week = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+        File(context.filesDir, "transfers").listFiles()?.forEach { if (it.lastModified() < week) it.delete() }
     }
 
     private fun copy(input: InputStream, output: OutputStream, onProgress: (Long) -> Unit) {

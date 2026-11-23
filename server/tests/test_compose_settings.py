@@ -25,6 +25,6 @@ def test_attachment_settings_reach_the_relay():
     for name in (
         "S3_ENDPOINT", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET", "S3_REGION",
         "ATTACHMENT_MAX_BYTES", "ATTACHMENT_MONTHLY_BYTES_PER_USER",
-        "ATTACHMENT_STORE_LIMIT_BYTES", "ATTACHMENT_MONTHLY_UPLOADS",
+        "ATTACHMENT_STORE_LIMIT_BYTES", "ATTACHMENT_MONTHLY_UPLOADS", "ATTACHMENT_PART_BYTES",
     ):
         assert re.search(rf"\b{name}:\s*\$\{{{name}:-", env), f"docker-compose.yml must forward {name}"

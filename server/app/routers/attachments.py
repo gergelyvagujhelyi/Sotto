@@ -15,6 +15,7 @@ sends a file to whom and its size, never its content, name or key.
 
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -48,8 +49,23 @@ class ReserveRequest(BaseModel):
 
 class ReserveResponse(BaseModel):
     id: str
+    # One URL for a small file; for a large one, upload_url is empty and part_urls has one
+    # URL per part_size bytes (the last part is the rest), uploaded in that order.
     upload_url: str
     expires_in: int
+    part_size: int = 0
+    part_urls: list[str] = []
+
+
+class PartsResponse(BaseModel):
+    part_size: int
+    part_urls: list[str]
+    expires_in: int
+
+
+class CompleteRequest(BaseModel):
+    # The ETag the store returned for each part, in order (multipart uploads only).
+    etags: list[str] = Field(default_factory=list, max_length=10_000)
 
 
 class DownloadResponse(BaseModel):
@@ -121,6 +137,13 @@ async def reserve_upload(
         raise HTTPException(status_code=507, detail="attachment_store_full")
 
     attachment_id = secrets.token_hex(16)
+    upload_id = None
+    if request.size > config.ATTACHMENT_PART_BYTES:
+        async with await _http() as client:
+            try:
+                upload_id = await store.create_multipart(client, object_key(attachment_id))
+            except httpx.HTTPError:
+                raise HTTPException(status_code=502, detail="store_unreachable")
     db.add(Attachment(
         id=attachment_id,
         sender_id=x_user_id,
@@ -128,14 +151,51 @@ async def reserve_upload(
         size=request.size,
         created_at=now,
         expires_at=now + timedelta(days=config.ATTACHMENT_TTL_DAYS),
+        upload_id=upload_id,
     ))
     db.add(AttachmentUsage(user_id=x_user_id, size=request.size, created_at=now))
     await db.commit()
+    if upload_id is not None:
+        urls = _part_urls(store, attachment_id, upload_id, request.size)
+        return ReserveResponse(
+            id=attachment_id, upload_url="", expires_in=UPLOAD_URL_SECONDS,
+            part_size=config.ATTACHMENT_PART_BYTES, part_urls=urls,
+        )
     url = store.presign(
         "PUT", object_key(attachment_id), UPLOAD_URL_SECONDS,
         signed_headers={"content-length": request.size},
     )
     return ReserveResponse(id=attachment_id, upload_url=url, expires_in=UPLOAD_URL_SECONDS)
+
+
+def _part_urls(store: ObjectStore, attachment_id: str, upload_id: str, size: int) -> list[str]:
+    part = config.ATTACHMENT_PART_BYTES
+    count = (size + part - 1) // part
+    return [
+        store.presign_part(
+            object_key(attachment_id), upload_id, n + 1,
+            min(part, size - n * part), UPLOAD_URL_SECONDS,
+        )
+        for n in range(count)
+    ]
+
+
+@router.post("/{attachment_id}/parts", response_model=PartsResponse)
+async def part_urls(
+    attachment_id: str,
+    x_user_id: str = Depends(verify_auth_token),
+    db: AsyncSession = Depends(get_db),
+) -> PartsResponse:
+    """Fresh part URLs for the sender's unfinished multipart upload, to resume it."""
+    store = _store()
+    row = await _own(db, attachment_id)
+    if row.sender_id != x_user_id or row.upload_id is None or row.uploaded_at is not None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    return PartsResponse(
+        part_size=config.ATTACHMENT_PART_BYTES,
+        part_urls=_part_urls(store, attachment_id, row.upload_id, row.size),
+        expires_in=UPLOAD_URL_SECONDS,
+    )
 
 
 async def _own(db: AsyncSession, attachment_id: str) -> Attachment:
@@ -150,6 +210,7 @@ async def _own(db: AsyncSession, attachment_id: str) -> Attachment:
 @router.post("/{attachment_id}/complete")
 async def complete_upload(
     attachment_id: str,
+    body: Optional[CompleteRequest] = None,
     x_user_id: str = Depends(verify_auth_token),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -161,6 +222,15 @@ async def complete_upload(
     if row.uploaded_at is not None:
         return {"status": "ok"}
     async with await _http() as client:
+        if row.upload_id is not None:
+            parts = (row.size + config.ATTACHMENT_PART_BYTES - 1) // config.ATTACHMENT_PART_BYTES
+            etags = body.etags if body else []
+            if len(etags) != parts or any(not t or len(t) > 200 for t in etags):
+                raise HTTPException(status_code=400, detail="attachment_parts_missing")
+            try:
+                await store.complete_multipart(client, object_key(attachment_id), row.upload_id, etags)
+            except httpx.HTTPError:
+                raise HTTPException(status_code=409, detail="attachment_not_uploaded")
         try:
             size = await store.size_of(client, object_key(attachment_id))
         except httpx.HTTPError:
@@ -211,13 +281,20 @@ async def delete_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
     async with await _http() as client:
         try:
-            await store.delete(client, object_key(attachment_id))
+            await _remove(store, client, row)
         except httpx.HTTPError:
             # The row stays, so the purge tries again later.
             raise HTTPException(status_code=502, detail="store_unreachable")
     await db.delete(row)
     await db.commit()
     return {"status": "deleted"}
+
+
+async def _remove(store: ObjectStore, client: httpx.AsyncClient, row: Attachment) -> None:
+    """Deletes the object, and an unfinished multipart upload's parts (which a delete leaves)."""
+    if row.upload_id is not None and row.uploaded_at is None:
+        await store.abort_multipart(client, object_key(row.id), row.upload_id)
+    await store.delete(client, object_key(row.id))
 
 
 async def purge_attachments(db: AsyncSession) -> int:
@@ -240,7 +317,7 @@ async def purge_attachments(db: AsyncSession) -> int:
         async with await _http() as client:
             for row in stale:
                 try:
-                    await store.delete(client, object_key(row.id))
+                    await _remove(store, client, row)
                 except httpx.HTTPError:
                     continue
                 await db.delete(row)

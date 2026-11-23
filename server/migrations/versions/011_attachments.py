@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("uploaded_at", sa.DateTime(), nullable=True),
         sa.Column("expires_at", sa.DateTime(), nullable=False),
+        sa.Column("upload_id", sa.String(512), nullable=True),
     )
     op.create_index("ix_attachments_sender_id", "attachments", ["sender_id"])
     op.create_index("ix_attachments_recipient_id", "attachments", ["recipient_id"])

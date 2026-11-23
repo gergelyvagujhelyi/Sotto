@@ -152,7 +152,8 @@ private fun FileCard(message: Message, contentColor: Color) {
     val status = when {
         progress != null && state == com.sotto.app.domain.model.FileState.UPLOADING -> "Uploading ${(progress * 100).toInt()}%"
         progress != null -> "Downloading ${(progress * 100).toInt()}%"
-        state == com.sotto.app.domain.model.FileState.UPLOADING -> if (message.state == com.sotto.app.domain.model.MessageState.FAILED) "Not uploaded" else "Encrypting…"
+        state == com.sotto.app.domain.model.FileState.UPLOADING -> if (message.state == com.sotto.app.domain.model.MessageState.FAILED) "Not uploaded" else "Waiting to upload…"
+        state == com.sotto.app.domain.model.FileState.DOWNLOADING -> "Waiting to download…"
         state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
         state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
         else -> "Tap to open"
@@ -163,7 +164,11 @@ private fun FileCard(message: Message, contentColor: Color) {
             .width(FileWidth)
             .clip(RoundedCornerShape(14.dp))
             .background(contentColor.copy(alpha = 0.08f))
-            .clickable(enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE, onClickLabel = status) {
+            .clickable(
+                enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
+                    state != com.sotto.app.domain.model.FileState.DOWNLOADING,
+                onClickLabel = status,
+            ) {
                 host.onFile(message)
             }
             .padding(10.dp),
@@ -455,9 +460,11 @@ fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
             if (message != null && media?.hd == true && !hdHere) {
                 val progress = host?.fileProgress?.value?.get(messageId + "-hd")
                 val gone = media.fileState == com.sotto.app.domain.model.FileState.GONE
+                val queued = media.fileState == com.sotto.app.domain.model.FileState.DOWNLOADING
                 Text(
                     text = when {
                         progress != null -> "Downloading HD ${(progress * 100).toInt()}%"
+                        queued -> "Downloading HD…"
                         gone -> "The HD copy is no longer available"
                         else -> "Download HD · ${byteSize(media.size)}"
                     },
@@ -468,7 +475,7 @@ fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
                         .padding(bottom = 48.dp)
                         .clip(RoundedCornerShape(20.dp))
                         .background(Color.White.copy(alpha = 0.18f))
-                        .clickable(enabled = progress == null && !gone) { host?.onFile?.invoke(message) }
+                        .clickable(enabled = progress == null && !gone && !queued) { host?.onFile?.invoke(message) }
                         .padding(horizontal = 18.dp, vertical = 10.dp),
                 )
             }

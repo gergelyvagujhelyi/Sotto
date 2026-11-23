@@ -62,6 +62,8 @@ ATTACHMENT_MONTHLY_BYTES_PER_USER: int = int(os.getenv("ATTACHMENT_MONTHLY_BYTES
 ATTACHMENT_STORE_LIMIT_BYTES: int = int(os.getenv("ATTACHMENT_STORE_LIMIT_BYTES", str(4 * 1024 ** 3)))
 ATTACHMENT_MONTHLY_UPLOADS: int = int(os.getenv("ATTACHMENT_MONTHLY_UPLOADS", "5000"))
 # Uncollected files go after this long (the bucket's own expiry rule is the backstop).
+# Files larger than this go up in parts of this size, so an interrupted upload resumes.
+ATTACHMENT_PART_BYTES: int = int(os.getenv("ATTACHMENT_PART_BYTES", str(8 * 1024 * 1024)))
 ATTACHMENT_TTL_DAYS: int = int(os.getenv("ATTACHMENT_TTL_DAYS", "30"))
 INVITE_ONLY: bool = os.getenv("INVITE_ONLY", "true").lower() == "true"
 INVITE_TTL_DAYS: int = int(os.getenv("INVITE_TTL_DAYS", "7"))

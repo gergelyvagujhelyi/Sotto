@@ -67,7 +67,10 @@ interface ApiService {
     // Encrypted attachments (ADR-29): the relay signs URLs for its object store.
     suspend fun reserveAttachment(request: com.sotto.app.data.remote.dto.AttachmentReserveRequest): com.sotto.app.data.remote.dto.AttachmentReserveResponse =
         throw UnsupportedOperationException("No attachments")
-    suspend fun completeAttachment(id: String): Unit = throw UnsupportedOperationException("No attachments")
+    suspend fun completeAttachment(id: String, etags: List<String> = emptyList()): Unit = throw UnsupportedOperationException("No attachments")
+    /** Fresh part URLs to resume a multipart upload; null when the relay has no such upload (404). */
+    suspend fun attachmentParts(id: String): com.sotto.app.data.remote.dto.AttachmentPartsResponse? =
+        throw UnsupportedOperationException("No attachments")
     /** A download URL for an attachment sent to the user; null when it's gone (404). */
     suspend fun attachmentDownload(id: String): com.sotto.app.data.remote.dto.AttachmentDownloadResponse? =
         throw UnsupportedOperationException("No attachments")

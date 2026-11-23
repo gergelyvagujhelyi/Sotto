@@ -43,6 +43,10 @@ class FakeStore:
     def __init__(self):
         self.objects: dict[str, int] = {}
         self.deleted: list[str] = []
+        self.multipart: dict[str, list] = {}
+        self.joined: dict[str, list] = {}
+        self.aborted: list[str] = []
+        self.pending_size: dict[str, int] = {}
 
     def presign(self, method, key, expires, signed_headers=None, now=None):
         size = (signed_headers or {}).get("content-length", "")
@@ -54,6 +58,20 @@ class FakeStore:
     async def delete(self, client, key):
         self.objects.pop(key, None)
         self.deleted.append(key)
+
+    async def create_multipart(self, client, key):
+        self.multipart[key] = []
+        return f"up-{key}"
+
+    def presign_part(self, key, upload_id, number, size, expires):
+        return f"https://bucket.example/{key}?part={number}&size={size}&upload={upload_id}"
+
+    async def complete_multipart(self, client, key, upload_id, etags):
+        self.joined[key] = list(etags)
+        self.objects[key] = self.multipart.pop(key, None) or self.pending_size.get(key, 0)
+
+    async def abort_multipart(self, client, key, upload_id):
+        self.aborted.append(key)
 
 
 @pytest.fixture
@@ -166,3 +184,42 @@ async def test_purge_removes_expired_and_unfinished(client: AsyncClient, store: 
         assert await attachments.purge_attachments(db) == 2
         assert await db.get(Attachment, ids[0]) is not None
     assert sorted(store.deleted) == sorted([f"a/{ids[1]}", f"a/{ids[2]}"])
+
+
+@pytest.mark.asyncio
+async def test_a_large_file_goes_up_in_parts_and_can_resume(client: AsyncClient, store: FakeStore, monkeypatch):
+    monkeypatch.setattr(config, "ATTACHMENT_PART_BYTES", 100)
+    alice, bob = await _pair(client)
+    att = (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 250}, headers=_auth(alice))).json()
+    assert att["upload_url"] == "" and att["part_size"] == 100
+    sizes = [parse_qs(urlsplit(u).query)["size"][0] for u in att["part_urls"]]
+    assert sizes == ["100", "100", "50"]
+    # Resuming: fresh URLs for the same upload, only for the sender.
+    again = await client.post(f"/v1/attachments/{att['id']}/parts", headers=_auth(alice))
+    assert again.status_code == 200 and len(again.json()["part_urls"]) == 3
+    assert (await client.post(f"/v1/attachments/{att['id']}/parts", headers=_auth(bob))).status_code == 404
+    # Completing needs every part's ETag; then the size is checked as usual.
+    r = await client.post(f"/v1/attachments/{att['id']}/complete", json={"etags": ["a", "b"]}, headers=_auth(alice))
+    assert r.status_code == 400
+    store.pending_size[f"a/{att['id']}"] = 250
+    r = await client.post(f"/v1/attachments/{att['id']}/complete", json={"etags": ["a", "b", "c"]}, headers=_auth(alice))
+    assert r.status_code == 200, r.text
+    assert store.joined[f"a/{att['id']}"] == ["a", "b", "c"]
+    assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_an_abandoned_multipart_upload_is_aborted(client: AsyncClient, store: FakeStore, monkeypatch):
+    monkeypatch.setattr(config, "ATTACHMENT_PART_BYTES", 100)
+    alice, bob = await _pair(client)
+    att = (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 250}, headers=_auth(alice))).json()
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(alice))).status_code == 200
+    assert store.aborted == [f"a/{att['id']}"]
+
+
+def test_part_urls_sign_their_part_number_upload_and_size():
+    store = ObjectStore("https://t3.storage.dev", "b", "id", "secret")
+    url = store.presign_part("a/x", "UP 1", 2, 100, 60)
+    q = parse_qs(urlsplit(url).query)
+    assert q["partNumber"] == ["2"] and q["uploadId"] == ["UP 1"]
+    assert q["X-Amz-SignedHeaders"] == ["content-length;host"]

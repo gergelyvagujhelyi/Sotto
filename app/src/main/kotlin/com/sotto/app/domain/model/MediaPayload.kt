@@ -49,6 +49,8 @@ enum class FileState(val wire: String) {
     SENT("sent"),
     /** Receiver: on the relay's store, not downloaded yet. */
     REMOTE("remote"),
+    /** Receiver: a download is queued or under way (a background job). */
+    DOWNLOADING("downloading"),
     /** On this phone, ready to open. */
     READY("ready"),
     /** Receiver: the store no longer has it (expired or deleted) and it was never downloaded. */

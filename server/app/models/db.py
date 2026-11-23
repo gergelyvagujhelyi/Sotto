@@ -178,6 +178,8 @@ class Attachment(Base):
     created_at = Column(DateTime, nullable=False, index=True)
     uploaded_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=False, index=True)
+    # A large file goes up in parts (resumable): the store's id for that multipart upload.
+    upload_id = Column(String(512), nullable=True)
 
 
 class AttachmentUsage(Base):

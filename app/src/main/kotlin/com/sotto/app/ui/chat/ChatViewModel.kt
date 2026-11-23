@@ -301,11 +301,11 @@ class ChatViewModel @Inject constructor(
             try {
                 if (media.kind == com.sotto.app.domain.model.MediaKind.PHOTO) {
                     // An HD photo's full-size copy: fetch it; the viewer shows it once it's here.
-                    if (media.fileState == com.sotto.app.domain.model.FileState.REMOTE) messageRepository.downloadFile(message.id)
+                    if (media.fileState == com.sotto.app.domain.model.FileState.REMOTE) messageRepository.requestDownload(message.id)
                     return@launch
                 }
                 if (media.fileState == com.sotto.app.domain.model.FileState.REMOTE) {
-                    messageRepository.downloadFile(message.id)
+                    messageRepository.requestDownload(message.id)
                     return@launch
                 }
                 val file = messageRepository.decryptFileForOpening(message.id)

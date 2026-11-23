@@ -140,7 +140,14 @@ interface MessageDao {
     suspend fun setMediaState(messageId: String, state: String)
 
     @Query("UPDATE messages SET attachmentId = :attachmentId WHERE id = :messageId")
-    suspend fun setAttachmentId(messageId: String, attachmentId: String)
+    suspend fun setAttachmentId(messageId: String, attachmentId: String?)
+
+    /** Our own sends whose file transfer a background job owns. */
+    @Query("SELECT * FROM messages WHERE state = 'SENDING' AND isOutgoing = 1 AND mediaState = 'uploading'")
+    suspend fun getUploadingMessages(): List<MessageEntity>
+
+    @Query("SELECT * FROM messages WHERE mediaState = 'downloading'")
+    suspend fun getDownloadingMessages(): List<MessageEntity>
 
     @Query("DELETE FROM messages")
     suspend fun deleteAll()

@@ -62,6 +62,7 @@ class MessageRepositoryImpl @Inject constructor(
     private val contactNames: ContactNameStore,
     private val mediaStore: MediaStore,
     private val fileDrop: com.sotto.app.data.media.FileDrop,
+    private val transfers: com.sotto.app.worker.FileTransfers,
 ) : MessageRepository {
 
     override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
@@ -268,18 +269,88 @@ class MessageRepositoryImpl @Inject constructor(
 
     /** Puts our file on the relay's store, once: reserve, upload, confirm. Returns the row as it is then. */
     private suspend fun ensureUploaded(entity: MessageEntity): MessageEntity {
-        if (entity.attachmentId != null) return entity
+        val sent = com.sotto.app.domain.model.FileState.SENT.wire
+        if (entity.attachmentId != null && entity.mediaState == sent) return entity
         messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.UPLOADING.wire)
         val name = storeName(entity)
         val size = fileDrop.fileFor(name).length()
+        suspend fun done(id: String): MessageEntity {
+            fileDrop.forgetParts(name)
+            messageDao.setMediaState(entity.id, sent)
+            return entity.copy(attachmentId = id, mediaState = sent)
+        }
+        // An earlier attempt reserved it: resume that upload when the relay still has it.
+        entity.attachmentId?.let { id ->
+            val parts = apiService.attachmentParts(id)
+            if (parts != null) {
+                apiService.completeAttachment(id, fileDrop.uploadParts(name, id, parts.partSize, parts.partUrls))
+                return done(id)
+            }
+            // A single upload that went through (only its confirmation was lost), or one
+            // that's finished already; otherwise it's gone and is reserved again.
+            if (runCatching { apiService.completeAttachment(id) }.isSuccess) return done(id)
+            messageDao.setAttachmentId(entity.id, null)
+        }
         val reserved = apiService.reserveAttachment(
             com.sotto.app.data.remote.dto.AttachmentReserveRequest(entity.recipientId, size),
         )
-        fileDrop.upload(name, reserved.uploadUrl)
-        apiService.completeAttachment(reserved.id)
         messageDao.setAttachmentId(entity.id, reserved.id)
-        messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.SENT.wire)
-        return entity.copy(attachmentId = reserved.id)
+        if (reserved.partUrls.isNotEmpty()) {
+            apiService.completeAttachment(reserved.id, fileDrop.uploadParts(name, reserved.id, reserved.partSize, reserved.partUrls))
+        } else {
+            fileDrop.upload(name, reserved.uploadUrl)
+            apiService.completeAttachment(reserved.id)
+        }
+        return done(reserved.id)
+    }
+
+    /**
+     * Finishes sending a message whose file goes through the store, in the background
+     * ([com.sotto.app.worker.TransferWorker]): the upload (resumable, so it may be
+     * stopped), then the message itself, which can't be once the ratchet has moved.
+     */
+    override suspend fun finishSend(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (!entity.isOutgoing || entity.state != MessageState.SENDING.name) return
+        val ready = ensureUploaded(entity)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+            val me = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+            val envelope = encryptFor(ready.recipientId, wirePayload(ready, me).toByteArray(Charsets.UTF_8))
+            messageDao.updateEncryptedBody(messageId, envelope.ciphertext, envelope.nonce)
+            val sigPayload = buildMessageSigPayload(me, ready.recipientId, envelope.nonce, envelope.ciphertext)
+            val response = apiService.sendMessage(
+                SendMessageRequest(
+                    recipientId = ready.recipientId,
+                    encryptedBody = Base64.encodeToString(envelope.ciphertext, Base64.NO_WRAP),
+                    nonce = Base64.encodeToString(envelope.nonce, Base64.NO_WRAP),
+                    signature = Base64.encodeToString(keyManager.sign(sigPayload), Base64.NO_WRAP),
+                    pqcSignature = signWithMlDsa(sigPayload),
+                    clientMessageId = messageId,
+                )
+            )
+            messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
+            updateConversationPreview(ready.conversationId, ready.recipientId, ready.preview(), response.timestamp)
+        }
+    }
+
+    override suspend fun markSendFailed(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (entity.state == MessageState.SENDING.name) messageDao.updateState(messageId, MessageState.FAILED.name)
+    }
+
+    override suspend fun requestDownload(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (!usesStore(entity) || entity.isOutgoing) return
+        if (entity.mediaState != com.sotto.app.domain.model.FileState.REMOTE.wire) return
+        messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.DOWNLOADING.wire)
+        transfers.download(messageId)
+    }
+
+    override suspend fun markDownloadFailed(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (entity.mediaState == com.sotto.app.domain.model.FileState.DOWNLOADING.wire) {
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.REMOTE.wire)
+        }
     }
 
     override suspend fun downloadFile(messageId: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
@@ -378,9 +449,14 @@ class MessageRepositoryImpl @Inject constructor(
             throw e
         }
 
+        // A file (or HD copy) goes up in the background; the message follows when it's there.
+        if (usesStore(entity)) {
+            transfers.upload(messageId)
+            return entity.toDomain(senderId)
+        }
+
         val envelope = try {
-            val ready = if (usesStore(entity)) ensureUploaded(entity) else entity
-            encryptFor(recipientId, wirePayload(ready, senderId).toByteArray(Charsets.UTF_8))
+            encryptFor(recipientId, wirePayload(entity, senderId).toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             throw e
@@ -487,8 +563,17 @@ class MessageRepositoryImpl @Inject constructor(
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { retryFailedInternal(messageId) }
 
     /** Messages left in SENDING by a process death can never complete: mark them FAILED (retryable). */
-    override suspend fun failInterruptedSends() {
-        messageDao.getSendingMessages().forEach { messageDao.updateState(it.id, MessageState.FAILED.name) }
+    override suspend fun failInterruptedSends() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        messageDao.getSendingMessages().forEach {
+            // A send whose file a background job still owns isn't interrupted: it goes on.
+            if (usesStore(it) && transfers.isQueued(it.id, up = true)) return@forEach
+            messageDao.updateState(it.id, MessageState.FAILED.name)
+        }
+        messageDao.getDownloadingMessages().forEach {
+            if (!transfers.isQueued(it.id, up = false)) {
+                messageDao.setMediaState(it.id, com.sotto.app.domain.model.FileState.REMOTE.wire)
+            }
+        }
     }
 
     private suspend fun retryFailedInternal(messageId: String) {
@@ -498,12 +583,16 @@ class MessageRepositoryImpl @Inject constructor(
         if (!entity.isOutgoing || entity.state != MessageState.FAILED.name) return
         val plaintext = entity.plaintext ?: return // Cannot retry without plaintext
         messageDao.updateState(messageId, MessageState.SENDING.name)
+        if (usesStore(entity)) {
+            // Its upload resumes in the background, then the message goes.
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
+            transfers.upload(messageId)
+            return
+        }
 
         try {
             val retrySenderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
-            // A file whose upload didn't finish goes up again first.
-            val ready = if (usesStore(entity)) ensureUploaded(entity) else entity
-            val envelope = encryptFor(entity.recipientId, wirePayload(ready, retrySenderId).toByteArray(Charsets.UTF_8))
+            val envelope = encryptFor(entity.recipientId, wirePayload(entity, retrySenderId).toByteArray(Charsets.UTF_8))
 
             val retrySigPayload = buildMessageSigPayload(retrySenderId, entity.recipientId, envelope.nonce, envelope.ciphertext)
             val retrySignature = keyManager.sign(retrySigPayload)

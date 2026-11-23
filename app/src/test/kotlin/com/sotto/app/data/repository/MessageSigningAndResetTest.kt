@@ -40,6 +40,7 @@ import org.junit.Test
  */
 class MessageSigningAndResetTest {
     private val messageDao = mockk<MessageDao>(relaxed = true)
+    private val transfers = mockk<com.sotto.app.worker.FileTransfers>(relaxed = true)
     private val conversationDao = mockk<ConversationDao>(relaxed = true)
     private val contactDao = mockk<ContactDao>(relaxed = true)
     private val apiService = mockk<ApiService>(relaxed = true)
@@ -96,6 +97,7 @@ class MessageSigningAndResetTest {
             contactNames = mockk<ContactNameStore>(relaxed = true),
             mediaStore = mockk<com.sotto.app.data.media.MediaStore>(relaxed = true),
             fileDrop = mockk<com.sotto.app.data.media.FileDrop>(relaxed = true),
+            transfers = transfers,
         )
     }
 
@@ -281,14 +283,39 @@ class MessageSigningAndResetTest {
 
     @Test
     fun `interrupted sends are marked failed for the user to retry`() = runTest {
-        val stuck = listOf("s1", "s2").map { id -> mockk<MessageEntity> { every { this@mockk.id } returns id } }
+        val stuck = listOf("s1", "s2").map { id ->
+            mockk<MessageEntity> {
+                every { this@mockk.id } returns id
+                every { mediaKind } returns null
+            }
+        }
         coEvery { messageDao.getSendingMessages() } returns stuck
+        coEvery { messageDao.getDownloadingMessages() } returns emptyList()
 
         repo.failInterruptedSends()
 
         coVerify { messageDao.updateState("s1", MessageState.FAILED.name) }
         coVerify { messageDao.updateState("s2", MessageState.FAILED.name) }
         coVerify(exactly = 0) { apiService.sendMessage(any()) }
+    }
+
+    @Test
+    fun `a file send its background job still owns is left to it`() = runTest {
+        val file = MessageEntity(
+            id = "f1", conversationId = "c", senderId = "me", recipientId = "peer",
+            encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "", state = MessageState.SENDING.name,
+            timestamp = 1, expiresAt = null, isOutgoing = true, mediaKind = "file", mediaState = "uploading",
+        )
+        val orphan = file.copy(id = "f2")
+        coEvery { messageDao.getSendingMessages() } returns listOf(file, orphan)
+        coEvery { messageDao.getDownloadingMessages() } returns emptyList()
+        every { transfers.isQueued("f1", true) } returns true
+        every { transfers.isQueued("f2", true) } returns false
+
+        repo.failInterruptedSends()
+
+        coVerify(exactly = 0) { messageDao.updateState("f1", any()) }
+        coVerify { messageDao.updateState("f2", MessageState.FAILED.name) }
     }
 
     // ── The pending queue ───────────────────────────────────────────────────

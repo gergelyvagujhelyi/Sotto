@@ -251,13 +251,25 @@ class KtorApiService @Inject constructor(
         return response.body()
     }
 
-    override suspend fun completeAttachment(id: String) {
+    override suspend fun completeAttachment(id: String, etags: List<String>) {
         val response: HttpResponse = client.post("/v1/attachments/$id/complete") {
             header("Authorization", "Bearer ${authToken()}")
+            setBody(com.sotto.app.data.remote.dto.AttachmentCompleteRequest(etags))
         }
         if (!response.status.isSuccess()) {
             throw ApiHttpException(response.status.value, errorDetail(response) ?: "Attachment not confirmed: ${response.status}")
         }
+    }
+
+    override suspend fun attachmentParts(id: String): com.sotto.app.data.remote.dto.AttachmentPartsResponse? {
+        val response: HttpResponse = client.post("/v1/attachments/$id/parts") {
+            header("Authorization", "Bearer ${authToken()}")
+        }
+        if (response.status.value == 404) return null
+        if (!response.status.isSuccess()) {
+            throw ApiHttpException(response.status.value, errorDetail(response) ?: "Parts unavailable: ${response.status}")
+        }
+        return response.body()
     }
 
     override suspend fun attachmentDownload(id: String): com.sotto.app.data.remote.dto.AttachmentDownloadResponse? {
