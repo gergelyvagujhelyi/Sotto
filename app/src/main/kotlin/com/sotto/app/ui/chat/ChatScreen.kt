@@ -1066,11 +1066,10 @@ private fun ChatTopBar(
                                 modifier = Modifier.clickable(onClickLabel = "Verify in person", onClick = onVerify),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    if (verifiedByCall) Icons.Rounded.PhoneInTalk else Icons.Rounded.GppMaybe,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(12.dp),
-                                    tint = tint,
+                                com.sotto.app.ui.components.TrustIcon(
+                                    if (verifiedByCall) com.sotto.app.domain.model.ContactTrust.BY_PHONE
+                                    else com.sotto.app.domain.model.ContactTrust.NONE,
+                                    size = 13.dp,
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(

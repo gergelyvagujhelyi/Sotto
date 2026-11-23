@@ -98,6 +98,7 @@ class InPersonVerifier @Inject constructor(
         var contact = contactDao.getByUserId(contactId) ?: return InPersonResult.NotAContact
         var pinned = contact.keyFingerprint
         if (pinned != code.fingerprintHex) {
+            com.sotto.app.util.Diag.i("InPersonVerifier", "Pinned keys differ from the code's: asking the relay for a rotation")
             // They may have rotated keys since this phone last looked (or the contact predates
             // fingerprints): take the relay's bundle only as far as the keys we hold endorse it.
             pinned = when (val check = keyVerifier.check(contactId)) {
@@ -119,6 +120,7 @@ class InPersonVerifier @Inject constructor(
             InPersonResult.Verified
         } else {
             // The keys moved on between the check and the write: let the user try again.
+            com.sotto.app.util.Diag.i("InPersonVerifier", "Marking verified changed no row (keys moved on meanwhile)")
             InPersonResult.CantCheck
         }
     }

@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Hearing
@@ -250,6 +251,7 @@ fun CallScreen(
         onVerify = viewModel::startVerification,
         onVerifyAnswer = viewModel::answerVerification,
         onVerifyDismiss = viewModel::dismissVerification,
+        onClose = onCallEnded,
     )
 }
 
@@ -272,6 +274,8 @@ fun CallContent(
     onVerify: () -> Unit = {},
     onVerifyAnswer: (matches: Boolean) -> Unit = {},
     onVerifyDismiss: () -> Unit = {},
+    /** Leave the screen now, once the call is over. */
+    onClose: () -> Unit = {},
 ) = ForcedDarkTheme {
     val status = callState?.status
     val name = callState?.peerDisplayName ?: "Unknown"
@@ -377,6 +381,7 @@ fun CallContent(
                     onToggleSpeaker = onToggleSpeaker,
                     onSelectAudioRoute = onSelectAudioRoute,
                     onToggleLouder = onToggleLouder,
+                    onClose = onClose,
                 )
                 Spacer(Modifier.height(16.dp))
             }
@@ -487,6 +492,7 @@ private fun CallControls(
     onToggleSpeaker: () -> Unit,
     onSelectAudioRoute: (AudioRoute) -> Unit,
     onToggleLouder: () -> Unit,
+    onClose: () -> Unit = {},
 ) {
     val state = callState
     when {
@@ -540,8 +546,19 @@ private fun CallControls(
                 RoundCallButton(Icons.Rounded.CallEnd, "End call", CallRed, onHangup, label = "End", size = 64.dp)
             }
         }
+        // Over: the screen closes by itself in a moment; "Close" closes it now. ("Cancel"
+        // here did nothing: there's no call left to cancel.)
+        state != null && state.status.isOver -> {
+            RoundCallButton(
+                Icons.Rounded.Close,
+                "Close",
+                listOf(Color(0xFF4A4A5A), Color(0xFF2E2E3A)),
+                onClose,
+                label = "Close",
+            )
+        }
         else -> {
-            // Non-active state: hangup (no-op if terminal), LaunchedEffect handles dismiss
+            // Calling out, not answered yet: cancel the call.
             RoundCallButton(Icons.Rounded.CallEnd, "Cancel", CallRed, onHangup, label = "Cancel")
         }
     }

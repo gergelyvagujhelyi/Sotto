@@ -62,7 +62,11 @@ object InPersonNfc {
     private fun deliver(code: InPersonCode) {
         val now = System.currentTimeMillis()
         val last = lastDelivered
-        if (last != null && last.first == code && now - last.second < REPEAT_QUIET_MS) return
+        if (last != null && last.first == code && now - last.second < REPEAT_QUIET_MS) {
+            com.sotto.app.util.Diag.i("InPersonNfc", "Same code again within ${REPEAT_QUIET_MS / 1000} s: passed on once")
+            return
+        }
+        com.sotto.app.util.Diag.i("InPersonNfc", "Code received from the other phone")
         lastDelivered = code to now
         _received.tryEmit(code)
     }
@@ -132,13 +136,16 @@ object InPersonNfc {
         try {
             isoDep.connect()
             isoDep.timeout = TIMEOUT_MS
-            if (!isoDep.transceive(selectCommand()).endsWithOk()) return
+            if (!isoDep.transceive(selectCommand()).endsWithOk()) {
+                com.sotto.app.util.Diag.i("InPersonNfc", "Read a phone without Sotto's verify or New chat screen open")
+                return
+            }
             val answer = isoDep.transceive(exchangeCommand(code))
             if (!answer.endsWithOk()) return
             InPersonCode.parse(answer.copyOfRange(0, answer.size - 2))?.let(::deliver)
         } catch (e: IOException) {
             // The phones moved apart mid-exchange: the user taps again.
-            if (BuildConfig.DEBUG) Log.d("InPersonNfc", "Tap broke off: ${e.message}")
+            com.sotto.app.util.Diag.i("InPersonNfc", "Tap broke off: ${e.message}")
         } catch (e: SecurityException) {
             // The tag went away before connect (Android reports a stale tag this way).
             if (BuildConfig.DEBUG) Log.d("InPersonNfc", "Tag gone: ${e.message}")

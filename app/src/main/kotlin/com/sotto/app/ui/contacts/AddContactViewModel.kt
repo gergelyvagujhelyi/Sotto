@@ -96,6 +96,11 @@ class AddContactViewModel @Inject constructor(
                 }
                 // A QR code must be live (it changes every second); NFC reaches only a phone held close.
                 val result = inPersonVerifier.verify(contact.userId, code, requireLive = viaQr)
+                // No keys or names: the outcome, so a tap that adds without verifying can be told apart.
+                com.sotto.app.util.Diag.i(
+                    "AddContactVM",
+                    "In-person add via ${if (viaQr) "QR" else "NFC"}: $result (new contact: $added, live code: ${code.isLive})",
+                )
                 when (result) {
                     com.sotto.app.crypto.InPersonResult.Verified -> {
                         val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
