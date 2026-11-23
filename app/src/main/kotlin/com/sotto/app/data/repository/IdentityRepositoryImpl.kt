@@ -296,6 +296,7 @@ class IdentityRepositoryImpl @Inject constructor(
                 verified = true,
                 // Keys their old ones never endorsed aren't the ones checked in person.
                 verifiedInPerson = stored.verifiedInPerson && !keysReplacedByShareCode,
+                verifiedByCall = stored.verifiedByCall && !keysReplacedByShareCode,
                 publicIdentityKey = keys.publicIdentityKey,
                 publicSigningKey = keys.publicSigningKey,
                 pqcSigningKey = keys.pqcSigningKey,
@@ -630,5 +631,6 @@ class IdentityRepositoryImpl @Inject constructor(
         profileName = profileName,
         verifiedInPerson = verifiedInPerson,
         inPersonWarned = inPersonWarned,
+        verifiedByCall = verifiedByCall,
     )
 }

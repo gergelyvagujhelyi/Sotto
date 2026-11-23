@@ -44,6 +44,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallEnd
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Pin
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Hearing
@@ -246,6 +247,9 @@ fun CallScreen(
         onSelectAudioRoute = viewModel::selectAudioRoute,
         onToggleLouder = viewModel::toggleLouder,
         onMinimize = if (callLive) minimize else null,
+        onVerify = viewModel::startVerification,
+        onVerifyAnswer = viewModel::answerVerification,
+        onVerifyDismiss = viewModel::dismissVerification,
     )
 }
 
@@ -264,6 +268,10 @@ fun CallContent(
     onMinimize: (() -> Unit)? = null,
     onSelectAudioRoute: (AudioRoute) -> Unit = {},
     onToggleLouder: () -> Unit = {},
+    /** Compare a code with the other person to verify them by call (ADR-31). */
+    onVerify: () -> Unit = {},
+    onVerifyAnswer: (matches: Boolean) -> Unit = {},
+    onVerifyDismiss: () -> Unit = {},
 ) = ForcedDarkTheme {
     val status = callState?.status
     val name = callState?.peerDisplayName ?: "Unknown"
@@ -299,6 +307,20 @@ fun CallContent(
                             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back to the app; the call goes on")
                         }
                     }
+                    if (status == CallStatus.CONNECTED && callState?.isNewContact == false) {
+                        IconButton(onClick = onVerify, modifier = Modifier.align(Alignment.CenterEnd)) {
+                            Icon(Icons.Rounded.Pin, contentDescription = "Compare a code to verify $name")
+                        }
+                    }
+                }
+                callState?.verify?.let { verify ->
+                    CallVerifyDialog(
+                        verify = verify,
+                        name = name,
+                        onStart = onVerify,
+                        onAnswer = onVerifyAnswer,
+                        onDismiss = onVerifyDismiss,
+                    )
                 }
 
                 // The controls below are measured before this weighted area, so they
@@ -860,4 +882,103 @@ private fun statusText(
     CallStatus.UNAVAILABLE -> "Contact unavailable"
     CallStatus.PEER_GONE -> if (peerName != null) "$peerName's phone stopped responding" else "The other phone stopped responding"
     else -> ""
+}
+
+
+/** Comparing a code with the other person, to verify them by call (CallVerification, ADR-31). */
+@Composable
+private fun CallVerifyDialog(
+    verify: com.sotto.app.domain.model.CallVerifyState,
+    name: String,
+    onStart: () -> Unit,
+    onAnswer: (Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val step = verify.step
+    val colors = MaterialTheme.colorScheme
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                when (step) {
+                    com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> Icons.Rounded.CheckCircle
+                    com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> Icons.Rounded.WarningAmber
+                    else -> Icons.Rounded.Pin
+                },
+                contentDescription = null,
+                tint = when (step) {
+                    com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> Aurora.colors.success
+                    com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> colors.error
+                    else -> colors.primary
+                },
+            )
+        },
+        title = {
+            Text(
+                when (step) {
+                    com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> "$name wants to compare a code"
+                    com.sotto.app.domain.model.CallVerifyState.Step.CODE -> "Read this to $name"
+                    com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> "$name is verified by call"
+                    com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> "The codes don't match"
+                    com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE -> "Can't compare a code now"
+                    else -> "Compare a code"
+                },
+                textAlign = TextAlign.Center,
+            )
+        },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                if (step == com.sotto.app.domain.model.CallVerifyState.Step.CODE && verify.code != null) {
+                    Text(
+                        verify.code,
+                        style = MaterialTheme.typography.displayMedium.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        ),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+                Text(
+                    when (step) {
+                        com.sotto.app.domain.model.CallVerifyState.Step.WAITING ->
+                            "Waiting for $name to tap the code button too. If nothing happens, their Sotto may be too old."
+                        com.sotto.app.domain.model.CallVerifyState.Step.ASKED ->
+                            "You'll both see the same six digits if nobody is in the middle of this call. Read them to each other."
+                        com.sotto.app.domain.model.CallVerifyState.Step.EXCHANGING -> "Working out the code…"
+                        com.sotto.app.domain.model.CallVerifyState.Step.CODE ->
+                            "Is it the same on $name's phone? Only say yes if you're sure it's $name's voice."
+                        com.sotto.app.domain.model.CallVerifyState.Step.MATCHED ->
+                            "The chat says \"Verified by call only\": a call is weaker proof than meeting. " +
+                                "When you meet, verify in person too."
+                        com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT ->
+                            "Someone may be in the middle of this call, such as the relay. Don't trust this chat " +
+                                "until you've met $name and verified in person."
+                        com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE ->
+                            "$name needs to be a saved contact whose keys this phone has checked. Try again later."
+                    },
+                    textAlign = TextAlign.Center,
+                )
+            }
+        },
+        confirmButton = {
+            when (step) {
+                com.sotto.app.domain.model.CallVerifyState.Step.ASKED ->
+                    androidx.compose.material3.TextButton(onClick = onStart) { Text("Compare") }
+                com.sotto.app.domain.model.CallVerifyState.Step.CODE ->
+                    androidx.compose.material3.TextButton(onClick = { onAnswer(true) }) { Text("It matches") }
+                com.sotto.app.domain.model.CallVerifyState.Step.WAITING,
+                com.sotto.app.domain.model.CallVerifyState.Step.EXCHANGING ->
+                    androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Close") }
+                else -> androidx.compose.material3.TextButton(onClick = onDismiss) { Text("OK") }
+            }
+        },
+        dismissButton = when (step) {
+            com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> {
+                { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Not now") } }
+            }
+            com.sotto.app.domain.model.CallVerifyState.Step.CODE -> {
+                { androidx.compose.material3.TextButton(onClick = { onAnswer(false) }) { Text("It's different") } }
+            }
+            else -> null
+        },
+    )
 }

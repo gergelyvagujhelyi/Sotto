@@ -15,6 +15,8 @@ data class Contact(
     val verifiedInPerson: Boolean = false,
     /** Already told once that they aren't verified in person, before a first message. */
     val inPersonWarned: Boolean = false,
+    /** A code compared in a Sotto call matched: weaker than [verifiedInPerson]. */
+    val verifiedByCall: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -28,7 +30,8 @@ data class Contact(
             nickname == other.nickname &&
             profileName == other.profileName &&
             verifiedInPerson == other.verifiedInPerson &&
-            inPersonWarned == other.inPersonWarned
+            inPersonWarned == other.inPersonWarned &&
+            verifiedByCall == other.verifiedByCall
     }
 
     override fun hashCode(): Int {
@@ -42,6 +45,7 @@ data class Contact(
         result = 31 * result + (profileName?.hashCode() ?: 0)
         result = 31 * result + verifiedInPerson.hashCode()
         result = 31 * result + inPersonWarned.hashCode()
+        result = 31 * result + verifiedByCall.hashCode()
         return result
     }
 }

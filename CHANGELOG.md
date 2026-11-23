@@ -4,6 +4,9 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Verify by call** — In a call with a contact, tap the code button at the top right; once you've both tapped it, both phones show six digits. Read them to each other: if they match, the chat says **"Verified by call only"**. If someone were in the middle of the call (the relay, say), the digits would differ. It's weaker than meeting, because it rests on recognising each other's voice, so only verifying in person turns the chat fully verified. A contact verified by call no longer gets the warning before your first message.
+  - Both phones need this version; an older Sotto doesn't answer, and the code never appears.
+- **Relay: forwards `call_verify`** — the new in-call signal, end-to-end encrypted like the others, never pushed.
 - **SourceDrop opens on the new version** — Tapping the update notification, or "Open SourceDrop" in the chat list, now tells SourceDrop which app and version it's about. SourceDrop opens Sotto's page and checks for the update right away, instead of showing what it saw at its last check. An older SourceDrop just opens as before.
 
 ## 0.7.9 — 2026-11-23

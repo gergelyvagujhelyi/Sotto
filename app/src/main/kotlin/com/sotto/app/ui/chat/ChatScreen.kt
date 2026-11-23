@@ -83,6 +83,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.GppMaybe
+import androidx.compose.material.icons.rounded.PhoneInTalk
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.MarkChatUnread
 import androidx.compose.material.icons.rounded.PersonOff
@@ -226,7 +227,7 @@ fun ChatScreen(
 
     // Before the first message to someone not verified in person, warn once (the user's
     // choice: trust comes only from meeting). Not for a request: replying is refused anyway.
-    val warnBeforeSending = contact?.let { !it.verifiedInPerson && !it.inPersonWarned } == true &&
+    val warnBeforeSending = contact?.let { !it.verifiedInPerson && !it.verifiedByCall && !it.inPersonWarned } == true &&
         conversation?.isApproved != false
     var heldSend by remember { mutableStateOf<HeldSend?>(null) }
     fun gated(onCancel: () -> Unit = {}, send: () -> Unit) {
@@ -395,6 +396,7 @@ fun ChatScreen(
         fileProgress = fileProgress,
         loadMedia = viewModel::loadMedia,
         verifiedInPerson = contact?.verifiedInPerson,
+        verifiedByCall = contact?.verifiedByCall == true,
         onVerify = { if (isResumed()) onVerifyClick(viewModel.contactId) },
     )
 }
@@ -477,6 +479,8 @@ fun ChatContent(
     loadMedia: suspend (String) -> ByteArray? = { null },
     /** Null while unknown (still loading): the header shows neither state then. */
     verifiedInPerson: Boolean? = null,
+    /** Checked by a code compared in a call only: the header says so (ADR-31). */
+    verifiedByCall: Boolean = false,
     onVerify: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
@@ -672,6 +676,7 @@ fun ChatContent(
                     onDelete = onDelete,
                     onRemoveContact = onRemoveContact,
                     verifiedInPerson = verifiedInPerson,
+                    verifiedByCall = verifiedByCall,
                     onVerify = onVerify,
                 )
             },
@@ -908,6 +913,7 @@ private fun ChatTopBar(
     onDelete: () -> Unit,
     onRemoveContact: () -> Unit,
     verifiedInPerson: Boolean? = null,
+    verifiedByCall: Boolean = false,
     onVerify: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
@@ -937,21 +943,23 @@ private fun ChatTopBar(
                         )
                         if (verifiedInPerson == false) {
                             // Not checked face to face: say so where the name is, and lead to the check.
+                            // A code compared in a call is said too, as the weaker proof it is.
+                            val tint = if (verifiedByCall) colors.primary else Aurora.colors.warning
                             Row(
                                 modifier = Modifier.clickable(onClickLabel = "Verify in person", onClick = onVerify),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    Icons.Rounded.GppMaybe,
+                                    if (verifiedByCall) Icons.Rounded.PhoneInTalk else Icons.Rounded.GppMaybe,
                                     contentDescription = null,
                                     modifier = Modifier.size(12.dp),
-                                    tint = Aurora.colors.warning,
+                                    tint = tint,
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = "Not verified in person",
+                                    text = if (verifiedByCall) "Verified by call only" else "Not verified in person",
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = Aurora.colors.warning,
+                                    color = tint,
                                     maxLines = 1,
                                 )
                             }

@@ -6,4 +6,7 @@ ALLOWED_SIGNAL_TYPES = frozenset({
     # Mid-call ICE restart (renegotiation after a network change). Older apps ignore
     # signal types they don't know, so forwarding it to them is harmless.
     "call_ice_restart",
+    # Verifying a contact by call: a six-digit code both phones show (commit, then reveal;
+    # ADR-31). End-to-end encrypted like every other call signal; older apps ignore it.
+    "call_verify",
 })

@@ -51,6 +51,10 @@ interface ContactDao {
     @Query("UPDATE contacts SET verifiedInPerson = 1 WHERE userId = :userId AND keyFingerprint = :fingerprint")
     suspend fun markVerifiedInPerson(userId: String, fingerprint: String): Int
 
+    /** Like [markVerifiedInPerson], for a code compared in a call. */
+    @Query("UPDATE contacts SET verifiedByCall = 1 WHERE userId = :userId AND keyFingerprint = :fingerprint")
+    suspend fun markVerifiedByCall(userId: String, fingerprint: String): Int
+
     @Query("UPDATE contacts SET inPersonWarned = 1 WHERE userId = :userId")
     suspend fun setInPersonWarned(userId: String): Int
 

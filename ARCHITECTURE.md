@@ -332,3 +332,18 @@
 
 **Tradeoff**: Nothing proves the phone is physically there: someone can pass on a screenshot of the QR code. The screen says to verify only with the person in front of you. NFC reaches a few centimetres and is the better proof. Phones without NFC use the QR code. The mark is local: the relay never learns who verified whom.
 
+---
+
+## ADR-31: Verifying by call, as a weaker level than in person
+
+**Decision**: During a connected Sotto call with a saved contact, either person can tap the code button. Once both have, each phone shows six digits; the two people read them to each other, and "It matches" marks the contact `contacts.verifiedByCall`. The chat then says "Verified by call only", never "Verified in person" (ADR-30), and the one-time warning before the first message no longer shows for them. Only meeting in person removes the "only".
+
+- **Protocol** (`CallVerification`, signal `call_verify`, kinds `commit` and `reveal`, end-to-end encrypted and signed like every call signal): each phone sends SHA-256 of a random 32-byte value, and reveals the value only after it has sent its own commitment and received the other's. The code is SHA-256(`Sotto-call-verify-v1` ‖ call ID ‖ caller's fingerprint ‖ callee's fingerprint ‖ caller's value ‖ callee's value), first 32 bits mod 10⁶, with each fingerprint as that phone has it pinned.
+- **Why the fingerprints are in the code**: someone in the middle who passed every message through unchanged would otherwise give both phones the same values and the same code. Each phone sees other keys for the other person then, so the codes differ.
+- **Why the commitments**: six digits are about 20 bits. Someone in the middle must commit to each side before it learns that side's value, so it can't search for keys or values that make both codes match: it gets one guess, about one in a million (as ZRTP's short authentication string).
+- **Kept and cleared** like `verifiedInPerson`: marked only while the fingerprint used is still the pinned one; an endorsed rotation keeps it, keys replaced by a share code without an endorsement clear it.
+
+**Why**: The owner asked for a way to verify online but said a call "is not good enough" to count as verified: "still flag the chat as only verified by phone". A code read aloud catches the relay or anyone else swapping keys, as long as each person knows the other's voice.
+
+**Tradeoff**: It trusts the voice: a convincing live voice fake defeats it, and between people who have never met it proves little. Hence the weaker level. Both phones need 0.7.10: an older Sotto ignores the signal, and the asking phone keeps waiting. The relay forwards `call_verify` like any in-call signal and never pushes for it.
+
