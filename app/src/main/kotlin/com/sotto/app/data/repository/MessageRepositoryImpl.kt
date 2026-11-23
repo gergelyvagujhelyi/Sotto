@@ -341,6 +341,8 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun requestDownload(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
         if (!usesStore(entity) || entity.isOutgoing) return
+        // Nothing comes down from someone whose message request isn't accepted.
+        if (conversationDao.getByContactId(entity.senderId)?.isApproved != true) return
         if (entity.mediaState != com.sotto.app.domain.model.FileState.REMOTE.wire) return
         messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.DOWNLOADING.wire)
         transfers.download(messageId)
@@ -968,14 +970,21 @@ class MessageRepositoryImpl @Inject constructor(
         // A reply: keep its text, and point at the original when this phone has it.
         // "mine" is the sender's: the original is theirs, so it has the relay's id here.
         // A voice message or photo carries the same reply fields, and its caption as text.
-        val media = MediaPayload.decode(plaintextStr)
-        val file = if (media == null) com.sotto.app.domain.model.FilePayload.decode(plaintextStr) else null
+        val sentMedia = MediaPayload.decode(plaintextStr)
+        val sentFile = if (sentMedia == null) com.sotto.app.domain.model.FilePayload.decode(plaintextStr) else null
         val reply = when {
-            media != null -> media.reply?.let { ReplyPayload.Decoded(media.caption, it.to, it.quote, it.mine) }
-            file != null -> file.reply?.let { ReplyPayload.Decoded(file.caption, it.to, it.quote, it.mine) }
+            sentMedia != null -> sentMedia.reply?.let { ReplyPayload.Decoded(sentMedia.caption, it.to, it.quote, it.mine) }
+            sentFile != null -> sentFile.reply?.let { ReplyPayload.Decoded(sentFile.caption, it.to, it.quote, it.mine) }
             else -> ReplyPayload.decode(plaintextStr)
         }
+        // Someone whose message request isn't accepted yet may only send text: a voice
+        // message, photo or file from them is neither stored nor downloadable, only noted.
+        val fromRequest = conversationDao.getByContactId(dto.senderId)?.isApproved != true
+        val refused = if (fromRequest) sentMedia?.media?.kind ?: sentFile?.let { MediaKind.FILE } else null
+        val media = sentMedia.takeIf { refused == null }
+        val file = sentFile.takeIf { refused == null }
         val messageText = when {
+            refused != null -> requestMediaNote(refused, sentMedia?.caption ?: sentFile?.caption.orEmpty())
             media != null -> media.caption
             file != null -> file.caption
             reply != null -> reply.text
@@ -1431,6 +1440,17 @@ class MessageRepositoryImpl @Inject constructor(
     ) {
         conversationDao.updatePreview(conversationId, preview.take(100), timestamp, if (incrementUnread) 1 else 0)
     }
+}
+
+/** What a message request shows instead of the voice message, photo or file it tried to send. */
+internal fun requestMediaNote(kind: MediaKind, caption: String): String {
+    val what = when (kind) {
+        MediaKind.VOICE -> "🎤 A voice message"
+        MediaKind.PHOTO -> "📷 A photo"
+        MediaKind.FILE -> "📎 A file"
+    }
+    val note = "$what was sent before you accepted this request, so it wasn't received. Ask them to send it again."
+    return if (caption.isBlank()) note else "$note\n\n${caption.trim()}"
 }
 
 /** What a reaction's notification says, e.g. `Reacted ❤️ to "See you at 6"`. */

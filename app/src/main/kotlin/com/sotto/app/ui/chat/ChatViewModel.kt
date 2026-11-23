@@ -229,6 +229,21 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Whether voice messages, photos and files can go to this contact: only once they've
+     * accepted, which shows as them having written to us, or sent us their name (which
+     * accepting a request does). Until then their phone would only note them (a message
+     * request may only bring text).
+     */
+    val canSendMedia: StateFlow<Boolean> =
+        combine(messages, contact) { list, c ->
+            c?.profileName != null || list.orEmpty().any { !it.isOutgoing && !it.state.isKeyChangeEvent }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    // Read when a button is pressed, so it's kept up to date even while nothing shows it.
+    private fun mediaRefusal(): String? = if (canSendMedia.value) null else
+        "You can send voice messages, photos and files once they've accepted your request."
+
     /** File transfers under way, by message id (0..1), for the file bubbles. */
     val fileProgress: StateFlow<Map<String, Float>> = messageRepository.fileProgress
 
@@ -251,12 +266,23 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /** Says why media can't be sent yet; true when it can. */
+    fun checkMediaAllowed(): Boolean {
+        val why = mediaRefusal() ?: return true
+        _sendError.value = why
+        return false
+    }
+
     fun reportError(message: String) {
         _sendError.value = message
     }
 
     /** Sends any file through the relay's store, with the composer's text as its caption. */
     fun sendFile(uri: android.net.Uri) {
+        mediaRefusal()?.let {
+            _sendError.value = it
+            return
+        }
         val replyTo = replyingTo.value
         val caption = draft.trim()
         if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
@@ -329,6 +355,11 @@ class ChatViewModel @Inject constructor(
 
     /** Sends a recorded voice message, replying to the message being replied to, if any. */
     fun sendVoice(recording: com.sotto.app.media.VoiceRecording) {
+        mediaRefusal()?.let {
+            recording.file.delete()
+            _sendError.value = it
+            return
+        }
         val replyTo = replyingTo.value
         viewModelScope.launch {
             val bytes = try {
@@ -350,6 +381,10 @@ class ChatViewModel @Inject constructor(
      * starts out with the composer's text); [hd] also sends its full-size copy.
      */
     fun sendPhoto(uri: android.net.Uri, hd: Boolean = false, caption: String = "") {
+        mediaRefusal()?.let {
+            _sendError.value = it
+            return
+        }
         val replyTo = replyingTo.value
         val composer = draft.trim()
         if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {

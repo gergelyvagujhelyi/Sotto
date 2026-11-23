@@ -238,7 +238,10 @@ class FileDrop @Inject constructor(
         try {
             connection.connectTimeout = 20_000
             connection.readTimeout = 60_000
-            if (have > 0) connection.setRequestProperty("Range", "bytes=$have-")
+            if (have > 0) {
+                connection.setRequestProperty("Range", "bytes=$have-")
+                if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.d("FileDrop", "Resuming download at $have of $expectedSize")
+            }
             report(messageId, have.toFloat() / expectedSize)
             val code = connection.responseCode
             if (code == 404) throw FileGoneException()

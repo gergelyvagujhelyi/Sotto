@@ -359,6 +359,7 @@ fun ChatScreen(
         onSendPhoto = viewModel::sendPhoto,
         loadHd = viewModel::loadHd,
         onSendFile = viewModel::sendFile,
+        checkMediaAllowed = viewModel::checkMediaAllowed,
         onFileTap = viewModel::onFileTap,
         fileProgress = fileProgress,
         loadMedia = viewModel::loadMedia,
@@ -406,6 +407,8 @@ fun ChatContent(
     onSendPhoto: (android.net.Uri, Boolean, String) -> Unit = { _, _, _ -> },
     loadHd: suspend (String) -> ByteArray? = { null },
     onSendFile: (android.net.Uri) -> Unit = {},
+    /** Voice, photos and files only once the contact accepted; false (with a note shown) before. */
+    checkMediaAllowed: () -> Boolean = { true },
     /** A file's bubble was tapped. */
     onFileTap: (Message) -> Unit = {},
     fileProgress: Map<String, Float> = emptyMap(),
@@ -454,6 +457,7 @@ fun ChatContent(
         }
     }
     val startRecording: () -> Boolean = start@{
+        if (!checkMediaAllowed()) return@start false
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micLauncher.launch(Manifest.permission.RECORD_AUDIO)
             return@start false
@@ -791,11 +795,11 @@ fun ChatContent(
                         recordLevel = recordLevel,
                         recordSlide = recordSlide,
                         onAttach = {
-                            photoPicker.launch(
+                            if (checkMediaAllowed()) photoPicker.launch(
                                 androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
-                        onAttachFile = { filePicker.launch(arrayOf("*/*")) },
+                        onAttachFile = { if (checkMediaAllowed()) filePicker.launch(arrayOf("*/*")) },
                         onRecordPress = startRecording,
                         onRecordRelease = { finishRecording(true) },
                         onRecordCancel = {
