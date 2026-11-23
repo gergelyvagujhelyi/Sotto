@@ -4,7 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Tapping phones is quicker and tells you when to hold still** — Both phones buzz as soon as they've found each other, so you know you've hit the spot and should keep still for a moment. They also find each other about twice as fast (each phone switches between reading and being read every 0.15–0.4 s, not 0.3–0.8 s).
+- **Clearer logs for taps** — A tap that doesn't swap the codes now logs why, on both sides (never the codes themselves).
 
 ## 0.7.20 — 2026-11-23
 

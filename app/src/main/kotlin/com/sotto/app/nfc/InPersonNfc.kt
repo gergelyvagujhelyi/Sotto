@@ -39,6 +39,7 @@ object InPersonNfc {
     private const val TIMEOUT_MS = 3_000
     private const val REPEAT_QUIET_MS = 5_000L
     private const val CARD_BUSY_MS = 1_500L
+    private const val CONTACT_QUIET_MS = 2_000L
 
     /** This phone's code while a verify screen is open; null otherwise (the card stays silent). */
     @Volatile
@@ -54,6 +55,23 @@ object InPersonNfc {
     private var cardActiveUntil = 0L
 
     val isBusy: Boolean get() = reading || System.currentTimeMillis() < cardActiveUntil
+
+    /**
+     * Called (on an NFC thread) when the phones have found each other: the screen buzzes, so the
+     * people holding them know to keep still for the exchange. At most once per [CONTACT_QUIET_MS].
+     */
+    @Volatile
+    var onContact: (() -> Unit)? = null
+
+    @Volatile
+    private var lastContact = 0L
+
+    private fun contact() {
+        val now = System.currentTimeMillis()
+        if (now - lastContact < CONTACT_QUIET_MS) return
+        lastContact = now
+        runCatching { onContact?.invoke() }
+    }
 
     /** The last code passed on, and when: phones left together swap again and again. */
     @Volatile
@@ -83,6 +101,7 @@ object InPersonNfc {
     fun stop() {
         myCode = null
         lastDelivered = null
+        lastContact = 0L
     }
 
     fun selectCommand(): ByteArray =
@@ -103,6 +122,7 @@ object InPersonNfc {
         return when {
             isSelect(command) -> if (code != null) {
                 cardActiveUntil = System.currentTimeMillis() + CARD_BUSY_MS
+                contact()
                 SW_OK
             } else {
                 SW_NOT_FOUND
@@ -110,12 +130,22 @@ object InPersonNfc {
             command.size >= 5 && command[0] == CLA_PROPRIETARY && command[1] == INS_EXCHANGE -> {
                 if (code == null) return SW_CONDITIONS
                 val length = command[4].toInt() and 0xFF
-                if (command.size < 5 + length) return SW_CONDITIONS
-                InPersonCode.parse(command.copyOfRange(5, 5 + length))?.let(::deliver)
+                if (command.size < 5 + length) {
+                    com.sotto.app.util.Diag.i("InPersonNfc", "As card: exchange cut short (${command.size} bytes)")
+                    return SW_CONDITIONS
+                }
+                val theirs = InPersonCode.parse(command.copyOfRange(5, 5 + length))
+                if (theirs != null) deliver(theirs)
+                else com.sotto.app.util.Diag.i("InPersonNfc", "As card: exchange with a code this app can't read ($length bytes)")
                 cardActiveUntil = 0L
                 code.toBytes() + SW_OK
             }
-            else -> SW_UNKNOWN
+            else -> {
+                // Not Sotto's exchange: say what it was (class and instruction bytes only), to
+                // tell another app's or Android's own probing from a broken-off Sotto exchange.
+                com.sotto.app.util.Diag.i("InPersonNfc", "As card: other command %02X %02X (%d bytes)".format(command.getOrElse(0) { 0 }, command.getOrElse(1) { 0 }, command.size))
+                SW_UNKNOWN
+            }
         }
     }
 
@@ -140,12 +170,18 @@ object InPersonNfc {
                 com.sotto.app.util.Diag.i("InPersonNfc", "Read a phone without Sotto's verify or New chat screen open")
                 return
             }
+            contact()
             val answer = isoDep.transceive(exchangeCommand(code))
-            if (!answer.endsWithOk()) return
-            InPersonCode.parse(answer.copyOfRange(0, answer.size - 2))?.let(::deliver)
+            if (!answer.endsWithOk()) {
+                com.sotto.app.util.Diag.i("InPersonNfc", "As reader: the other phone refused the exchange (${answer.size} bytes)")
+                return
+            }
+            val theirs = InPersonCode.parse(answer.copyOfRange(0, answer.size - 2))
+            if (theirs != null) deliver(theirs)
+            else com.sotto.app.util.Diag.i("InPersonNfc", "As reader: got a code this app can't read (${answer.size - 2} bytes)")
         } catch (e: IOException) {
             // The phones moved apart mid-exchange: the user taps again.
-            com.sotto.app.util.Diag.i("InPersonNfc", "Tap broke off: ${e.message}")
+            com.sotto.app.util.Diag.i("InPersonNfc", "As reader: tap broke off: ${e.message}")
         } catch (e: SecurityException) {
             // The tag went away before connect (Android reports a stale tag this way).
             if (BuildConfig.DEBUG) Log.d("InPersonNfc", "Tag gone: ${e.message}")
