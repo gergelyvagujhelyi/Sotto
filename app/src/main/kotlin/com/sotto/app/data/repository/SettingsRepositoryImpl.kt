@@ -133,6 +133,11 @@ class SettingsRepositoryImpl @Inject constructor(
         androidx.work.WorkManager.getInstance(context).cancelAllWork()
         try { pushTokenRepository.clearLocal() } catch (_: Exception) {}
         messageDao.deleteAll()
+        // Voice messages and photos are files beside the database.
+        java.io.File(context.filesDir, "media").deleteRecursively()
+        // Decrypted copies made for opening files, and records of unfinished uploads.
+        java.io.File(context.cacheDir, com.sotto.app.data.media.FileDrop.OPEN_DIR).deleteRecursively()
+        java.io.File(context.filesDir, "transfers").deleteRecursively()
         conversationDao.deleteAll()
         contactDao.deleteAll()
         database.close()

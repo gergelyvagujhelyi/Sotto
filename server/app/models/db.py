@@ -160,3 +160,34 @@ class DeliveryReceipt(Base):
     message_ids = Column(Text, nullable=False)
     created_at = Column(DateTime, server_default=func.now())
 
+
+class Attachment(Base):
+    """An encrypted file in the object store, on its way from sender to recipient (ADR-29).
+
+    The relay only knows who sends to whom and how big the ciphertext is; the key
+    travels inside the end-to-end encrypted message. The row (and the object) go
+    when the recipient has it, or after ATTACHMENT_TTL_DAYS.
+    """
+
+    __tablename__ = "attachments"
+
+    id = Column(String(32), primary_key=True)
+    sender_id = Column(String(32), nullable=False, index=True)
+    recipient_id = Column(String(32), nullable=False, index=True)
+    size = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, nullable=False, index=True)
+    uploaded_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    # A large file goes up in parts (resumable): the store's id for that multipart upload.
+    upload_id = Column(String(512), nullable=True)
+
+
+class AttachmentUsage(Base):
+    """Bytes an account reserved for upload, kept after the file is gone, for its monthly allowance."""
+
+    __tablename__ = "attachment_usage"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(32), nullable=False, index=True)
+    size = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, nullable=False, index=True)

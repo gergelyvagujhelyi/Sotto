@@ -21,6 +21,28 @@ data class InviteDto(
 )
 
 @Serializable
+data class AttachmentReserveRequest(val recipientId: String, val size: Long)
+
+@Serializable
+data class AttachmentReserveResponse(
+    val id: String,
+    val uploadUrl: String,
+    val expiresIn: Int = 0,
+    /** A large file goes up in parts of [partSize] bytes, one URL each, in order. */
+    val partSize: Long = 0,
+    val partUrls: List<String> = emptyList(),
+)
+
+@Serializable
+data class AttachmentPartsResponse(val partSize: Long, val partUrls: List<String>, val expiresIn: Int = 0)
+
+@Serializable
+data class AttachmentCompleteRequest(val etags: List<String> = emptyList())
+
+@Serializable
+data class AttachmentDownloadResponse(val downloadUrl: String, val size: Long, val expiresIn: Int = 0)
+
+@Serializable
 data class RelayHealthDto(
     val status: String = "",
     val version: String = "",

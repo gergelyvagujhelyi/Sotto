@@ -202,7 +202,7 @@ internal fun ReplyPreview(message: Message, contactName: String, onCancel: () ->
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = ReplyPayload.quoteOf(message.plaintext),
+                text = ReplyPayload.quoteOf(message.preview),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,

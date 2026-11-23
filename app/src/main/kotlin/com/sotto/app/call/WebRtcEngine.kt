@@ -481,7 +481,7 @@ class WebRtcEngine(context: Context, private val voiceProcessing: VoiceProcessin
         private val phoneHasNoiseSuppressor: Boolean by lazy { JavaAudioDeviceModule.isBuiltInNoiseSuppressorSupported() }
         @Volatile private var initialized = false
 
-        private fun initOnce(context: Context) {
+        internal fun initOnce(context: Context) {
             if (!initialized) {
                 synchronized(this) {
                     if (!initialized) {

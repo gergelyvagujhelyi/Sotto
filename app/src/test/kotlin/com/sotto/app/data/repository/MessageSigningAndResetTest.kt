@@ -40,6 +40,8 @@ import org.junit.Test
  */
 class MessageSigningAndResetTest {
     private val messageDao = mockk<MessageDao>(relaxed = true)
+    private val transfers = mockk<com.sotto.app.worker.FileTransfers>(relaxed = true)
+    private val mediaStore = mockk<com.sotto.app.data.media.MediaStore>(relaxed = true)
     private val conversationDao = mockk<ConversationDao>(relaxed = true)
     private val contactDao = mockk<ContactDao>(relaxed = true)
     private val apiService = mockk<ApiService>(relaxed = true)
@@ -94,6 +96,9 @@ class MessageSigningAndResetTest {
             settingsRepository = javax.inject.Provider { throw IllegalStateException("no settings in this test") },
             blockedUserDao = blockedUserDao,
             contactNames = mockk<ContactNameStore>(relaxed = true),
+            mediaStore = mediaStore,
+            fileDrop = mockk<com.sotto.app.data.media.FileDrop>(relaxed = true),
+            transfers = transfers,
         )
     }
 
@@ -279,14 +284,39 @@ class MessageSigningAndResetTest {
 
     @Test
     fun `interrupted sends are marked failed for the user to retry`() = runTest {
-        val stuck = listOf("s1", "s2").map { id -> mockk<MessageEntity> { every { this@mockk.id } returns id } }
+        val stuck = listOf("s1", "s2").map { id ->
+            mockk<MessageEntity> {
+                every { this@mockk.id } returns id
+                every { mediaKind } returns null
+            }
+        }
         coEvery { messageDao.getSendingMessages() } returns stuck
+        coEvery { messageDao.getDownloadingMessages() } returns emptyList()
 
         repo.failInterruptedSends()
 
         coVerify { messageDao.updateState("s1", MessageState.FAILED.name) }
         coVerify { messageDao.updateState("s2", MessageState.FAILED.name) }
         coVerify(exactly = 0) { apiService.sendMessage(any()) }
+    }
+
+    @Test
+    fun `a file send its background job still owns is left to it`() = runTest {
+        val file = MessageEntity(
+            id = "f1", conversationId = "c", senderId = "me", recipientId = "peer",
+            encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "", state = MessageState.SENDING.name,
+            timestamp = 1, expiresAt = null, isOutgoing = true, mediaKind = "file", mediaState = "uploading",
+        )
+        val orphan = file.copy(id = "f2")
+        coEvery { messageDao.getSendingMessages() } returns listOf(file, orphan)
+        coEvery { messageDao.getDownloadingMessages() } returns emptyList()
+        every { transfers.isQueued("f1", true) } returns true
+        every { transfers.isQueued("f2", true) } returns false
+
+        repo.failInterruptedSends()
+
+        coVerify(exactly = 0) { messageDao.updateState("f1", any()) }
+        coVerify { messageDao.updateState("f2", MessageState.FAILED.name) }
     }
 
     // ── The pending queue ───────────────────────────────────────────────────
@@ -352,5 +382,42 @@ class MessageSigningAndResetTest {
         sender.send("peer")
         val ctrl = String(java.util.Base64.getDecoder().decode(sent.captured.nonce))
         assertTrue(ctrl, Regex(""""ts":\d+""").containsMatchIn(ctrl))
+    }
+
+    // ── Message requests bring text only ────────────────────────────────────
+
+    private fun conversation(approved: Boolean) = com.sotto.app.data.local.entity.ConversationEntity(
+        id = "conv", contactId = "peer", contactDisplayName = "Peer", lastMessagePreview = null,
+        lastMessageTimestamp = null, unreadCount = 0, isEncrypted = true, isApproved = approved,
+    )
+
+    private suspend fun receivePhoto(approved: Boolean) {
+        coEvery { mediaStore.save(any(), any()) } returns ByteArray(32)
+        coEvery { contactDao.getByUserId("peer") } returns classicalContact
+        coEvery { conversationDao.getByContactId("peer") } returns conversation(approved)
+        val photo = com.sotto.app.domain.model.MessageMedia(com.sotto.app.domain.model.MediaKind.PHOTO, "image/jpeg", width = 4, height = 3)
+        coEvery { cryptoEngine.decrypt(any(), any(), any()) } returns
+            com.sotto.app.domain.model.MediaPayload.encode(photo, byteArrayOf(9, 9, 9), "Titta").toByteArray()
+        coEvery { apiService.fetchPendingMessages() } returns listOf(chatDto("p1"))
+        repo.fetchPendingAndWait()
+    }
+
+    @Test
+    fun `a photo in a message request is only noted, never stored`() = runTest {
+        receivePhoto(approved = false)
+        coVerify(exactly = 0) { mediaStore.save(any(), any()) }
+        coVerify {
+            messageDao.insert(match<MessageEntity> {
+                it.id == "p1" && it.mediaKind == null && it.mediaKey == null &&
+                    it.plaintext.startsWith("📷 A photo was sent before you accepted") && it.plaintext.endsWith("Titta")
+            })
+        }
+    }
+
+    @Test
+    fun `once accepted, a photo arrives as a photo`() = runTest {
+        receivePhoto(approved = true)
+        coVerify { mediaStore.save("p1", byteArrayOf(9, 9, 9)) }
+        coVerify { messageDao.insert(match<MessageEntity> { it.id == "p1" && it.mediaKind == "photo" && it.plaintext == "Titta" }) }
     }
 }

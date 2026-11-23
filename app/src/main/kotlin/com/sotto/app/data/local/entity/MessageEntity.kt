@@ -30,6 +30,26 @@ data class MessageEntity(
     /** The emoji the user reacted to this message with, and the contact's; null when none. */
     val myReaction: String? = null,
     val theirReaction: String? = null,
+    /**
+     * Media carried by the message (ADR-29): its kind (MediaKind.wire) and format, the key
+     * its file on disk is encrypted under (MediaStore), and for voice its length, for a
+     * photo its size in pixels. All null/0 for a text message; [plaintext] is the caption.
+     */
+    val mediaKind: String? = null,
+    val mediaMime: String? = null,
+    val mediaKey: ByteArray? = null,
+    val mediaDurationMs: Long = 0,
+    val mediaWidth: Int = 0,
+    val mediaHeight: Int = 0,
+    /** A file's name, its size in bytes, its transfer state (FileState.wire) and the relay's id for it. */
+    val mediaName: String? = null,
+    val mediaSize: Long = 0,
+    val mediaState: String? = null,
+    val attachmentId: String? = null,
+    /** An HD photo's key: its full-size copy goes through the store like a file (attachmentId, mediaSize, mediaState). */
+    val hdKey: ByteArray? = null,
+    /** A file's preview (a few KB of JPEG), kept in the (encrypted) database. */
+    val thumbnail: ByteArray? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

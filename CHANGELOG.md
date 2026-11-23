@@ -6,6 +6,23 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.7 — 2026-11-23
+
+Everyone needs this version: 0.7.6 and older show a voice message, photo or file as a line of raw text.
+
+- **Voice messages** — Hold the microphone (where Send is while the message box is empty) to record, and let go to send. Slide left to cancel, or slide up to lock and keep recording hands-free, then send with the big button or throw it away with the bin. Up to a minute. A voice message plays straight from the chat, one at a time.
+- **Photos** — The paperclip opens a menu: "Photo" opens the phone's photo picker, which shows Sotto only the photo you pick. The photo then opens in a preview, where you add a caption (it starts with whatever you'd typed) and send it. Photos are shrunk to 1280 pixels on the long side and turned upright, and their hidden details (location, camera, time) are left out. Tap a photo to see it full screen, and pinch to zoom.
+- **HD photos** — The HD switch at the top of the preview also sends the photo at up to 4096 pixels, through the relay's file storage; it remembers your last choice while the chat is open. The chat shows the normal photo at once with an "HD" badge; in the full-screen view, "Download HD" fetches the full-size copy and shows it instead.
+- **Files and videos** — "File or video" sends any file up to 98 MB. It's encrypted on your phone and goes to the relay's file storage, which only ever holds the encrypted copy; the key travels in the message itself. Your contact taps the file to download it, and it's deleted from the storage as soon as they have it (or after 30 days). Tap a downloaded file to open it in another app; if no app on the phone can open it, Sotto offers to save a copy.
+- **Previews of videos and pictures** — A video or picture sent as a file shows a small preview in the chat before it's downloaded (a frame from the video's first second, with its length), carried inside the encrypted message.
+- **Files go phone to phone when they can** — When both of you allow direct connections (Settings → Direct calls, on by default), trust each other, and your contact's phone is on Wi-Fi, a file goes straight from your phone to theirs: it never touches the relay or its storage. If the phones can't reach each other within about a minute, or the connection breaks partway, the file goes through the storage as before, and what already came directly isn't downloaded again.
+- **Transfers in the background, and they resume** — Files and HD photos go up and down in the background, with a progress notification, so you can leave the chat or the app. If the connection drops, a download carries on where it stopped, and a large upload (over 8 MB, sent in 8 MB parts) only sends the parts that were missing.
+- **Sizes padded** — Files, HD copies, voice messages and photos are padded before they're encrypted, so their size gives away little about what they are (at most about 12% more data).
+- **Message requests bring text only** — Until you accept someone's message request, they can only send you text: a voice message, photo or file from them isn't received, and the chat says so. On your side, voice messages, photos and files unlock once your contact has accepted your request (written back, or sent their name).
+- **Replies, reactions and notifications know about media** — You can reply to a voice message, photo or file, and reply with one. Chat previews and notifications say "🎤 Voice message", "📷 Photo" or the file's name.
+- **Messages from newer versions** — A kind of message this version doesn't know yet now shows a note to update Sotto, instead of raw text.
+- **Relay: file storage** — With `S3_ENDPOINT`, `S3_BUCKET`, `S3_ACCESS_KEY_ID` and `S3_SECRET` in `.env`, the relay signs short-lived upload and download URLs for an S3-compatible bucket; it never carries the files. It keeps each account to 2 GB per 30 days and the bucket under 4 GB, and removes uncollected files after 30 days. `/health` says the largest file it takes (`attachment_max_bytes`, 0 without storage). See `.env.example`.
+
 ## 0.7.6 — 2026-11-22
 
 - **Double-tap to heart** — Double-tapping a message reacts to it with ❤️, as on Instagram. Double-tapping it again takes the heart back; if you had reacted with another emoji, the heart replaces it. Holding a message still opens all the reactions.
