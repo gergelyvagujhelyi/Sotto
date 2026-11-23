@@ -98,6 +98,15 @@ class AddContactViewModel @Inject constructor(
         }
     }
 
+    /** Opens the chat with someone already added (started now if there's none yet). */
+    fun openChat(contact: Contact) {
+        if (_state.value is AddContactState.Loading) return
+        viewModelScope.launch {
+            val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
+            _state.value = AddContactState.Success(contact, conversationId)
+        }
+    }
+
     /** Remove [userId] from the contacts, and the chat with them, from this phone. */
     fun removeContact(userId: String) {
         viewModelScope.launch { conversationRepository.removeContact(userId) }
