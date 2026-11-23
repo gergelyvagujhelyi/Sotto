@@ -170,6 +170,20 @@ class MainActivity : ComponentActivity() {
                     _deepLinkIntent.value = null
                 }
 
+                // Someone just scanned our live QR code and added us: open their request.
+                LaunchedEffect(Unit) {
+                    com.sotto.app.ui.contacts.LiveQrWatch.openRequest.collect { (conversationId, contactId) ->
+                        navController.awaitGraph()
+                        val current = navController.currentBackStackEntry
+                        val onChat = current?.destination?.route == Routes.CHAT
+                        if (!onChat || current?.arguments?.getString("conversationId") != conversationId) {
+                            navController.navigate(Routes.chat(conversationId, contactId)) {
+                                if (onChat) popUpTo(Routes.CHAT) { inclusive = true }
+                            }
+                        }
+                    }
+                }
+
                 // An invite link opened the app after setup: add its sender when they're on our
                 // relay. (During setup, setup takes the invite itself.)
                 LaunchedEffect(startDestination) {

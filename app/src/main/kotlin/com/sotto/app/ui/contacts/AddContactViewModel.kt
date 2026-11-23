@@ -127,6 +127,7 @@ class AddContactViewModel @Inject constructor(
     /** A fresh live QR code for "Show my QR code" (it changes every second, as BankID's does). */
     suspend fun liveQr(): String? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myLiveCode() }?.encode()
+            ?.also { LiveQrWatch.shown() }
 
     /** Opens the chat with someone already added (started now if there's none yet). */
     fun openChat(contact: Contact) {

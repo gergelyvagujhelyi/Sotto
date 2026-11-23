@@ -1425,7 +1425,7 @@ class MessageRepositoryImpl @Inject constructor(
         val displayName = contact?.displayName ?: contactId.take(8)
 
         val id = UUID.randomUUID().toString()
-        return conversationDao.getOrInsert(
+        val stored = conversationDao.getOrInsert(
             com.sotto.app.data.local.entity.ConversationEntity(
                 id = id,
                 contactId = contactId,
@@ -1437,6 +1437,12 @@ class MessageRepositoryImpl @Inject constructor(
                 isApproved = contact?.verified == true,
             )
         )
+        // A new request just after our live QR code was on screen: likely whoever scanned it.
+        // Open it (only that; it's still a request to accept or not).
+        if (stored == id && contact?.verified != true) {
+            com.sotto.app.ui.contacts.LiveQrWatch.newRequest(stored, contactId)
+        }
+        return stored
     }
 
     private suspend fun countDecryptFailure(

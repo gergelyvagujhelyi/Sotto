@@ -9,6 +9,7 @@ Nothing yet.
 ## 0.7.12 — 2026-11-23
 
 - **One place to verify, with the choice explained** — Tapping "Not verified" under a contact's name, or ⋮ → Verify…, asks how: **In person** (stronger: meet and tap phones or scan their code) or **By phone** (weaker: a call and seven emoji, which relies on knowing their voice). By phone calls them, and the emoji open as soon as the call connects. The Verify in person screen also offers it ("Can't meet?"). In 0.7.11 Verify by phone was hard to find: only on a connected call's screen and in the first-message warning.
+- **Their request opens by itself after they scan your code** — When someone scans your QR code (it's live while it's on your screen) and adds you, their request arrives a moment later. If it comes within two minutes of your code being shown and Sotto is open, the chat opens straight away, for you to accept or not.
 
 ## 0.7.11 — 2026-11-23
 
