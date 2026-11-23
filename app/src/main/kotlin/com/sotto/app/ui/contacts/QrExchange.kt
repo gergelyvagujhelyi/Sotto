@@ -175,7 +175,7 @@ private fun MyCode(
 
 /** Scan | My code, over the camera or the code. */
 @Composable
-private fun QrTabs(tab: QrTab, onTab: (QrTab) -> Unit, modifier: Modifier = Modifier) {
+internal fun QrTabs(tab: QrTab, onTab: (QrTab) -> Unit, modifier: Modifier = Modifier) {
     Row(
         modifier
             .clip(RoundedCornerShape(50))
