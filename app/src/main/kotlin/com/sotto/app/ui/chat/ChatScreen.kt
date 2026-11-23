@@ -1183,8 +1183,8 @@ private fun ChatRowItem(
                         groupedWithPrevious = row.groupedWithPrevious,
                         quote = message.bubbleQuote(contactName),
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },
-                        // Failed sends: tap to retry.
-                        onClick = if (message.isOutgoing && message.state == MessageState.FAILED) {
+                        // Failed sends (or a file that couldn't follow its message): tap to retry.
+                        onClick = if (message.isOutgoing && message.shownState == MessageState.FAILED) {
                             { onRetry(message.id) }
                         } else {
                             null

@@ -818,6 +818,11 @@ class MessageRepositoryImpl @Inject constructor(
 
     private suspend fun retryFailedInternal(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
+        // A file whose message is out but that couldn't follow it: only the file goes again.
+        if (entity.isOutgoing && entity.mediaState == com.sotto.app.domain.model.FileState.UNSENT.wire) {
+            retryFile(messageId)
+            return
+        }
         // Only our own failed messages (a double tap must not resend a message
         // that the first tap already got through).
         if (!entity.isOutgoing || entity.state != MessageState.FAILED.name) return

@@ -164,15 +164,25 @@ private fun Modifier.mediaClickable(
 }
 
 /**
- * The delivery state a bubble shows. A file's message arrives before the file does, so our
- * file shows as sent (one tick) until it's on the contact's phone, then as delivered or seen.
+ * The delivery state a bubble shows. A file's message can go out before the file does (it's
+ * offered phone to phone first), so for our files the ticks follow the file: the clock while
+ * it's still only on this phone, failed when it couldn't go anywhere, one tick while it waits
+ * in the relay's store, and delivered (or seen) once it's on the contact's phone.
  */
 internal val Message.shownState: com.sotto.app.domain.model.MessageState
     get() {
-        val m = media ?: return state
-        val fileNotThere = isOutgoing && m.kind == MediaKind.FILE && m.fileState != com.sotto.app.domain.model.FileState.RECEIVED
-        val reached = state == com.sotto.app.domain.model.MessageState.DELIVERED || state == com.sotto.app.domain.model.MessageState.SEEN
-        return if (fileNotThere && reached) com.sotto.app.domain.model.MessageState.SENT else state
+        val m = media
+        if (!isOutgoing || m == null || m.kind != MediaKind.FILE) return state
+        val reached = state == com.sotto.app.domain.model.MessageState.SENT ||
+            state == com.sotto.app.domain.model.MessageState.DELIVERED ||
+            state == com.sotto.app.domain.model.MessageState.SEEN
+        if (!reached) return state // still sending its message, or that failed
+        return when (m.fileState) {
+            com.sotto.app.domain.model.FileState.RECEIVED -> state
+            com.sotto.app.domain.model.FileState.SENT -> com.sotto.app.domain.model.MessageState.SENT
+            com.sotto.app.domain.model.FileState.UNSENT -> com.sotto.app.domain.model.MessageState.FAILED
+            else -> com.sotto.app.domain.model.MessageState.SENDING
+        }
     }
 
 /** "1.4 MB" */
@@ -204,7 +214,7 @@ private fun FileCard(message: Message, contentColor: Color) {
         state == com.sotto.app.domain.model.FileState.DIRECT -> if (message.isOutgoing) "Sending directly…" else "Coming directly…"
         state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
         state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
-        state == com.sotto.app.domain.model.FileState.UNSENT -> "Not sent · Tap to retry"
+        state == com.sotto.app.domain.model.FileState.UNSENT -> "Not uploaded"
         message.isOutgoing && state == com.sotto.app.domain.model.FileState.SENT -> "Not downloaded yet"
         message.isOutgoing && state == com.sotto.app.domain.model.FileState.RECEIVED -> "Delivered"
         else -> "Tap to open"
