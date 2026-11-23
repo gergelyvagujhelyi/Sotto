@@ -6,7 +6,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
-## 0.7.13 — 2026-11-23
+## 0.7.20 — 2026-11-23
 
 - **"Verified by phone" looks like it** — In the chat list, the chat header, your contacts and on the verify screen, a contact verified by phone now has the verified shield in purple with a small phone badge. The phone icon alone looked like there had been a call.
 - **A hung-up call ends on the other phone too** — When you hung up while the other phone's connection had just dropped (say, it was switching networks), the relay thought it had delivered the hangup and that phone kept trying to reconnect the call for up to a minute. The relay now also keeps the hangup (and reject, and busy) for 30 seconds, so the other phone gets it as soon as it's back.
