@@ -17,6 +17,13 @@ import java.util.Base64
  * while it's fresh ([InPersonVerifier]); an old screenshot still adds the person, unverified.
  *
  *     sotto-verify:2:<user id>:<fingerprint>:<unix seconds>:<Ed25519 signature, base64url>
+ *
+ * Since 0.7.12 the live code is packed tighter, so the QR code is smaller and easier to scan
+ * (version 3): the same four parts as bytes (user id 8, fingerprint 32, time 4, signature 64),
+ * in uppercase base32, which a QR code stores in its compact alphanumeric mode. Version 2
+ * still reads.
+ *
+ *     SV3:<base32 of user id ‖ fingerprint ‖ time ‖ signature>
  */
 data class InPersonCode(
     val userId: String,
@@ -36,7 +43,9 @@ data class InPersonCode(
         val at = issuedAt
         val sig = signature
         return if (at != null && sig != null) {
-            "${PREFIX_LIVE}$userId:$fp:$at:${B64.encodeToString(sig)}"
+            val id = KeyFingerprint.fromHex(userId)
+            val time = ByteArray(4) { i -> (at ushr (24 - 8 * i)).toByte() }
+            PREFIX_COMPACT + base32(id + fingerprint + time + sig)
         } else {
             "${PREFIX}$userId:$fp"
         }
@@ -80,9 +89,57 @@ data class InPersonCode(
             return byteArrayOf((n ushr 24).toByte(), (n ushr 16).toByte(), (n ushr 8).toByte(), n.toByte()) + data
         }
 
+        private const val PREFIX_COMPACT = "SV3:"
+        private const val B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+
+        private fun base32(data: ByteArray): String {
+            val out = StringBuilder()
+            var buffer = 0
+            var bits = 0
+            for (b in data) {
+                buffer = (buffer shl 8) or (b.toInt() and 0xFF)
+                bits += 8
+                while (bits >= 5) {
+                    out.append(B32[(buffer ushr (bits - 5)) and 31])
+                    bits -= 5
+                }
+            }
+            if (bits > 0) out.append(B32[(buffer shl (5 - bits)) and 31])
+            return out.toString()
+        }
+
+        private fun unbase32(text: String): ByteArray? {
+            val out = java.io.ByteArrayOutputStream()
+            var buffer = 0
+            var bits = 0
+            for (c in text) {
+                val v = B32.indexOf(c)
+                if (v < 0) return null
+                buffer = (buffer shl 5) or v
+                bits += 5
+                if (bits >= 8) {
+                    out.write((buffer ushr (bits - 8)) and 0xFF)
+                    bits -= 8
+                }
+            }
+            return out.toByteArray()
+        }
+
+        private fun parseCompact(body: String): InPersonCode? {
+            val bytes = unbase32(body) ?: return null
+            if (bytes.size != 8 + FINGERPRINT_BYTES + 4 + SIGNATURE_BYTES) return null
+            val id = KeyFingerprint.toHex(bytes.copyOfRange(0, 8))
+            val fp = bytes.copyOfRange(8, 8 + FINGERPRINT_BYTES)
+            var at = 0L
+            for (i in 0 until 4) at = (at shl 8) or (bytes[8 + FINGERPRINT_BYTES + i].toLong() and 0xFF)
+            val sig = bytes.copyOfRange(8 + FINGERPRINT_BYTES + 4, bytes.size)
+            return if (at > 0) InPersonCode(id, fp, at, sig) else null
+        }
+
         /** The code [text] holds, or null when it holds something else. */
         fun parse(text: String): InPersonCode? {
             val t = text.trim()
+            if (t.startsWith(PREFIX_COMPACT)) return parseCompact(t.removePrefix(PREFIX_COMPACT))
             val live = t.startsWith(PREFIX_LIVE)
             val body = when {
                 live -> t.removePrefix(PREFIX_LIVE)

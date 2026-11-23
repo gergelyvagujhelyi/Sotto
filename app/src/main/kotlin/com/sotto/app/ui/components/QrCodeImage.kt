@@ -29,12 +29,15 @@ fun QrCodeImage(
     val foreground = android.graphics.Color.BLACK
     val background = android.graphics.Color.WHITE
 
+    // One pixel per module, drawn without smoothing: a scaled-up 512 px picture blurred
+    // every module's edges, and a dense live code was hard to read off the screen.
     val bitmap = remember(content, foreground, background) {
-        generateQrBitmap(content, 512, foreground, background)
+        generateQrBitmap(content, 0, foreground, background)
     }
 
     Image(
         bitmap = bitmap.asImageBitmap(),
+        filterQuality = androidx.compose.ui.graphics.FilterQuality.None,
         contentDescription = "QR code for share code",
         modifier = modifier
             .size(size)
@@ -50,10 +53,17 @@ private fun generateQrBitmap(
     foregroundColor: Int,
     backgroundColor: Int,
 ): Bitmap {
-    val bitMatrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
-    val bitmap = createBitmap(size, size)
-    for (x in 0 until size) {
-        for (y in 0 until size) {
+    val hints = mapOf(
+        com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.L,
+        com.google.zxing.EncodeHintType.MARGIN to 2,
+    )
+    // Size 0: the matrix at one pixel per module.
+    val bitMatrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size, hints)
+    val width = bitMatrix.width
+    val height = bitMatrix.height
+    val bitmap = createBitmap(width, height)
+    for (x in 0 until width) {
+        for (y in 0 until height) {
             bitmap[x, y] = if (bitMatrix[x, y]) foregroundColor else backgroundColor
         }
     }

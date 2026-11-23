@@ -38,7 +38,9 @@ class InPersonCodeTest {
     @Test
     fun `a live code carries its time and signature and reads back`() {
         val live = code.copy(issuedAt = 1_800_000_000, signature = ByteArray(64) { 7 })
-        assertTrue(live.encode().startsWith("sotto-verify:2:0123456789abcdef:"))
+        // Compact: QR alphanumeric characters only, so the QR code stays small.
+        assertTrue(live.encode().startsWith("SV3:"))
+        assertTrue(live.encode().all { it in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567:" || it.isDigit() })
         assertEquals(live, InPersonCode.parse(live.encode()))
         assertTrue(InPersonCode.parse(live.encode())!!.isLive)
     }
@@ -50,5 +52,13 @@ class InPersonCodeTest {
         assertNull(InPersonCode.parse("sotto-verify:2:0123456789abcdef:$fp:1800000000"))
         assertNull(InPersonCode.parse("sotto-verify:2:0123456789abcdef:$fp:soon:$sig"))
         assertNull(InPersonCode.parse("sotto-verify:2:0123456789abcdef:$fp:1800000000:${sig.dropLast(4)}"))
+    }
+
+    @Test
+    fun `a 0_7_11 live code still reads`() {
+        val b64 = java.util.Base64.getUrlEncoder().withoutPadding()
+        val sig = ByteArray(64) { 7 }
+        val old = "sotto-verify:2:0123456789abcdef:${b64.encodeToString(code.fingerprint)}:1800000000:${b64.encodeToString(sig)}"
+        assertEquals(code.copy(issuedAt = 1_800_000_000, signature = sig), InPersonCode.parse(old))
     }
 }

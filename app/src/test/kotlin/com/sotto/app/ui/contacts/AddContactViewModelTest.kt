@@ -196,4 +196,19 @@ class AddContactViewModelTest {
 
         assertEquals(false, (vm.state.value as AddContactState.Success).contact.verifiedInPerson)
     }
+
+    @Test
+    fun `verifying them from their QR code asks them to scan ours next, but not when we scanned back`() {
+        coEvery { addContact(theirShareCode) } returns Result.success(them)
+        coEvery { verifier.verify(theirCode.userId, theirCode, true, any()) } returns com.sotto.app.crypto.InPersonResult.Verified
+        coEvery { conversations.getOrCreateConversation(theirCode.userId) } returns "conv-1"
+
+        val first = viewModel()
+        first.addInPerson(theirCode, viaQr = true)
+        assertEquals(true, (first.state.value as AddContactState.Success).swapRoles)
+
+        val back = viewModel()
+        back.addInPerson(theirCode, viaQr = true, scannedBack = true)
+        assertEquals(false, (back.state.value as AddContactState.Success).swapRoles)
+    }
 }

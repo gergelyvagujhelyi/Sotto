@@ -207,6 +207,12 @@ fun ChatNavGraph(
                     }
                 },
                 onScan = { navController.navigate(Routes.SCAN_VERIFY) { launchSingleTop = true } },
+                onVerifyByPhone = { contactId, name ->
+                    // The call screen asks for the microphone and dials; the check opens once
+                    // the call connects (and the request lapses if it never does).
+                    com.sotto.app.call.VerifyOnConnect.arm(contactId)
+                    navController.navigate(Routes.call(contactId, name)) { launchSingleTop = true }
+                },
                 scannedCode = scannedCode,
                 onScannedCodeHandled = { entry.savedStateHandle[SCANNED_VERIFY_CODE_KEY] = null },
             )
@@ -261,6 +267,10 @@ fun ChatNavGraph(
             val scannedShareCode by entry.savedStateHandle
                 .getStateFlow<String?>(SCANNED_SHARE_CODE_KEY, null)
                 .collectAsState()
+            // Their request came in while our live code was on screen (LiveQrWatch, MainActivity).
+            val scanBackRequest by entry.savedStateHandle
+                .getStateFlow(com.sotto.app.ui.contacts.LiveQrWatch.SCAN_BACK_REQUEST_KEY, false)
+                .collectAsState()
             // An opened invite link's sender, filled in for the user to confirm.
             val prefilledShareCode by entry.savedStateHandle
                 .getStateFlow<String?>(PREFILLED_SHARE_CODE_KEY, null)
@@ -276,11 +286,12 @@ fun ChatNavGraph(
                         popUpTo(Routes.CONVERSATIONS)
                     }
                 },
-                onScanQr = { navController.navigate(Routes.SCAN_QR) { launchSingleTop = true } },
                 scannedShareCode = scannedShareCode,
                 onScannedShareCodeHandled = { entry.savedStateHandle[SCANNED_SHARE_CODE_KEY] = null },
                 prefilledShareCode = prefilledShareCode,
                 onPrefilledShareCodeHandled = { entry.savedStateHandle[PREFILLED_SHARE_CODE_KEY] = null },
+                scanBackRequest = scanBackRequest,
+                onScanBackRequestHandled = { entry.savedStateHandle[com.sotto.app.ui.contacts.LiveQrWatch.SCAN_BACK_REQUEST_KEY] = false },
             )
         }
 

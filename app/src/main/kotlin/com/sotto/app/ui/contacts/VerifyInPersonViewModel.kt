@@ -48,6 +48,7 @@ class VerifyInPersonViewModel @Inject constructor(
     /** Makes a fresh live QR code; the screen calls it every second while it's in front. */
     suspend fun refreshQr() {
         _myQr.value = withContext(Dispatchers.IO) { verifier.myLiveCode() }?.encode()
+        if (_myQr.value != null) LiveQrWatch.shown()
     }
 
     private val _outcome = MutableStateFlow<VerifyOutcome?>(null)

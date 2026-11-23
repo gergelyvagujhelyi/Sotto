@@ -97,11 +97,13 @@ import com.sotto.app.ui.theme.Aurora
 fun AddContactScreen(
     onBack: () -> Unit,
     onContactAdded: (conversationId: String, contactId: String) -> Unit,
-    onScanQr: () -> Unit,
     scannedShareCode: String?,
     onScannedShareCodeHandled: () -> Unit,
     prefilledShareCode: String? = null,
     onPrefilledShareCodeHandled: () -> Unit = {},
+    /** Their request came in while our code was on screen: open Scan to answer it. */
+    scanBackRequest: Boolean = false,
+    onScanBackRequestHandled: () -> Unit = {},
     viewModel: AddContactViewModel = hiltViewModel(),
 ) {
     val shareCodeInput by viewModel.shareCodeInput.collectAsState()
@@ -112,36 +114,112 @@ fun AddContactScreen(
     val myCode by viewModel.myCode.collectAsState()
     // Two phones held together here add each other, verified in person.
     com.sotto.app.nfc.InPersonNfcEffect(myCode)
-    // While "Show my QR code" is open, its code changes every second (BankID-style).
-    var qrShown by remember { mutableStateOf(false) }
+    // The QR code exchange (Scan | My code), on this screen; null shows the list.
+    var qrTab by rememberSaveable { mutableStateOf<QrTab?>(null) }
+    // They scanned ours first and their request came in: this scan answers theirs.
+    var scanBack by rememberSaveable { mutableStateOf(false) }
+    // Just verified them from their code: "Your turn" on My code, then the chat. Kept as
+    // plain strings, so it survives a rotation like the tab does.
+    var yourTurnName by rememberSaveable { mutableStateOf<String?>(null) }
+    var yourTurnChat by rememberSaveable { mutableStateOf<String?>(null) }
+    var yourTurnContact by rememberSaveable { mutableStateOf<String?>(null) }
     var liveQr by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(qrShown) {
-        while (qrShown) {
-            liveQr = viewModel.liveQr()
-            kotlinx.coroutines.delay(1000)
+    val showingMine = qrTab == QrTab.MINE
+    // Our live code changes every second while it's on screen (BankID-style).
+    LaunchedEffect(showingMine) {
+        if (!showingMine) return@LaunchedEffect
+        try {
+            while (true) {
+                liveQr = viewModel.liveQr()
+                kotlinx.coroutines.delay(1000)
+            }
+        } finally {
+            LiveQrWatch.hidden()
         }
+    }
+    fun closeQr() {
+        qrTab = null
+        scanBack = false
+        yourTurnName = null
+        yourTurnChat = null
+        yourTurnContact = null
     }
 
     LaunchedEffect(state) {
-        if (state is AddContactState.Success) {
-            val success = state as AddContactState.Success
-            onContactAdded(success.conversationId, success.contact.userId)
-            viewModel.resetState()
+        when (val s = state) {
+            is AddContactState.Success -> {
+                if (s.swapRoles) {
+                    // Their side is verified here; now they scan ours.
+                    yourTurnName = s.contact.displayName
+                    yourTurnChat = s.conversationId
+                    yourTurnContact = s.contact.userId
+                    qrTab = QrTab.MINE
+                } else {
+                    closeQr()
+                    onContactAdded(s.conversationId, s.contact.userId)
+                }
+                viewModel.resetState()
+            }
+            // The list shows the error.
+            is AddContactState.Error -> if (qrTab != null) closeQr()
+            else -> Unit
+        }
+    }
+
+    // Their request arrived while our code was on screen (LiveQrWatch, MainActivity): scan theirs.
+    LaunchedEffect(scanBackRequest) {
+        if (scanBackRequest) {
+            onScanBackRequestHandled()
+            scanBack = true
+            yourTurnName = null
+            yourTurnChat = null
+            yourTurnContact = null
+            qrTab = QrTab.SCAN
+        }
+    }
+
+    val onScannedCode: (String) -> Unit = { code ->
+        // Their full code, read off their phone: added and verified in person at once.
+        val inPerson = com.sotto.app.crypto.InPersonCode.parse(code)
+        if (inPerson != null) {
+            viewModel.addInPerson(inPerson, viaQr = true, scannedBack = scanBack)
+        } else {
+            closeQr()
+            viewModel.submitScannedShareCode(code)
         }
     }
 
     LaunchedEffect(scannedShareCode) {
         val code = scannedShareCode ?: return@LaunchedEffect
         onScannedShareCodeHandled()
-        // Their full code, read off their phone: added and verified in person at once.
-        val inPerson = com.sotto.app.crypto.InPersonCode.parse(code)
-        if (inPerson != null) viewModel.addInPerson(inPerson, viaQr = true) else viewModel.submitScannedShareCode(code)
+        onScannedCode(code)
     }
 
     LaunchedEffect(prefilledShareCode) {
         val code = prefilledShareCode ?: return@LaunchedEffect
         onPrefilledShareCodeHandled()
         viewModel.updateShareCode(code)
+    }
+
+    qrTab?.let { tab ->
+        androidx.activity.compose.BackHandler { closeQr() }
+        QrExchangeScreen(
+            tab = tab,
+            onTab = { qrTab = it },
+            liveQr = liveQr,
+            myShareCode = myShareCode,
+            yourTurnFor = yourTurnName,
+            scanBack = scanBack,
+            onScanned = onScannedCode,
+            onClose = { closeQr() },
+            onDone = {
+                val chat = yourTurnChat
+                val contact = yourTurnContact
+                closeQr()
+                if (chat != null && contact != null) onContactAdded(chat, contact)
+            },
+        )
+        return
     }
 
     AddContactContent(
@@ -152,12 +230,10 @@ fun AddContactScreen(
         onBack = onBack,
         onShareCodeChange = viewModel::updateShareCode,
         onSubmit = viewModel::submitShareCode,
-        onScanQr = onScanQr,
+        onScanQr = { qrTab = QrTab.SCAN },
         showNameHint = !hasMyName,
         onRemoveContact = { viewModel.removeContact(it.userId) },
-        myQr = liveQr,
         onOpenChat = viewModel::openChat,
-        onQrShownChange = { qrShown = it },
     )
 }
 
@@ -174,12 +250,8 @@ fun AddContactContent(
     onScanQr: () -> Unit,
     showNameHint: Boolean = false,
     onRemoveContact: (Contact) -> Unit = {},
-    /** This phone's in-person code for "Show my QR code"; the share code when not loaded yet. */
-    myQr: String? = null,
     /** Opens the chat with someone already added. */
     onOpenChat: (Contact) -> Unit = {},
-    /** "Show my QR code" opened or closed: its live code is made only while it's open. */
-    onQrShownChange: (Boolean) -> Unit = {},
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     var removing by remember { mutableStateOf<Contact?>(null) }
@@ -204,7 +276,6 @@ fun AddContactContent(
     val hasCode = shareCodeInput.isNotBlank()
     LaunchedEffect(hasCode) { if (hasCode) entering = true }
     val canSubmit = shareCodeInput.isNotBlank() && state !is AddContactState.Loading
-    var showMyQr by rememberSaveable { mutableStateOf(false) }
     // Gives the bar its solid colour once content scrolls under it.
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val layoutDirection = LocalLayoutDirection.current
@@ -275,20 +346,12 @@ fun AddContactContent(
                         }
                         WayRow(
                             icon = Icons.Rounded.QrCodeScanner,
-                            title = "Scan their QR code",
-                            subtitle = "Point your camera at the code on their phone.",
+                            title = "QR code",
+                            subtitle = "Scan theirs, then they scan yours.",
                             verifies = true,
                             position = if (nfcAdapter != null) RowPosition.MIDDLE else RowPosition.FIRST,
                             enabled = !busy,
                             onClick = onScanQr,
-                        )
-                        WayRow(
-                            icon = Icons.Rounded.QrCode2,
-                            title = "Show my QR code",
-                            subtitle = "For them to scan with their phone.",
-                            position = RowPosition.MIDDLE,
-                            enabled = myShareCode != null,
-                            onClick = { showMyQr = true },
                         )
                         WayRow(
                             icon = Icons.Rounded.Keyboard,
@@ -378,11 +441,6 @@ fun AddContactContent(
         TapPhonesDialog(adding = state is AddContactState.Loading, onDismiss = { tapping = false })
     }
 
-    LaunchedEffect(showMyQr) { onQrShownChange(showMyQr) }
-
-    if (showMyQr && myShareCode != null) {
-        ShareCodeQrDialog(shareCode = myShareCode, qrContent = myQr, onDismiss = { showMyQr = false })
-    }
 
     removing?.let { contact ->
         RemoveContactDialog(
@@ -669,3 +727,4 @@ private fun TapPhonesDialog(adding: Boolean, onDismiss: () -> Unit) {
         confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+

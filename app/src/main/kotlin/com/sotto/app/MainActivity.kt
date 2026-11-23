@@ -170,6 +170,19 @@ class MainActivity : ComponentActivity() {
                     _deepLinkIntent.value = null
                 }
 
+                // Someone just scanned our live QR code and added us: swap roles. Open the
+                // scanner over New chat; scanning their code verifies them and accepts the request.
+                LaunchedEffect(Unit) {
+                    com.sotto.app.ui.contacts.LiveQrWatch.openRequest.collect {
+                        navController.awaitGraph()
+                        if (navController.currentBackStackEntry?.destination?.route != Routes.ADD_CONTACT) {
+                            navController.navigate(Routes.ADD_CONTACT) { launchSingleTop = true }
+                        }
+                        navController.currentBackStackEntry?.savedStateHandle
+                            ?.set(com.sotto.app.ui.contacts.LiveQrWatch.SCAN_BACK_REQUEST_KEY, true)
+                    }
+                }
+
                 // An invite link opened the app after setup: add its sender when they're on our
                 // relay. (During setup, setup takes the invite itself.)
                 LaunchedEffect(startDestination) {

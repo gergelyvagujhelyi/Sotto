@@ -36,6 +36,7 @@ class SettingsViewModel @Inject constructor(
      */
     suspend fun liveQr(): String? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myLiveCode() }?.encode()
+            ?.also { com.sotto.app.ui.contacts.LiveQrWatch.shown() }
 
     /** The relay the account lives on. */
     val relayHost: String? = relayConfig.host

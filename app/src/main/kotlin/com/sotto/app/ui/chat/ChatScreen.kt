@@ -224,6 +224,7 @@ fun ChatScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
+    var choosingVerify by rememberSaveable { mutableStateOf(false) }
 
     // Before the first message to someone not verified in person, warn once (the user's
     // choice: trust comes only from meeting). Not for a request: replying is refused anyway.
@@ -412,8 +413,102 @@ fun ChatScreen(
         loadMedia = viewModel::loadMedia,
         verifiedInPerson = contact?.verifiedInPerson,
         verifiedByCall = contact?.verifiedByCall == true,
-        onVerify = { if (isResumed()) onVerifyClick(viewModel.contactId) },
+        // Already verified in person: nothing stronger to offer, straight to the screen. Else
+        // the choice: in person (stronger) or by phone (weaker).
+        onVerify = {
+            if (isResumed()) {
+                if (contact?.verifiedInPerson == true) onVerifyClick(viewModel.contactId) else choosingVerify = true
+            }
+        },
     )
+
+    if (choosingVerify) {
+        VerifyChoiceDialog(
+            name = conversation?.contactDisplayName,
+            verifiedByPhone = contact?.verifiedByCall == true,
+            onInPerson = {
+                choosingVerify = false
+                onVerifyClick(viewModel.contactId)
+            },
+            onByPhone = {
+                choosingVerify = false
+                startCall(true)
+            },
+            onDismiss = { choosingVerify = false },
+        )
+    }
+}
+
+/**
+ * How to verify someone: in person (stronger: their phone, in front of you) or by phone (weaker:
+ * a call and seven emoji, which trusts their voice). Opened from "Not verified" and from ⋮.
+ */
+@Composable
+internal fun VerifyChoiceDialog(
+    name: String?,
+    verifiedByPhone: Boolean,
+    onInPerson: () -> Unit,
+    onByPhone: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val who = name ?: "this contact"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.GppMaybe, contentDescription = null, tint = Aurora.colors.warning) },
+        title = { Text("Verify $who") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                VerifyChoice(
+                    icon = Icons.Rounded.VerifiedUser,
+                    tint = Aurora.colors.success,
+                    title = "In person",
+                    badge = "Stronger",
+                    body = "Meet, then tap your phones together or scan the code on their phone.",
+                    onClick = onInPerson,
+                )
+                VerifyChoice(
+                    icon = Icons.Rounded.PhoneInTalk,
+                    tint = MaterialTheme.colorScheme.primary,
+                    title = "By phone",
+                    badge = if (verifiedByPhone) "Done · weaker" else "Weaker",
+                    body = "Call $who and read seven emoji to each other. It relies on knowing their voice.",
+                    onClick = onByPhone,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+@Composable
+private fun VerifyChoice(
+    icon: ImageVector,
+    tint: Color,
+    title: String,
+    badge: String,
+    body: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.width(8.dp))
+                Text(badge, style = MaterialTheme.typography.labelSmall, color = tint)
+            }
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
 }
 
 /** A send held back while the "not verified in person" warning asks first. */
@@ -1024,7 +1119,7 @@ private fun ChatTopBar(
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (verifiedInPerson == true) "Verified in person" else "Verify in person") },
+                            text = { Text(if (verifiedInPerson == true) "Verified in person" else "Verify…") },
                             leadingIcon = {
                                 Icon(
                                     if (verifiedInPerson == true) Icons.Rounded.VerifiedUser else Icons.Rounded.GppMaybe,

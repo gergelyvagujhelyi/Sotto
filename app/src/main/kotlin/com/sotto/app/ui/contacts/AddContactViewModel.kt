@@ -68,7 +68,11 @@ class AddContactViewModel @Inject constructor(
      * and marks them verified in person: the share code inside the fingerprint finds them on
      * the relay, and their whole fingerprint must match the keys it hands out.
      */
-    fun addInPerson(code: com.sotto.app.crypto.InPersonCode, viaQr: Boolean = false) {
+    /**
+     * [scannedBack]: this scan answers theirs (they verified us a moment ago), so no "Your
+     * turn" afterwards.
+     */
+    fun addInPerson(code: com.sotto.app.crypto.InPersonCode, viaQr: Boolean = false, scannedBack: Boolean = false) {
         if (_state.value is AddContactState.Loading) return
         _state.value = AddContactState.Loading
         viewModelScope.launch {
@@ -96,7 +100,13 @@ class AddContactViewModel @Inject constructor(
                     com.sotto.app.crypto.InPersonResult.Verified -> {
                         val conversationId = conversationRepository.getOrCreateConversation(contact.userId)
                         if (added) sendMyName(contact.userId)
-                        _state.value = AddContactState.Success(contact.copy(verifiedInPerson = true), conversationId)
+                        _state.value = AddContactState.Success(
+                            contact.copy(verifiedInPerson = true),
+                            conversationId,
+                            // A QR code verifies one way only: their turn to scan ours, unless
+                            // this already was the scan back.
+                            swapRoles = viaQr && !scannedBack,
+                        )
                     }
                     com.sotto.app.crypto.InPersonResult.NotLive,
                     com.sotto.app.crypto.InPersonResult.OlderApp,
@@ -127,6 +137,7 @@ class AddContactViewModel @Inject constructor(
     /** A fresh live QR code for "Show my QR code" (it changes every second, as BankID's does). */
     suspend fun liveQr(): String? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { inPersonVerifier.myLiveCode() }?.encode()
+            ?.also { LiveQrWatch.shown() }
 
     /** Opens the chat with someone already added (started now if there's none yet). */
     fun openChat(contact: Contact) {
@@ -199,6 +210,10 @@ const val OWN_SHARE_CODE_MESSAGE = "That's your own share code. Ask the other pe
 sealed interface AddContactState {
     data object Idle : AddContactState
     data object Loading : AddContactState
-    data class Success(val contact: Contact, val conversationId: String) : AddContactState
+    /**
+     * [swapRoles]: we just verified them from their live QR code; now they should scan ours,
+     * so both phones are verified (the screen shows our code before opening the chat).
+     */
+    data class Success(val contact: Contact, val conversationId: String, val swapRoles: Boolean = false) : AddContactState
     data class Error(val message: String) : AddContactState
 }
