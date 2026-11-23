@@ -1,8 +1,13 @@
 package com.sotto.app.nfc
 
 import android.app.Activity
+import android.content.Context
 import android.nfc.NfcAdapter
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -34,6 +39,7 @@ fun InPersonNfcEffect(code: InPersonCode?) {
         if (code == null) return@LaunchedEffect
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             InPersonNfc.start(code)
+            InPersonNfc.onContact = { buzz(activity) }
             try {
                 if (adapter == null) {
                     // No NFC: nothing to read with; the QR code is the way.
@@ -51,16 +57,33 @@ fun InPersonNfcEffect(code: InPersonCode?) {
                 }
             } finally {
                 runCatching { adapter?.disableReaderMode(activity) }
+                InPersonNfc.onContact = null
                 InPersonNfc.stop()
             }
         }
     }
 }
 
-private const val CARD_MS_MIN = 300L
-private const val CARD_MS_MAX = 800L
-private const val READER_MS_MIN = 300L
-private const val READER_MS_MAX = 800L
+/** A short buzz: the phones found each other, keep still. */
+private fun buzz(context: Context) {
+    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        context.getSystemService(VibratorManager::class.java)?.defaultVibrator
+    } else {
+        @Suppress("DEPRECATION")
+        context.getSystemService(Vibrator::class.java)
+    } ?: return
+    vibrator.vibrate(VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE))
+}
+
+// Widely spread turns. A swap needs the phones in opposite roles for long enough to start
+// reading, find the other phone and exchange (about 100–200 ms), and the spread is what gets
+// two phones out of step. Simulated, 0.1–1.0 s beats 0.7.20's 0.3–0.8 s (90% of swaps within
+// about 0.75 s rather than 0.9 s, or 1.5 s rather than 2 s if 200 ms are needed); short turns
+// (0.15–0.4 s) were slower, rarely leaving a long enough gap.
+private const val CARD_MS_MIN = 100L
+private const val CARD_MS_MAX = 1_000L
+private const val READER_MS_MIN = 100L
+private const val READER_MS_MAX = 1_000L
 
 private const val READER_FLAGS =
     NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK

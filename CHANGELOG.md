@@ -6,6 +6,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.21 — 2026-11-23
+
+- **Tapping phones is quicker and tells you when to hold still** — Both phones buzz as soon as they've found each other, so you know you've hit the spot and should keep still for a moment. They also find each other a bit sooner: each phone switches between reading and being read after a more widely varying time (0.1–1 s, not 0.3–0.8 s), which gets two phones out of step more quickly.
+- **Clearer logs for taps** — A tap that doesn't swap the codes now logs why, on both sides (never the codes themselves).
+
 ## 0.7.20 — 2026-11-23
 
 - **"Verified by phone" looks like it** — In the chat list, the chat header, your contacts and on the verify screen, a contact verified by phone now has the verified shield in purple with a small phone badge. The phone icon alone looked like there had been a call.
