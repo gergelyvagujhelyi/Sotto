@@ -9,7 +9,7 @@ load_dotenv()
 
 # The release this relay belongs to: the app's versionName in app/build.gradle.kts, so
 # /health tells which code a relay runs. tests/test_version.py keeps the two in step.
-RELAY_VERSION = "0.7.21"
+RELAY_VERSION = "0.7.22"
 
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL", "sqlite+aiosqlite:///./sotto.db"
