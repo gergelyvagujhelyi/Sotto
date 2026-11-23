@@ -136,6 +136,9 @@ interface MessageDao {
     @Query("UPDATE messages SET mediaKind = :kind, mediaMime = :mime, mediaKey = :key, mediaDurationMs = :durationMs, mediaWidth = :width, mediaHeight = :height WHERE id = :messageId")
     suspend fun setMedia(messageId: String, kind: String, mime: String, key: ByteArray, durationMs: Long, width: Int, height: Int)
 
+    @Query("UPDATE messages SET hdKey = NULL, attachmentId = NULL, mediaState = NULL, mediaSize = 0 WHERE id = :messageId")
+    suspend fun clearHd(messageId: String)
+
     @Query("UPDATE messages SET mediaState = :state WHERE id = :messageId")
     suspend fun setMediaState(messageId: String, state: String)
 

@@ -329,8 +329,22 @@ class MessageRepositoryImpl @Inject constructor(
             sendFileDirectFirst(entity, me, token)
             return
         }
-        val ready = ensureUploaded(entity)
+        val ready = try {
+            ensureUploaded(entity)
+        } catch (e: com.sotto.app.data.remote.ApiHttpException) {
+            // An HD copy the store won't take (no storage, too large, allowance used up):
+            // the photo still goes, without it.
+            if (entity.mediaKind != MediaKind.PHOTO.wire || !isFinalRefusal(e)) throw e
+            dropHd(entity)
+        }
         sendEnvelope(ready, me, wirePayload(ready, me))
+    }
+
+    /** Forgets a photo's HD copy: its file, its key and its place in the store. */
+    private suspend fun dropHd(entity: MessageEntity): MessageEntity {
+        mediaStore.delete(entity.id + com.sotto.app.data.media.MediaStore.HD_SUFFIX)
+        messageDao.clearHd(entity.id)
+        return entity.copy(hdKey = null, attachmentId = null, mediaState = null, mediaSize = 0)
     }
 
     /** Encrypts, signs and sends our stored message [entity] with [payload]; marks it SENT. */
@@ -375,6 +389,10 @@ class MessageRepositoryImpl @Inject constructor(
         val contact = contactDao.getByUserId(peer) ?: return false
         return com.sotto.app.call.isTrustedPeer(true, contact.verified, conversationDao.getByContactId(peer)?.isApproved == true)
     }
+
+    /** A refusal from the relay that won't change on retry. */
+    private fun isFinalRefusal(e: com.sotto.app.data.remote.ApiHttpException): Boolean =
+        com.sotto.app.worker.TransferWorker.isFinal(e)
 
     /** Our consent to a direct transfer: as [mayOfferDirect], on an unmetered network (Wi-Fi). */
     private suspend fun mayAcceptDirect(peer: String): Boolean =
@@ -492,6 +510,13 @@ class MessageRepositoryImpl @Inject constructor(
         val update = com.sotto.app.domain.model.FileUpdatePayload.decode(plaintext) ?: return
         val entity = messageDao.getById(update.file) ?: return
         if (entity.isOutgoing || entity.senderId != sender || entity.mediaKind != MediaKind.FILE.wire) return
+        if (update.gone) {
+            // The sender couldn't get it to us; a retry from them sends it again.
+            if (entity.mediaState != com.sotto.app.domain.model.FileState.READY.wire) {
+                messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.GONE.wire)
+            }
+            return
+        }
         if (entity.mediaState == com.sotto.app.domain.model.FileState.READY.wire) {
             // We have it already (directly): it needn't wait in the store.
             runCatching { apiService.deleteAttachment(update.id) }
@@ -503,7 +528,22 @@ class MessageRepositoryImpl @Inject constructor(
 
     override suspend fun markSendFailed(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
-        if (entity.state == MessageState.SENDING.name) messageDao.updateState(messageId, MessageState.FAILED.name)
+        if (entity.state == MessageState.SENDING.name) {
+            messageDao.updateState(messageId, MessageState.FAILED.name)
+            return
+        }
+        // A file offered directly whose fallback to the store failed for good: the contact
+        // stops waiting for it, and here it shows as not delivered (a tap tries again).
+        if (entity.isOutgoing && entity.mediaKind == MediaKind.FILE.wire &&
+            entity.mediaState != com.sotto.app.domain.model.FileState.SENT.wire
+        ) {
+            val me = keyManager.getUserId() ?: return
+            runCatching {
+                sendUnstored(entity.recipientId, com.sotto.app.domain.model.FileUpdatePayload.encodeGone(ReceiptManager.relayMessageId(me, entity.id)))
+            }
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
+            messageDao.updateState(messageId, MessageState.FAILED.name)
+        }
     }
 
     override suspend fun requestDownload(messageId: String) {
@@ -1612,8 +1652,11 @@ class MessageRepositoryImpl @Inject constructor(
         private const val DIRECT_ANSWER_WAIT_MS = 30_000L
         private const val DIRECT_OPEN_MS = 20_000L
         private const val DIRECT_DONE_MS = 60_000L
-        /** Largest file sent through the store: its ciphertext stays within the relay's 100 MiB. */
-        const val MAX_FILE_BYTES = 100L * 1024 * 1024 - 64 * 1024
+        /**
+         * Largest file sent: padded (Padmé rounds to 2 MiB steps here) and encrypted it stays
+         * within the relay's 100 MiB (ATTACHMENT_MAX_BYTES); a test checks the sum.
+         */
+        const val MAX_FILE_BYTES = 98L * 1024 * 1024
         /** How many of our own newest messages a received reply's original is looked for in. */
         private const val OWN_REPLY_SEARCH_LIMIT = 5_000
         /** Preview and notification text when someone adds the user and sends only their name. */

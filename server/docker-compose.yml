@@ -87,6 +87,7 @@ services:
       ATTACHMENT_STORE_LIMIT_BYTES: ${ATTACHMENT_STORE_LIMIT_BYTES:-4294967296}
       ATTACHMENT_MONTHLY_UPLOADS: ${ATTACHMENT_MONTHLY_UPLOADS:-5000}
       ATTACHMENT_PART_BYTES: ${ATTACHMENT_PART_BYTES:-8388608}
+      ATTACHMENT_TTL_DAYS: ${ATTACHMENT_TTL_DAYS:-30}
       # nginx reaches the server over the compose network, not from 127.0.0.1.
       # Without this every client shares nginx's IP for IP rate limiting.
       # Only nginx can reach server:8000 (expose, not published).

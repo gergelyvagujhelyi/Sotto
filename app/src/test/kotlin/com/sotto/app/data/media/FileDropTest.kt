@@ -176,4 +176,30 @@ class FileDropTest {
         assertNull(com.sotto.app.domain.model.DirectPayload.decode("\u0001sotto/direct/v1:{\"file\":\"f1\",\"kind\":\"steal\"}"))
         assertNull(com.sotto.app.domain.model.DirectPayload.decode("\u0001sotto/direct/v1:{\"kind\":\"offer\"}"))
     }
+
+    @Test
+    fun `the largest file the app sends fits the relay's maximum once padded and encrypted`() {
+        val max = com.sotto.app.data.repository.MessageRepositoryImpl.MAX_FILE_BYTES
+        val relayMax = 100L * 1024 * 1024 // ATTACHMENT_MAX_BYTES's default
+        assertTrue(SegmentedCrypto.encryptedSize(Padme.padded(max)) <= relayMax)
+    }
+
+    @Test
+    fun `a short rate limit is retried, a used-up allowance or missing storage isn't`() {
+        fun e(status: Int, detail: String) = com.sotto.app.data.remote.ApiHttpException(status, detail)
+        val final = com.sotto.app.worker.TransferWorker.Companion::isFinal
+        assertTrue(!final(e(429, "attachment_rate_limited")))
+        assertTrue(!final(e(429, "Rate limit exceeded")))
+        assertTrue(final(e(429, "attachment_monthly_limit")))
+        assertTrue(final(e(503, "attachments_unavailable")))
+        assertTrue(final(e(413, "attachment_too_large")))
+        assertTrue(!final(e(502, "store_unreachable")))
+    }
+
+    @Test
+    fun `a file the sender couldn't deliver is announced as gone`() {
+        val u = com.sotto.app.domain.model.FileUpdatePayload.decode(com.sotto.app.domain.model.FileUpdatePayload.encodeGone("relayid"))!!
+        assertTrue(u.gone)
+        assertEquals("relayid", u.file)
+    }
 }

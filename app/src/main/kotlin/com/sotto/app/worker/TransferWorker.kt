@@ -77,7 +77,7 @@ class TransferWorker @AssistedInject constructor(
             Log.w(TAG, "Transfer failed (attempt ${runAttemptCount + 1}): ${e.message}")
             // The relay said no for good (no storage, too large, allowance used up): no retries.
             // A direct transfer that failed has said so; the store is the fallback, not a retry.
-            val final = direct || (e is com.sotto.app.data.remote.ApiHttpException && e.status in PERMANENT)
+            val final = direct || (e is com.sotto.app.data.remote.ApiHttpException && isFinal(e))
             if (!final && runAttemptCount < MAX_RETRIES) {
                 Result.retry()
             } else {
@@ -122,7 +122,12 @@ class TransferWorker @AssistedInject constructor(
         private const val CHANNEL = "file_transfers"
         private const val NOTIFICATION_BASE = 0x0F000
         private const val MAX_RETRIES = 4
-        private val PERMANENT = setOf(400, 403, 404, 413, 429, 503, 507)
+        private val PERMANENT = setOf(400, 403, 404, 413, 503, 507)
+        private val MONTHLY = setOf("attachment_monthly_limit", "attachment_relay_monthly_limit")
+
+        /** A refusal that won't change by trying again soon (a short rate limit will). */
+        fun isFinal(e: com.sotto.app.data.remote.ApiHttpException): Boolean =
+            e.status in PERMANENT || (e.status == 429 && e.message in MONTHLY)
 
         fun workName(messageId: String, up: Boolean) = "transfer-${if (up) "up" else "down"}-$messageId"
     }

@@ -359,11 +359,17 @@ object DirectPayload {
 object FileUpdatePayload {
     private const val PREFIX = "\u0001sotto/file-update/v1:"
     private val ID = Regex("^[0-9a-f]{32}$")
-    data class Decoded(val file: String, val id: String)
+    /** [gone]: the sender couldn't put it anywhere; it won't come (unless they try again). */
+    data class Decoded(val file: String, val id: String, val gone: Boolean = false)
 
     fun encode(file: String, id: String): String = PREFIX + buildJsonObject {
         put("file", file)
         put("id", id)
+    }.toString()
+
+    fun encodeGone(file: String): String = PREFIX + buildJsonObject {
+        put("file", file)
+        put("gone", true)
     }.toString()
 
     fun isUpdate(plaintext: String) = plaintext.startsWith(PREFIX)
@@ -373,10 +379,9 @@ object FileUpdatePayload {
         return runCatching {
             val obj = Json.parseToJsonElement(plaintext.removePrefix(PREFIX)) as JsonObject
             fun string(key: String) = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            Decoded(
-                file = string("file")?.takeIf { it.isNotEmpty() && it.length <= 64 } ?: return null,
-                id = string("id")?.takeIf { ID.matches(it) } ?: return null,
-            )
+            val file = string("file")?.takeIf { it.isNotEmpty() && it.length <= 64 } ?: return null
+            if ((obj["gone"] as? JsonPrimitive)?.booleanOrNull == true) return Decoded(file, "", gone = true)
+            Decoded(file = file, id = string("id")?.takeIf { ID.matches(it) } ?: return null)
         }.getOrNull()
     }
 }

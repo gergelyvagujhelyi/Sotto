@@ -150,7 +150,7 @@ private fun FileCard(message: Message, contentColor: Color) {
         else -> Icons.Rounded.Description
     }
     val status = when {
-        progress != null && state == com.sotto.app.domain.model.FileState.UPLOADING -> "Uploading ${(progress * 100).toInt()}%"
+        progress != null && message.isOutgoing -> "Sending ${(progress * 100).toInt()}%"
         progress != null -> "Downloading ${(progress * 100).toInt()}%"
         state == com.sotto.app.domain.model.FileState.UPLOADING -> if (message.state == com.sotto.app.domain.model.MessageState.FAILED) "Not uploaded" else "Waiting to upload…"
         state == com.sotto.app.domain.model.FileState.DOWNLOADING -> "Waiting to download…"

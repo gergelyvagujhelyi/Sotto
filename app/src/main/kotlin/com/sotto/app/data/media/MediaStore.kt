@@ -58,11 +58,13 @@ class MediaStore @Inject constructor(
     /** Removes the files of messages that are gone: [keep] is every message id that still has media. */
     suspend fun sweep(keep: Set<String>) = withContext(Dispatchers.IO) {
         val staleTmp = System.currentTimeMillis() - 6 * 60 * 60 * 1000L
+        val fresh = System.currentTimeMillis() - 10 * 60 * 1000L
         dir.listFiles()?.forEach { file ->
             // A .tmp is a file being written (an encryption or download under way) until it's old.
             if (file.name.endsWith(".tmp")) {
                 if (file.lastModified() < staleTmp) file.delete()
-            } else if (file.name.removeSuffix(HD_SUFFIX) !in keep) {
+            } else if (file.name.removeSuffix(HD_SUFFIX) !in keep && file.lastModified() < fresh) {
+                // Files are written before their message's row: a new one may have no row yet.
                 file.delete()
             }
         }

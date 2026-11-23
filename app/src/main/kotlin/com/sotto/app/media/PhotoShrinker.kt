@@ -71,7 +71,10 @@ object PhotoShrinker {
         stream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxSide)
+            var sample = sampleSize(bounds.outWidth, bounds.outHeight, maxSide)
+            // A very large camera picture is decoded smaller, so it (and its upright copy) fit in memory.
+            while (bounds.outWidth.toLong() / sample * (bounds.outHeight / sample) > MAX_DECODE_PIXELS) sample *= 2
+            inSampleSize = sample
         }
         val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
         val orientation = runCatching {
@@ -115,4 +118,6 @@ object PhotoShrinker {
     }
 
     private const val MIN_SIDE = 480
+    /** About 64 MB as ARGB: a 50 MP photo decodes at half size (still over 4000 px). */
+    private const val MAX_DECODE_PIXELS = 16_000_000L
 }

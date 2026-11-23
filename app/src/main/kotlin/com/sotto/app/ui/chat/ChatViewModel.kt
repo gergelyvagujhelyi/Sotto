@@ -401,7 +401,7 @@ class ChatViewModel @Inject constructor(
             }
             // HD: also a full-size copy, through the relay's store. Not for a picture that's
             // no bigger than the normal one anyway.
-            val full = if (hd) {
+            val made = if (hd) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
                         com.sotto.app.media.PhotoShrinker.shrink(
@@ -411,10 +411,15 @@ class ChatViewModel @Inject constructor(
                             qualities = com.sotto.app.media.PhotoShrinker.HD_QUALITIES,
                         )
                     }.getOrNull()
-                }?.takeIf { maxOf(it.width, it.height) > maxOf(photo.width, photo.height) }
+                }
             } else {
                 null
             }
+            if (hd && made == null) {
+                // Out of memory, say: the user asked for HD, so they hear it didn't happen.
+                _sendError.value = "The HD copy couldn't be made; the photo goes in normal quality."
+            }
+            val full = made?.takeIf { maxOf(it.width, it.height) > maxOf(photo.width, photo.height) }
             val sent = sendMediaNow(
                 com.sotto.app.domain.model.MessageMedia(
                     com.sotto.app.domain.model.MediaKind.PHOTO, "image/jpeg", width = photo.width, height = photo.height,
@@ -443,14 +448,7 @@ class ChatViewModel @Inject constructor(
         return try {
             messageRepository.sendMedia(conversationId, contactId, media, bytes, caption, replyTo, hdBytes)
             true
-        } catch (e: com.sotto.app.data.remote.ApiHttpException) {
-            Log.w("ChatViewModel", "HD copy refused: ${e.message}")
-            _sendError.value = if (e.status == 404 || e.status == 503) {
-                "This relay doesn't take HD photos. Send it as a normal photo."
-            } else {
-                "The HD copy couldn't be sent. Tap the photo to try again."
-            }
-            false
+
         } catch (e: Exception) {
             Log.w("ChatViewModel", "Sending media failed: ${e.message}")
             // The message stays in the chat as "Not delivered · Tap to retry" if it got that far.

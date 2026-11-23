@@ -239,3 +239,14 @@ async def test_completing_again_after_the_parts_were_joined_still_works(client: 
     r = await client.post(f"/v1/attachments/{att['id']}/complete", json={"etags": ["a", "b", "c"]}, headers=_auth(alice))
     assert r.status_code == 200, r.text
     assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_health_reports_attachments_only_with_a_whole_store_configuration(client: AsyncClient, monkeypatch):
+    monkeypatch.setattr(config, "S3_ENDPOINT", "https://t3.storage.dev")
+    monkeypatch.setattr(config, "S3_BUCKET", "b")
+    monkeypatch.setattr(config, "S3_ACCESS_KEY_ID", "id")
+    monkeypatch.setattr(config, "S3_SECRET", "")
+    assert (await client.get("/health")).json()["attachment_max_bytes"] == 0
+    monkeypatch.setattr(config, "S3_SECRET", "s")
+    assert (await client.get("/health")).json()["attachment_max_bytes"] == config.ATTACHMENT_MAX_BYTES

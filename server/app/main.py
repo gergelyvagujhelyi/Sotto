@@ -33,6 +33,7 @@ from app import config
 from app.routers import attachments, calling, identity, invites, messages, push, receipts, web, websocket
 from app.services import app_release as app_release_service
 from app.services.invites import relay_founded
+from app.services.object_store import configured_store
 from app.services.metrics import MetricsMiddleware, metrics_endpoint
 from app.services.websocket_manager import ws_manager
 
@@ -343,5 +344,5 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
     return HealthResponse(
         version=app.version,
         invite_required=config.INVITE_ONLY and founded,
-        attachment_max_bytes=config.ATTACHMENT_MAX_BYTES if config.S3_BUCKET and config.S3_ENDPOINT else 0,
+        attachment_max_bytes=config.ATTACHMENT_MAX_BYTES if configured_store() is not None else 0,
     )
