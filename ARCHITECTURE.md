@@ -316,5 +316,5 @@
 
 **Why**: ADR-19 keeps the relay on the Premium tier with 1 GB of free egress a month, which calls need. Small inline media costs a few MB a month of it and needs nothing new; large files never touch the relay, and Tigris has free egress and, without a card on file, stops at its free tier rather than billing. The relay signs every URL, so it decides who may upload how much, and a signed size can't be exceeded.
 
-**Tradeoff**: A third party (Tigris) sees the phones' addresses, file sizes and timing, though never content or keys. Inline media makes a message as large as about 190 KB, so it shows its kind by size. Sotto 0.7.6 and older show the new payloads as raw text, so everyone updates together. Direct phone-to-phone transfer is designed but comes later.
+**Tradeoff**: A third party (Tigris) sees the phones' addresses, file sizes and timing, though never content or keys. Inline media makes a message as large as about 190 KB, so it shows its kind by size. Sotto 0.7.6 and older show the new payloads as raw text, so everyone updates together. Files go phone to phone first when both sides consent (as for direct calls), with the drop as the fallback.
 

@@ -47,6 +47,7 @@ class TransferWorker @AssistedInject constructor(
 
     private val messageId get() = inputData.getString(KEY_MESSAGE).orEmpty()
     private val upload get() = inputData.getBoolean(KEY_UP, true)
+    private val direct get() = inputData.getBoolean(KEY_DIRECT, false)
 
     override suspend fun doWork(): Result = coroutineScope {
         if (messageId.isEmpty()) return@coroutineScope Result.failure()
@@ -64,18 +65,23 @@ class TransferWorker @AssistedInject constructor(
             }
         }
         try {
-            if (upload) messageRepository.finishSend(messageId) else messageRepository.downloadFile(messageId)
+            when {
+                direct -> messageRepository.receiveDirect(messageId)
+                upload -> messageRepository.finishSend(messageId)
+                else -> messageRepository.downloadFile(messageId)
+            }
             Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.w(TAG, "Transfer failed (attempt ${runAttemptCount + 1}): ${e.message}")
             // The relay said no for good (no storage, too large, allowance used up): no retries.
-            val final = e is com.sotto.app.data.remote.ApiHttpException && e.status in PERMANENT
+            // A direct transfer that failed has said so; the store is the fallback, not a retry.
+            val final = direct || (e is com.sotto.app.data.remote.ApiHttpException && e.status in PERMANENT)
             if (!final && runAttemptCount < MAX_RETRIES) {
                 Result.retry()
             } else {
-                if (upload) messageRepository.markSendFailed(messageId) else messageRepository.markDownloadFailed(messageId)
+                if (direct) Unit else if (upload) messageRepository.markSendFailed(messageId) else messageRepository.markDownloadFailed(messageId)
                 Result.failure()
             }
         } finally {
@@ -95,7 +101,7 @@ class TransferWorker @AssistedInject constructor(
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (upload) "Sending a file" else "Downloading a file")
+            .setContentTitle(if (upload) "Sending a file" else "Receiving a file")
             .setProgress(100, percent ?: 0, percent == null)
             .setOngoing(true)
             .setSilent(true)
@@ -112,6 +118,7 @@ class TransferWorker @AssistedInject constructor(
         private const val TAG = "TransferWorker"
         private const val KEY_MESSAGE = "message"
         private const val KEY_UP = "up"
+        private const val KEY_DIRECT = "direct"
         private const val CHANNEL = "file_transfers"
         private const val NOTIFICATION_BASE = 0x0F000
         private const val MAX_RETRIES = 4
@@ -129,14 +136,17 @@ class FileTransfers @Inject constructor(
     fun upload(messageId: String) = enqueue(messageId, up = true)
     fun download(messageId: String) = enqueue(messageId, up = false)
 
-    private fun enqueue(messageId: String, up: Boolean) {
+    /** Takes a file offered phone to phone (a direct transfer). */
+    fun receiveDirect(messageId: String) = enqueue(messageId, up = false, direct = true)
+
+    private fun enqueue(messageId: String, up: Boolean, direct: Boolean = false) {
         val request = OneTimeWorkRequestBuilder<TransferWorker>()
-            .setInputData(workDataOf("message" to messageId, "up" to up))
+            .setInputData(workDataOf("message" to messageId, "up" to up, "direct" to direct))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(context)
-            .enqueueUniqueWork(TransferWorker.workName(messageId, up), ExistingWorkPolicy.KEEP, request)
+            .enqueueUniqueWork(TransferWorker.workName(messageId, up) + if (direct) "-direct" else "", ExistingWorkPolicy.KEEP, request)
     }
 
     /** Whether a transfer for [messageId] is queued or running (blocking: call off the main thread). */

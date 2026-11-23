@@ -154,6 +154,7 @@ private fun FileCard(message: Message, contentColor: Color) {
         progress != null -> "Downloading ${(progress * 100).toInt()}%"
         state == com.sotto.app.domain.model.FileState.UPLOADING -> if (message.state == com.sotto.app.domain.model.MessageState.FAILED) "Not uploaded" else "Waiting to upload…"
         state == com.sotto.app.domain.model.FileState.DOWNLOADING -> "Waiting to download…"
+        state == com.sotto.app.domain.model.FileState.DIRECT -> if (message.isOutgoing) "Sending directly…" else "Coming directly…"
         state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
         state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
         else -> "Tap to open"
@@ -169,7 +170,8 @@ private fun FileCard(message: Message, contentColor: Color) {
                 .aspectRatio((thumb.width.toFloat() / thumb.height).coerceIn(0.6f, 1.8f))
                 .clip(RoundedCornerShape(14.dp))
                 .clickable(enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
-                    state != com.sotto.app.domain.model.FileState.DOWNLOADING, onClickLabel = status) { host.onFile(message) },
+                    state != com.sotto.app.domain.model.FileState.DOWNLOADING &&
+                    state != com.sotto.app.domain.model.FileState.DIRECT, onClickLabel = status) { host.onFile(message) },
             contentAlignment = Alignment.Center,
         ) {
             Image(thumb, contentDescription = media.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -229,7 +231,8 @@ private fun FileCard(message: Message, contentColor: Color) {
             .background(contentColor.copy(alpha = 0.08f))
             .clickable(
                 enabled = progress == null && state != com.sotto.app.domain.model.FileState.GONE &&
-                    state != com.sotto.app.domain.model.FileState.DOWNLOADING,
+                    state != com.sotto.app.domain.model.FileState.DOWNLOADING &&
+                    state != com.sotto.app.domain.model.FileState.DIRECT,
                 onClickLabel = status,
             ) {
                 host.onFile(message)

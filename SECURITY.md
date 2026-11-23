@@ -300,6 +300,7 @@ The name itself is public, because Certificate Transparency logs list every cert
 - **Sizes are padded** (Padmé, at most about 12%): files and HD copies with zeros before encryption, inline media with a filler field. The real size travels inside the encryption.
 - **Message requests bring text only.** Media and files from someone whose request isn't accepted are not stored or downloaded; the receiving phone enforces this, whatever the sender's app does.
 - **Large uploads go in parts** (8 MiB, multipart), each part's size signed into its URL; downloads resume with HTTP Range. Every segment is still checked before a file is kept.
+- **Direct transfers.** A file can go phone to phone over a WebRTC data channel that has STUN servers only, never TURN, so it never passes through the relay. The two connection descriptions (which hold IP addresses) travel as ratchet-encrypted, signed messages; both sides must allow direct connections and trust each other, as for direct calls (ADR-17), and the receiver goes direct only on an unmetered network. The bytes are the same encrypted file the store would hold, checked the same way; a broken transfer falls back to the store.
 - **The relay's key** to the bucket can read and write that bucket only. It can't create buckets, keys or policies.
 
 ## Security Checklist

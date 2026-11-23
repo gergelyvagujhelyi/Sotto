@@ -170,6 +170,53 @@ class FileDrop @Inject constructor(
         }.getOrNull()
     }
 
+    fun newDirectLink(stunUrls: List<String>) = DirectLink(context, stunUrls)
+
+    fun onUnmeteredNetwork(): Boolean = runCatching {
+        val cm = context.getSystemService(android.net.ConnectivityManager::class.java)
+        !cm.isActiveNetworkMetered
+    }.getOrDefault(false)
+
+    /** Sends this message's encrypted file over [link]. */
+    suspend fun sendDirect(name: String, link: DirectLink) {
+        val file = fileFor(name)
+        val total = file.length()
+        report(name, 0f)
+        try {
+            link.send(file) { done -> report(name, done.toFloat() / total) }
+        } finally {
+            report(name, null)
+        }
+    }
+
+    /**
+     * Takes the encrypted file over [link] into this message's file, checking every segment
+     * first. If the connection breaks, what came is kept: it's the same encrypted file the
+     * store gets, so a download from there goes on from that point ([download]).
+     */
+    suspend fun receiveDirect(name: String, key: ByteArray, expectedSize: Long, link: DirectLink) {
+        val out = fileFor(name)
+        val tmp = File(out.parentFile, out.name + ".tmp")
+        tmp.delete()
+        report(name, 0f)
+        try {
+            tmp.outputStream().buffered().use { output ->
+                link.receive(output, expectedSize) { done -> report(name, done.toFloat() / expectedSize) }
+            }
+            try {
+                withContext(Dispatchers.IO) {
+                    tmp.inputStream().buffered().use { SegmentedCrypto.decrypt(it, NullOutput, key) }
+                }
+            } catch (e: Exception) {
+                tmp.delete() // damaged: nothing of it is worth resuming
+                throw e
+            }
+            if (!tmp.renameTo(out)) throw IOException("Could not store the file")
+        } finally {
+            report(name, null)
+        }
+    }
+
     /** Where an upload in parts keeps the ETags of the parts already up, to resume after a break. */
     private fun partsFile(name: String): File = File(File(context.filesDir, "transfers").apply { mkdirs() }, "$name.json")
 
@@ -338,6 +385,11 @@ class FileDrop @Inject constructor(
         }
         out
     }
+
+    /** Part of this message's file came already (a download or direct transfer that broke off). */
+    fun hasPartial(messageId: String): Boolean = runCatching {
+        File(fileFor(messageId).parentFile, "$messageId.tmp").let { it.isFile && it.length() > 0 }
+    }.getOrDefault(false)
 
     fun hasFile(messageId: String): Boolean = runCatching { fileFor(messageId).isFile }.getOrDefault(false)
 

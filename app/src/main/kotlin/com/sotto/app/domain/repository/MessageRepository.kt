@@ -56,6 +56,9 @@ interface MessageRepository {
     /** The background part of sending a message with a file: upload it, then send the message. */
     suspend fun finishSend(messageId: String) {}
 
+    /** The receiving side of a direct file transfer, in the background. */
+    suspend fun receiveDirect(messageId: String) {}
+
     /** A background send or download gave up. */
     suspend fun markSendFailed(messageId: String) {}
     suspend fun markDownloadFailed(messageId: String) {}

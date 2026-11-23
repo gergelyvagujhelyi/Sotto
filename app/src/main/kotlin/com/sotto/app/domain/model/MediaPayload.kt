@@ -53,6 +53,11 @@ enum class FileState(val wire: String) {
     REMOTE("remote"),
     /** Receiver: a download is queued or under way (a background job). */
     DOWNLOADING("downloading"),
+    /**
+     * A file offered phone to phone: the sender's message is out and the file is on its
+     * way directly, or waits for the store as the fallback.
+     */
+    DIRECT("direct"),
     /** On this phone, ready to open. */
     READY("ready"),
     /** Receiver: the store no longer has it (expired or deleted) and it was never downloaded. */
@@ -229,6 +234,8 @@ object FilePayload {
         /** A small JPEG preview (a video's frame, a picture shrunk), and a video's length. */
         val thumbnail: ByteArray? = null,
         val durationMs: Long = 0,
+        /** The sender offers it phone to phone first; [id] is then empty until a FileUpdate names it. */
+        val direct: Boolean = false,
     ) {
         override fun equals(other: Any?) = other is Decoded && id == other.id && key.contentEquals(other.key) &&
             name == other.name && mime == other.mime && size == other.size && caption == other.caption && reply == other.reply
@@ -248,17 +255,18 @@ object FilePayload {
         reply: MediaPayload.Reply? = null,
         thumbnail: ByteArray? = null,
         durationMs: Long = 0,
+        direct: Boolean = false,
     ): String {
-        val bare = body(id, key, name, mime, size, caption, reply, thumbnail, durationMs, pad = "")
+        val bare = body(id, key, name, mime, size, caption, reply, thumbnail, durationMs, direct, pad = "")
         // Padded like inline media, so the message's size says little about the name or preview.
         val bytes = (PREFIX + bare).toByteArray(Charsets.UTF_8).size
         val target = com.sotto.app.data.media.Padme.padded(bytes.toLong()).toInt()
-        return PREFIX + body(id, key, name, mime, size, caption, reply, thumbnail, durationMs, "0".repeat((target - bytes).coerceAtLeast(0)))
+        return PREFIX + body(id, key, name, mime, size, caption, reply, thumbnail, durationMs, direct, "0".repeat((target - bytes).coerceAtLeast(0)))
     }
 
     private fun body(
         id: String, key: ByteArray, name: String, mime: String, size: Long, caption: String,
-        reply: MediaPayload.Reply?, thumbnail: ByteArray?, durationMs: Long, pad: String,
+        reply: MediaPayload.Reply?, thumbnail: ByteArray?, durationMs: Long, direct: Boolean, pad: String,
     ): String =
         buildJsonObject {
             put("id", id)
@@ -274,6 +282,7 @@ object FilePayload {
             }
             if (thumbnail != null && thumbnail.size <= THUMB_MAX_BYTES) put("thumb", Base64.getEncoder().encodeToString(thumbnail))
             if (durationMs > 0) put("ms", durationMs)
+            if (direct) put("direct", true)
             put("pad", pad)
         }.toString()
 
@@ -284,7 +293,9 @@ object FilePayload {
         return runCatching {
             val obj = Json.parseToJsonElement(plaintext.removePrefix(PREFIX)) as JsonObject
             fun string(key: String) = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
-            val id = string("id")?.takeIf { ID.matches(it) } ?: return null
+            val direct = (obj["direct"] as? JsonPrimitive)?.booleanOrNull == true
+            // A file offered phone to phone has no id in the store (yet).
+            val id = string("id")?.takeIf { ID.matches(it) || (direct && it.isEmpty()) } ?: return null
             val key = string("key")?.let { Base64.getDecoder().decode(it) }?.takeIf { it.size == 32 } ?: return null
             val size = (obj["size"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull?.takeIf { it in 0..MAX_SIZE } ?: return null
             val mime = string("mime")?.lowercase()?.takeIf { MIME.matches(it) } ?: "application/octet-stream"
@@ -293,6 +304,7 @@ object FilePayload {
                 ?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
                 ?.takeIf { it.isNotEmpty() && it.size <= THUMB_MAX_BYTES }
             Decoded(
+                direct = direct,
                 thumbnail = thumb,
                 durationMs = ((obj["ms"] as? JsonPrimitive)?.takeUnless { it.isString }?.longOrNull ?: 0L).coerceIn(0L, 48L * 3600 * 1000),
                 id = id,
@@ -304,6 +316,66 @@ object FilePayload {
                 reply = to?.let {
                     MediaPayload.Reply(it, ReplyPayload.quoteOf(string("quote").orEmpty()), (obj["mine"] as? JsonPrimitive)?.booleanOrNull ?: false)
                 },
+            )
+        }.getOrNull()
+    }
+}
+
+/**
+ * The handshake of a direct file transfer (ADR-29), sent like a reaction: ratchet-encrypted,
+ * signed, stored by neither phone. [file] names the file message by the relay's id for it.
+ * The receiver sends an OFFER (its connection description) or NO (it won't or can't go
+ * direct); the sender answers with an ANSWER; the receiver confirms with DONE once it has
+ * checked the file. Descriptions carry IP addresses, so only consenting, trusted contacts
+ * exchange them (as for direct calls, ADR-17).
+ */
+object DirectPayload {
+    private const val PREFIX = "\u0001sotto/direct/v1:"
+    enum class Kind { OFFER, ANSWER, DONE, NO }
+    data class Decoded(val file: String, val kind: Kind, val sdp: String)
+
+    fun encode(file: String, kind: Kind, sdp: String = ""): String =
+        PREFIX + buildJsonObject {
+            put("file", file)
+            put("kind", kind.name.lowercase())
+            if (sdp.isNotEmpty()) put("sdp", sdp)
+        }.toString()
+
+    fun isDirect(plaintext: String) = plaintext.startsWith(PREFIX)
+
+    fun decode(plaintext: String): Decoded? {
+        if (!isDirect(plaintext)) return null
+        return runCatching {
+            val obj = Json.parseToJsonElement(plaintext.removePrefix(PREFIX)) as JsonObject
+            fun string(key: String) = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            val file = string("file")?.takeIf { it.isNotEmpty() && it.length <= 64 } ?: return null
+            val kind = Kind.entries.firstOrNull { it.name.lowercase() == string("kind") } ?: return null
+            Decoded(file, kind, string("sdp").orEmpty().take(20_000))
+        }.getOrNull()
+    }
+}
+
+/** After a direct transfer didn't happen: the file is in the store after all, under [id]. */
+object FileUpdatePayload {
+    private const val PREFIX = "\u0001sotto/file-update/v1:"
+    private val ID = Regex("^[0-9a-f]{32}$")
+    data class Decoded(val file: String, val id: String)
+
+    fun encode(file: String, id: String): String = PREFIX + buildJsonObject {
+        put("file", file)
+        put("id", id)
+    }.toString()
+
+    fun isUpdate(plaintext: String) = plaintext.startsWith(PREFIX)
+
+    fun decode(plaintext: String): Decoded? {
+        if (!isUpdate(plaintext)) return null
+        return runCatching {
+            val obj = Json.parseToJsonElement(plaintext.removePrefix(PREFIX)) as JsonObject
+            fun string(key: String) = (obj[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            Decoded(
+                file = string("file")?.takeIf { it.isNotEmpty() && it.length <= 64 } ?: return null,
+                id = string("id")?.takeIf { ID.matches(it) } ?: return null,
             )
         }.getOrNull()
     }

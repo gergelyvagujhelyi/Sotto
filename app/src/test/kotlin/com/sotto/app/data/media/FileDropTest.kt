@@ -151,4 +151,29 @@ class FileDropTest {
         val big = FilePayload.encode("0123456789abcdef0123456789abcdef", key, "a", "video/mp4", 1, "", thumbnail = ByteArray(FilePayload.THUMB_MAX_BYTES + 1))
         assertNull(FilePayload.decode(big)!!.thumbnail)
     }
+
+    @Test
+    fun `a file offered directly has no store id until an update names one`() {
+        val key = SegmentedCrypto.newKey()
+        val d = FilePayload.decode(FilePayload.encode("", key, "a.bin", "application/octet-stream", 10, "", direct = true))!!
+        assertTrue(d.direct)
+        assertEquals("", d.id)
+        // Without "direct", an empty id is refused.
+        assertNull(FilePayload.decode(FilePayload.encode("", key, "a.bin", "application/octet-stream", 10, "")))
+        val u = com.sotto.app.domain.model.FileUpdatePayload.decode(
+            com.sotto.app.domain.model.FileUpdatePayload.encode("relayid", "0123456789abcdef0123456789abcdef"),
+        )!!
+        assertEquals("relayid", u.file)
+        assertNull(com.sotto.app.domain.model.FileUpdatePayload.decode(com.sotto.app.domain.model.FileUpdatePayload.encode("r", "../x")))
+    }
+
+    @Test
+    fun `direct handshake messages round-trip and junk is dropped`() {
+        val o = com.sotto.app.domain.model.DirectPayload.decode(com.sotto.app.domain.model.DirectPayload.encode("f1", com.sotto.app.domain.model.DirectPayload.Kind.OFFER, "v=0 sdp"))!!
+        assertEquals(com.sotto.app.domain.model.DirectPayload.Kind.OFFER, o.kind)
+        assertEquals("v=0 sdp", o.sdp)
+        assertEquals(com.sotto.app.domain.model.DirectPayload.Kind.NO, com.sotto.app.domain.model.DirectPayload.decode(com.sotto.app.domain.model.DirectPayload.encode("f1", com.sotto.app.domain.model.DirectPayload.Kind.NO))!!.kind)
+        assertNull(com.sotto.app.domain.model.DirectPayload.decode("\u0001sotto/direct/v1:{\"file\":\"f1\",\"kind\":\"steal\"}"))
+        assertNull(com.sotto.app.domain.model.DirectPayload.decode("\u0001sotto/direct/v1:{\"kind\":\"offer\"}"))
+    }
 }

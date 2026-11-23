@@ -311,11 +311,34 @@ class MessageRepositoryImpl @Inject constructor(
      */
     override suspend fun finishSend(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
-        if (!entity.isOutgoing || entity.state != MessageState.SENDING.name) return
+        if (!entity.isOutgoing) return
+        val me = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+        val token = ReceiptManager.relayMessageId(me, entity.id)
+        // Its message is out (sent, delivered or even seen) but the file isn't through yet.
+        val messageOut = entity.state != MessageState.SENDING.name && entity.state != MessageState.FAILED.name
+        val sentDirect = messageOut && entity.mediaKind == MediaKind.FILE.wire &&
+            entity.mediaState != com.sotto.app.domain.model.FileState.SENT.wire
+        if (sentDirect) {
+            // Its message went out offering the file directly; that didn't happen (or this
+            // job was interrupted): the store it is, and the contact hears where.
+            storeAfterDirect(entity, token)
+            return
+        }
+        if (entity.state != MessageState.SENDING.name) return
+        if (entity.mediaKind == MediaKind.FILE.wire && entity.attachmentId == null && mayOfferDirect(entity.recipientId)) {
+            sendFileDirectFirst(entity, me, token)
+            return
+        }
         val ready = ensureUploaded(entity)
+        sendEnvelope(ready, me, wirePayload(ready, me))
+    }
+
+    /** Encrypts, signs and sends our stored message [entity] with [payload]; marks it SENT. */
+    private suspend fun sendEnvelope(entity: MessageEntity, me: String, payload: String) {
+        val messageId = entity.id
+        val ready = entity
         kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-            val me = keyManager.getUserId() ?: throw IllegalStateException("No identity")
-            val envelope = encryptFor(ready.recipientId, wirePayload(ready, me).toByteArray(Charsets.UTF_8))
+            val envelope = encryptFor(ready.recipientId, payload.toByteArray(Charsets.UTF_8))
             messageDao.updateEncryptedBody(messageId, envelope.ciphertext, envelope.nonce)
             val sigPayload = buildMessageSigPayload(me, ready.recipientId, envelope.nonce, envelope.ciphertext)
             val response = apiService.sendMessage(
@@ -331,6 +354,151 @@ class MessageRepositoryImpl @Inject constructor(
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
             updateConversationPreview(ready.conversationId, ready.recipientId, ready.preview(), response.timestamp)
         }
+    }
+
+    // ── Direct transfers (ADR-29) ────────────────────────────────────────────
+
+    /** Handshake messages waiting to be picked up, by peer, file and who waits. */
+    private val directWaits = ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<com.sotto.app.domain.model.DirectPayload.Decoded>>()
+
+    private fun directKey(peer: String, file: String, role: String) = "$peer|$file|$role"
+
+    private fun expectDirect(peer: String, file: String, role: String) =
+        kotlinx.coroutines.CompletableDeferred<com.sotto.app.domain.model.DirectPayload.Decoded>().also {
+            directWaits[directKey(peer, file, role)] = it
+        }
+
+    /** As for direct calls (ADR-17): our own setting on, and a contact we added or accepted. */
+    private suspend fun mayOfferDirect(peer: String): Boolean {
+        val on = runCatching { settingsRepository.get().getPrivacySettings().first().directCalls }.getOrDefault(false)
+        if (!on) return false
+        val contact = contactDao.getByUserId(peer) ?: return false
+        return com.sotto.app.call.isTrustedPeer(true, contact.verified, conversationDao.getByContactId(peer)?.isApproved == true)
+    }
+
+    /** Our consent to a direct transfer: as [mayOfferDirect], on an unmetered network (Wi-Fi). */
+    private suspend fun mayAcceptDirect(peer: String): Boolean =
+        mayOfferDirect(peer) && fileDrop.onUnmeteredNetwork()
+
+    private suspend fun stunServers(): List<String> =
+        runCatching { apiService.getIceServers().iceServers.map { it.urls }.filter { it.startsWith("stun:") } }.getOrDefault(emptyList())
+
+    /**
+     * Sends the file message offering the file phone to phone, waits for the contact's phone
+     * to connect and sends it straight over; if that doesn't happen, the store as usual.
+     */
+    private suspend fun sendFileDirectFirst(entity: MessageEntity, me: String, token: String) {
+        val peer = entity.recipientId
+        val offerWait = expectDirect(peer, token, ROLE_SENDER)
+        sendEnvelope(entity, me, wirePayload(entity, me, direct = true))
+        messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.DIRECT.wire)
+        val reply = kotlinx.coroutines.withTimeoutOrNull(DIRECT_OFFER_WAIT_MS) { offerWait.await() }
+        directWaits.remove(directKey(peer, token, ROLE_SENDER))
+        val stun = if (reply?.kind == com.sotto.app.domain.model.DirectPayload.Kind.OFFER) stunServers() else emptyList()
+        if (reply?.kind == com.sotto.app.domain.model.DirectPayload.Kind.OFFER && stun.isNotEmpty()) {
+            val link = fileDrop.newDirectLink(stun)
+            val doneWait = expectDirect(peer, token, ROLE_DONE)
+            try {
+                val answer = link.answer(reply.sdp)
+                sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(token, com.sotto.app.domain.model.DirectPayload.Kind.ANSWER, answer))
+                link.awaitOpen(DIRECT_OPEN_MS)
+                fileDrop.sendDirect(entity.id, link)
+                val done = kotlinx.coroutines.withTimeout(DIRECT_DONE_MS) { doneWait.await() }
+                if (done.kind == com.sotto.app.domain.model.DirectPayload.Kind.DONE) {
+                    messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.SENT.wire)
+                    if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.i("MessageRepo", "File ${entity.id.take(8)} went directly")
+                    return
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e // the job was stopped (no network, say): it runs again and goes to the store
+            } catch (e: Exception) {
+                if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Direct transfer failed: ${e.message}")
+            } finally {
+                directWaits.remove(directKey(peer, token, ROLE_DONE))
+                link.close()
+            }
+        }
+        storeAfterDirect(messageDao.getById(entity.id) ?: return, token)
+    }
+
+    /** The direct transfer didn't happen: upload the file, and tell the contact where it is. */
+    private suspend fun storeAfterDirect(entity: MessageEntity, token: String) {
+        val ready = ensureUploaded(entity)
+        val id = ready.attachmentId ?: return
+        sendUnstored(entity.recipientId, com.sotto.app.domain.model.FileUpdatePayload.encode(token, id))
+    }
+
+    /**
+     * The receiving side of a direct transfer, run in the background: offer a connection,
+     * take the file over it, check every segment, and confirm. On any failure the sender
+     * hears NO and the file comes through the store instead.
+     */
+    override suspend fun receiveDirect(messageId: String) {
+        val entity = messageDao.getById(messageId) ?: return
+        if (entity.isOutgoing || entity.mediaState != com.sotto.app.domain.model.FileState.DIRECT.wire) return
+        val peer = entity.senderId
+        val key = entity.mediaKey ?: return
+        val stun = stunServers()
+        // A direct transfer that broke off (this job was stopped) isn't tried again: the
+        // sender goes to the store, and the download there continues from what came.
+        if (stun.isEmpty() || fileDrop.hasPartial(messageId)) {
+            runCatching { sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(messageId, com.sotto.app.domain.model.DirectPayload.Kind.NO)) }
+            return
+        }
+        val link = fileDrop.newDirectLink(stun)
+        val answerWait = expectDirect(peer, messageId, ROLE_RECEIVER)
+        try {
+            val offer = link.offer()
+            sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(messageId, com.sotto.app.domain.model.DirectPayload.Kind.OFFER, offer))
+            val reply = kotlinx.coroutines.withTimeout(DIRECT_ANSWER_WAIT_MS) { answerWait.await() }
+            if (reply.kind != com.sotto.app.domain.model.DirectPayload.Kind.ANSWER) return
+            link.acceptAnswer(reply.sdp)
+            link.awaitOpen(DIRECT_OPEN_MS)
+            val expected = com.sotto.app.data.media.SegmentedCrypto.encryptedSize(com.sotto.app.data.media.Padme.padded(entity.mediaSize))
+            fileDrop.receiveDirect(messageId, key, expected, link)
+            messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
+            sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(messageId, com.sotto.app.domain.model.DirectPayload.Kind.DONE))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Direct receive failed: ${e.message}")
+            runCatching { sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(messageId, com.sotto.app.domain.model.DirectPayload.Kind.NO)) }
+        } finally {
+            directWaits.remove(directKey(peer, messageId, ROLE_RECEIVER))
+            link.close()
+        }
+    }
+
+    /** A handshake message from [sender]: handed to whoever waits for it, if it names a file of theirs. */
+    private suspend fun applyDirect(sender: String, me: String, plaintext: String) {
+        val msg = com.sotto.app.domain.model.DirectPayload.decode(plaintext) ?: return
+        // Only whoever waits on this peer and file gets it: a stray or forged handshake
+        // finds nobody waiting and is dropped.
+        val fileKey = msg.file
+        for (role in listOf(ROLE_SENDER, ROLE_RECEIVER, ROLE_DONE)) {
+            val wait = directWaits[directKey(sender, fileKey, role)] ?: continue
+            val fits = when (msg.kind) {
+                com.sotto.app.domain.model.DirectPayload.Kind.OFFER -> role == ROLE_SENDER
+                com.sotto.app.domain.model.DirectPayload.Kind.ANSWER -> role == ROLE_RECEIVER
+                com.sotto.app.domain.model.DirectPayload.Kind.DONE -> role == ROLE_DONE
+                com.sotto.app.domain.model.DirectPayload.Kind.NO -> true
+            }
+            if (fits) wait.complete(msg)
+        }
+    }
+
+    /** The sender put the file in the store after all: it can be downloaded from there. */
+    private suspend fun applyFileUpdate(sender: String, plaintext: String) {
+        val update = com.sotto.app.domain.model.FileUpdatePayload.decode(plaintext) ?: return
+        val entity = messageDao.getById(update.file) ?: return
+        if (entity.isOutgoing || entity.senderId != sender || entity.mediaKind != MediaKind.FILE.wire) return
+        if (entity.mediaState == com.sotto.app.domain.model.FileState.READY.wire) {
+            // We have it already (directly): it needn't wait in the store.
+            runCatching { apiService.deleteAttachment(update.id) }
+            return
+        }
+        messageDao.setAttachmentId(entity.id, update.id)
+        messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.REMOTE.wire)
     }
 
     override suspend fun markSendFailed(messageId: String) {
@@ -628,16 +796,17 @@ class MessageRepositoryImpl @Inject constructor(
      * the original's own id when [me] received it, or derived from our local id when we
      * sent it.
      */
-    private suspend fun wirePayload(entity: MessageEntity, me: String): String {
+    private suspend fun wirePayload(entity: MessageEntity, me: String, direct: Boolean = false): String {
         val replyTo = entity.replyToId
         val to = replyTo?.let { if (entity.replyToOwn) ReceiptManager.relayMessageId(me, it) else it }
         if (entity.mediaKind == MediaKind.FILE.wire) {
-            val id = entity.attachmentId ?: throw IllegalStateException("File not uploaded")
+            // Offered phone to phone first: no id in the store yet.
+            val id = if (direct) "" else entity.attachmentId ?: throw IllegalStateException("File not uploaded")
             val key = entity.mediaKey ?: throw IllegalStateException("File without a key")
             val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
             return com.sotto.app.domain.model.FilePayload.encode(
                 id, key, entity.mediaName ?: "file", entity.mediaMime ?: "application/octet-stream",
-                entity.mediaSize, entity.plaintext, reply, entity.thumbnail, entity.mediaDurationMs,
+                entity.mediaSize, entity.plaintext, reply, entity.thumbnail, entity.mediaDurationMs, direct,
             )
         }
         val media = entity.media()
@@ -959,6 +1128,17 @@ class MessageRepositoryImpl @Inject constructor(
             receivedIds.add(dto.messageId)
             return
         }
+        // A direct transfer's handshake, or a file that went to the store after all.
+        if (com.sotto.app.domain.model.DirectPayload.isDirect(plaintextStr)) {
+            applyDirect(dto.senderId, localUserId, plaintextStr)
+            receivedIds.add(dto.messageId)
+            return
+        }
+        if (com.sotto.app.domain.model.FileUpdatePayload.isUpdate(plaintextStr)) {
+            applyFileUpdate(dto.senderId, plaintextStr)
+            receivedIds.add(dto.messageId)
+            return
+        }
         // A reaction: it goes on the message it names, and is no message of its own.
         if (ReactionPayload.isReaction(plaintextStr)) {
             applyReceivedReaction(dto.senderId, localUserId, plaintextStr)
@@ -1022,13 +1202,28 @@ class MessageRepositoryImpl @Inject constructor(
             mediaHeight = media?.media?.height ?: 0,
             mediaName = file?.name,
             mediaSize = file?.size ?: media?.hd?.size ?: 0,
-            mediaState = if (file != null || media?.hd != null) com.sotto.app.domain.model.FileState.REMOTE.wire else null,
-            attachmentId = file?.id ?: media?.hd?.id,
+            mediaState = when {
+                file?.direct == true && file.id.isEmpty() -> com.sotto.app.domain.model.FileState.DIRECT.wire
+                file != null || media?.hd != null -> com.sotto.app.domain.model.FileState.REMOTE.wire
+                else -> null
+            },
+            attachmentId = file?.id?.ifEmpty { null } ?: media?.hd?.id,
             hdKey = media?.hd?.key,
             thumbnail = file?.thumbnail,
         )
         messageDao.insert(entity)
         receivedIds.add(dto.messageId)
+        if (entity.mediaState == com.sotto.app.domain.model.FileState.DIRECT.wire) {
+            // Offered phone to phone: take it when we may (our own consent, Wi-Fi); else
+            // say no at once, so the sender puts it in the store without waiting.
+            if (mayAcceptDirect(dto.senderId)) {
+                transfers.receiveDirect(dto.messageId)
+            } else {
+                runCatching {
+                    sendUnstored(dto.senderId, com.sotto.app.domain.model.DirectPayload.encode(dto.messageId, com.sotto.app.domain.model.DirectPayload.Kind.NO))
+                }
+            }
+        }
         val shownText = entity.preview()
 
         val isActive = conversationId == activeConversationId
@@ -1409,6 +1604,14 @@ class MessageRepositoryImpl @Inject constructor(
     companion object {
         /** Server default page size for GET /v1/messages/pending. */
         private const val PENDING_PAGE_SIZE = 100
+        private const val ROLE_SENDER = "s"
+        private const val ROLE_RECEIVER = "r"
+        private const val ROLE_DONE = "d"
+        /** How long the sender waits for the contact's phone to offer a direct connection. */
+        private const val DIRECT_OFFER_WAIT_MS = 45_000L
+        private const val DIRECT_ANSWER_WAIT_MS = 30_000L
+        private const val DIRECT_OPEN_MS = 20_000L
+        private const val DIRECT_DONE_MS = 60_000L
         /** Largest file sent through the store: its ciphertext stays within the relay's 100 MiB. */
         const val MAX_FILE_BYTES = 100L * 1024 * 1024 - 64 * 1024
         /** How many of our own newest messages a received reply's original is looked for in. */
