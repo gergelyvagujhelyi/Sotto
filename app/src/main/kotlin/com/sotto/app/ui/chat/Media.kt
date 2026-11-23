@@ -163,6 +163,18 @@ private fun Modifier.mediaClickable(
     )
 }
 
+/**
+ * The delivery state a bubble shows. A file's message arrives before the file does, so our
+ * file shows as sent (one tick) until it's on the contact's phone, then as delivered or seen.
+ */
+internal val Message.shownState: com.sotto.app.domain.model.MessageState
+    get() {
+        val m = media ?: return state
+        val fileNotThere = isOutgoing && m.kind == MediaKind.FILE && m.fileState != com.sotto.app.domain.model.FileState.RECEIVED
+        val reached = state == com.sotto.app.domain.model.MessageState.DELIVERED || state == com.sotto.app.domain.model.MessageState.SEEN
+        return if (fileNotThere && reached) com.sotto.app.domain.model.MessageState.SENT else state
+    }
+
 /** "1.4 MB" */
 internal fun byteSize(bytes: Long): String = when {
     bytes < 1024 -> "$bytes B"
@@ -193,6 +205,8 @@ private fun FileCard(message: Message, contentColor: Color) {
         state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
         state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
         state == com.sotto.app.domain.model.FileState.UNSENT -> "Not sent · Tap to retry"
+        message.isOutgoing && state == com.sotto.app.domain.model.FileState.SENT -> "Not downloaded yet"
+        message.isOutgoing && state == com.sotto.app.domain.model.FileState.RECEIVED -> "Delivered"
         else -> "Tap to open"
     }
     // Our own file is on this phone from the start: it opens while it's still being sent.

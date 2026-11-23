@@ -139,6 +139,13 @@ interface MessageDao {
     @Query("UPDATE messages SET hdKey = NULL, attachmentId = NULL, mediaState = NULL, mediaSize = 0 WHERE id = :messageId")
     suspend fun clearHd(messageId: String)
 
+    /** Our files to [recipientId] that they don't have yet, as far as we know. */
+    @Query(
+        "SELECT id FROM messages WHERE isOutgoing = 1 AND recipientId = :recipientId AND mediaKind = 'file' " +
+            "AND (mediaState IS NULL OR mediaState != 'received')"
+    )
+    suspend fun getOutgoingFilesNotReceived(recipientId: String): List<String>
+
     @Query("UPDATE messages SET mediaState = :state WHERE id = :messageId")
     suspend fun setMediaState(messageId: String, state: String)
 

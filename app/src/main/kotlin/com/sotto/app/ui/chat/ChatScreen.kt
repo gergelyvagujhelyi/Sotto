@@ -1179,7 +1179,7 @@ private fun ChatRowItem(
                         media = message.media?.let { { color -> BubbleMedia(message, color) } },
                         timestamp = time,
                         isOutgoing = message.isOutgoing,
-                        state = message.state,
+                        state = message.shownState,
                         groupedWithPrevious = row.groupedWithPrevious,
                         quote = message.bubbleQuote(contactName),
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },

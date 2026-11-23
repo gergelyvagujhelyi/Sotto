@@ -343,6 +343,23 @@ class MessageSigningAndResetTest {
         coVerify(exactly = 0) { apiService.sendMessage(match { it.clientMessageId == "f3" }) }
     }
 
+    @Test
+    fun `a contact's word that they have our file marks it delivered, and only that file`() = runTest {
+        every { keyManager.getUserId() } returns "me"
+        coEvery { contactDao.getByUserId("peer") } returns classicalContact
+        coEvery { messageDao.getOutgoingFilesNotReceived("peer") } returns listOf("other", "f4")
+        val theirId = ReceiptManager.relayMessageId("me", "f4")
+        coEvery { cryptoEngine.decrypt(any(), any(), any()) } returns
+            com.sotto.app.domain.model.FileUpdatePayload.encodeGot(theirId).toByteArray()
+        coEvery { apiService.fetchPendingMessages() } returns listOf(chatDto("u1"))
+
+        repo.fetchPendingAndWait()
+
+        coVerify { messageDao.setMediaState("f4", "received") }
+        coVerify(exactly = 0) { messageDao.setMediaState("other", any()) }
+        coVerify(exactly = 0) { messageDao.insert(any()) }
+    }
+
     // ── The pending queue ───────────────────────────────────────────────────
 
     @Test

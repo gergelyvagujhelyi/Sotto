@@ -7,6 +7,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 - **Photo preview: Send always reachable** — The preview before sending a photo is now drawn in the app's own window instead of a separate one, so its caption and Send button stay above the navigation bar and the keyboard on every phone. On some phones they sat too low to tap.
 - **React to photos, videos and voice messages** — Holding a photo, a file's preview or a voice message now opens the reactions, and double-tapping a photo or file hearts it, like the rest of the bubble. Before, only the thin edge of the bubble around them reacted.
 - **Open your own file while it's sending** — A video or file you sent opens with a tap at once, also while it's still "Sending directly…" or uploading. Before, its preview didn't react until the transfer was done.
+- **Delivered means the file is there** — For a file or video, the ticks used to say only that its message had arrived, while the file itself could still be on its way or waiting to be downloaded. Now your file shows one tick and "Not downloaded yet" until it's on your contact's phone (it came directly, or they downloaded it); then it shows delivered (or read) and "Delivered". Your contact's Sotto needs this version to tell yours; files sent before it keep one tick.
+- **Direct calls setting mentions files** — Its description now says that files, too, go phone to phone when it's on.
 - **A file that couldn't follow its message says so** — If a file offered phone to phone can't be stored either, its message stays delivered and the file shows "Not sent · Tap to retry"; a tap tries the storage again and your contact gets it from there. Before, it stayed at "Waiting to upload…" with no way to retry.
 
 ## 0.7.7 — 2026-11-23

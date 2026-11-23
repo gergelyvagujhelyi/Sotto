@@ -521,10 +521,10 @@ fun SettingsContent(
                     SettingsSwitchRow(
                         icon = Icons.Rounded.SwapCalls,
                         title = "Direct calls",
-                        subtitle = "When a contact also has this on, call audio goes straight between your " +
-                            "phones instead of through the relay: better sound, less relay data, but each of " +
-                            "you can see the other's IP addresses (internet, home network and mobile). Calls " +
-                            "with people who aren't your contacts always use the relay.",
+                        subtitle = "When a contact also has this on, call audio and files go straight between " +
+                            "your phones instead of through the relay: better sound, less relay data, but each of " +
+                            "you can see the other's IP addresses (internet, home network and mobile). Calls and " +
+                            "files with people who aren't your contacts always use the relay.",
                         checked = settings.directCalls,
                         onCheckedChange = onDirectCallsChange,
                     )
