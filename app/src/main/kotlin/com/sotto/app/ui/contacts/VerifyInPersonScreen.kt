@@ -281,8 +281,8 @@ private fun StatusCard(name: String, seed: String, verified: Boolean, byCall: Bo
                     Text(
                         when {
                             verified -> "Verified in person"
-                            byCall -> "Verified by call only"
-                            else -> "Not verified in person"
+                            byCall -> "Verified by phone only"
+                            else -> "Not verified"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = tint,
@@ -296,7 +296,7 @@ private fun StatusCard(name: String, seed: String, verified: Boolean, byCall: Bo
                 if (verified) {
                     "You've checked $name's keys face to face. You can check again any time."
                 } else {
-                    "You compared a code with $name in a call. Meeting is stronger proof: verify in person when you can."
+                    "You verified $name by phone. Meeting is stronger proof: verify in person when you can."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -322,7 +322,7 @@
 
 ## ADR-30: Trust comes only from meeting in person
 
-**Decision**: Every contact shows "Not verified in person" until the user checks their keys face to face: holding the two phones together (NFC) or scanning the QR code on the other phone's "Verify in person" screen. Both carry an `InPersonCode`, `sotto-verify:1:<user id>:<base64url fingerprint>`: the full 256-bit fingerprint over all four public keys, not the share code's 96 bits. `InPersonVerifier` compares it with the fingerprint pinned for the contact (following a rotation their old keys endorsed first) and only then sets `contacts.verifiedInPerson`. Before the first message to a contact who isn't verified in person, the chat warns once (`contacts.inPersonWarned`). The existing `verified` flag keeps its meaning (the relay's keys matched a share code) and still decides direct calls (ADR-17).
+**Decision**: Every contact shows "Not verified" (until 0.7.11: "Not verified in person") until the user checks their keys face to face: holding the two phones together (NFC) or scanning the QR code on the other phone's "Verify in person" screen. Both carry an `InPersonCode`, `sotto-verify:1:<user id>:<base64url fingerprint>`: the full 256-bit fingerprint over all four public keys, not the share code's 96 bits. `InPersonVerifier` compares it with the fingerprint pinned for the contact (following a rotation their old keys endorsed first) and only then sets `contacts.verifiedInPerson`. Before the first message to a contact who isn't verified in person, the chat warns once (`contacts.inPersonWarned`). The existing `verified` flag keeps its meaning (the relay's keys matched a share code) and still decides direct calls (ADR-17).
 
 - **NFC**: both phones have the screen open. Android listens as a card (host card emulation, `InPersonApduService`, proprietary AID `F0534F54544F01`, category "other", only when unlocked) and polls at the same time (foreground dispatch on `MainActivity`), so whichever phone finds the other reads it. One exchange APDU carries the reader's code and the answer carries the card's, so a single tap checks both phones. The card answers only while a verify screen is in front.
 - **QR**: each phone checks only the code it scanned, so both scan.
@@ -334,9 +334,9 @@
 
 ---
 
-## ADR-31: Verifying by call, as a weaker level than in person
+## ADR-31: Verifying by phone (in a call), as a weaker level than in person
 
-**Decision**: During a connected Sotto call with a saved contact, either person can tap the code button. Once both have, each phone shows six digits; the two people read them to each other, and "It matches" marks the contact `contacts.verifiedByCall`. The chat then says "Verified by call only", never "Verified in person" (ADR-30), and the one-time warning before the first message no longer shows for them. Only meeting in person removes the "only".
+**Decision**: During a connected Sotto call with a saved contact, either person can tap "Verify by phone" (under the call's details; until 0.7.11 a "123" button in the corner). Once both have, each phone shows six digits; the two people read them to each other, and "It matches" marks the contact `contacts.verifiedByCall`. The chat then says "Verified by phone only" (0.7.10: "Verified by call only"), never "Verified in person" (ADR-30), and the one-time warning before the first message no longer shows for them. Only meeting in person removes the "only".
 
 - **Protocol** (`CallVerification`, signal `call_verify`, kinds `commit` and `reveal`, end-to-end encrypted and signed like every call signal): each phone sends SHA-256 of a random 32-byte value, and reveals the value only after it has sent its own commitment and received the other's. The code is SHA-256(`Sotto-call-verify-v1` ‖ call ID ‖ caller's fingerprint ‖ callee's fingerprint ‖ caller's value ‖ callee's value), first 32 bits mod 10⁶, with each fingerprint as that phone has it pinned.
 - **Why the fingerprints are in the code**: someone in the middle who passed every message through unchanged would otherwise give both phones the same values and the same code. Each phone sees other keys for the other person then, so the codes differ.

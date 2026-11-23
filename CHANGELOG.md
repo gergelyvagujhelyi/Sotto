@@ -8,6 +8,14 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 - **Relay: unused routes gone** — `DELETE /v1/push/register` and call signals sent over the WebSocket; no app ever used them. nginx no longer passes `/metrics` through (it's read inside the container).
 - **Relay README: the endpoint table is complete** — With receipts, attachments, the release call, the invite page and App Links, and who may call each.
 
+## 0.7.11 — 2026-11-23
+
+Update both phones: with 0.7.10 the code for verifying by phone never appeared.
+
+- **Verify by phone works** — In 0.7.10 the code never appeared: each phone sent its half, but the other phone's connection to the relay dropped it unread, so both kept waiting. A test now checks that the app takes every kind of call signal the relay forwards. Update both phones.
+- **"Not verified"** — A contact you haven't checked yet now says "Not verified" instead of "Not verified in person", which read as if some other check had happened.
+- **"Verify by phone"** — The call screen's "123" button is now a labelled **Verify by phone** button under the call's details, and the dialog says what it's for. A contact checked this way says **"Verified by phone only"**.
+
 ## 0.7.10 — 2026-11-23
 
 Update both phones to compare a code in a call.

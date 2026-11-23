@@ -277,8 +277,7 @@ class WebSocketClient @Inject constructor(
                 // The app of the relay's version is out (it was on its way).
                 "app_release" -> relayReport(msg)?.let { (version, ready) -> appUpdates.report(version, ready) }
 
-                "call_offer", "call_answer", "call_ice_candidate",
-                "call_hangup", "call_busy", "call_reject", "call_ringing", "call_ice_restart" -> {
+                in CALL_SIGNAL_TYPES -> {
                     val signal = CallSignalDto(
                         senderId = msg["sender_id"]?.jsonPrimitive?.content ?: return,
                         signalType = msg["type"]?.jsonPrimitive?.content ?: return,
@@ -337,3 +336,14 @@ internal fun shouldReconnect(state: SocketState, sinceStateMs: Long, sinceFrameM
     SocketState.CONNECTING -> sinceStateMs > CONNECT_GRACE_MS
     SocketState.OPEN -> sinceFrameMs > QUIET_MS
 }
+
+/**
+ * Every call signal type the relay forwards (server/app/services/call_signals.py). Anything
+ * missing here is dropped unread: 0.7.10's call_verify was, so the code to compare never
+ * appeared. WebSocketCallSignalsTest keeps the two lists the same.
+ */
+internal val CALL_SIGNAL_TYPES = setOf(
+    "call_offer", "call_answer", "call_ice_candidate",
+    "call_hangup", "call_busy", "call_reject", "call_ringing", "call_ice_restart",
+    "call_verify",
+)

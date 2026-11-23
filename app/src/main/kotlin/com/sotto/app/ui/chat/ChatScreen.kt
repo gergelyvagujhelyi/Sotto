@@ -416,7 +416,7 @@ internal fun NotVerifiedWarningDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.GppMaybe, contentDescription = null, tint = Aurora.colors.warning) },
-        title = { Text("$who isn't verified in person") },
+        title = { Text("$who isn't verified") },
         text = {
             Text(
                 "You haven't checked $who's keys face to face, so you can't be sure this chat is really " +
@@ -957,7 +957,7 @@ private fun ChatTopBar(
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = if (verifiedByCall) "Verified by call only" else "Not verified in person",
+                                    text = if (verifiedByCall) "Verified by phone only" else "Not verified",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = tint,
                                     maxLines = 1,
