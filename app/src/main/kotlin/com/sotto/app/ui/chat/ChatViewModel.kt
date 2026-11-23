@@ -94,6 +94,11 @@ class ChatViewModel @Inject constructor(
         identityRepository.observeContact(contactId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    /** The user saw the one-time "not verified in person" warning and chose to send anyway. */
+    fun markInPersonWarned() {
+        viewModelScope.launch { identityRepository.markInPersonWarned(contactId) }
+    }
+
     /** Give the contact a name on this phone; blank clears it. */
     fun rename(nickname: String) {
         viewModelScope.launch { identityRepository.renameContact(contactId, nickname) }

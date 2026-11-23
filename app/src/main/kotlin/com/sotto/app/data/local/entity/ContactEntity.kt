@@ -22,6 +22,14 @@ data class ContactEntity(
     val profileName: String? = null,
     /** Louder was on in the last call with this contact: calls with them start with it on. */
     val louderVoice: Boolean = false,
+    /**
+     * The user checked this contact's keys face to face: a QR code or NFC tap from their
+     * phone matched [keyFingerprint] (InPersonVerifier). Kept through a rotation their old
+     * keys endorsed; cleared when keys are replaced any other way.
+     */
+    val verifiedInPerson: Boolean = false,
+    /** The user was told once, before their first message, that this contact isn't verified in person. */
+    val inPersonWarned: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -37,7 +45,9 @@ data class ContactEntity(
             keyFingerprint == other.keyFingerprint &&
             nickname == other.nickname &&
             profileName == other.profileName &&
-            louderVoice == other.louderVoice
+            louderVoice == other.louderVoice &&
+            verifiedInPerson == other.verifiedInPerson &&
+            inPersonWarned == other.inPersonWarned
     }
 
     override fun hashCode(): Int {
@@ -53,6 +63,8 @@ data class ContactEntity(
         result = 31 * result + (nickname?.hashCode() ?: 0)
         result = 31 * result + (profileName?.hashCode() ?: 0)
         result = 31 * result + louderVoice.hashCode()
+        result = 31 * result + verifiedInPerson.hashCode()
+        result = 31 * result + inPersonWarned.hashCode()
         return result
     }
 }

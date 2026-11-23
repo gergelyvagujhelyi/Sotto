@@ -82,6 +82,8 @@ import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.GppMaybe
+import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.MarkChatUnread
 import androidx.compose.material.icons.rounded.PersonOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -175,6 +177,7 @@ import kotlin.time.Duration.Companion.minutes
 fun ChatScreen(
     onBack: () -> Unit,
     onCallClick: (String, String) -> Unit = { _, _ -> },
+    onVerifyClick: (String) -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel(),
 ) {
     val messages by viewModel.messages.collectAsState()
@@ -220,6 +223,34 @@ fun ChatScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmRemove by remember { mutableStateOf(false) }
     var renaming by rememberSaveable { mutableStateOf(false) }
+
+    // Before the first message to someone not verified in person, warn once (the user's
+    // choice: trust comes only from meeting). Not for a request: replying is refused anyway.
+    val warnBeforeSending = contact?.let { !it.verifiedInPerson && !it.inPersonWarned } == true &&
+        conversation?.isApproved != false
+    var heldSend by remember { mutableStateOf<HeldSend?>(null) }
+    fun gated(onCancel: () -> Unit = {}, send: () -> Unit) {
+        if (warnBeforeSending) heldSend = HeldSend(send, onCancel) else send()
+    }
+    heldSend?.let { held ->
+        NotVerifiedWarningDialog(
+            name = conversation?.contactDisplayName,
+            onSendAnyway = {
+                heldSend = null
+                viewModel.markInPersonWarned()
+                held.send()
+            },
+            onVerify = {
+                heldSend = null
+                held.cancel()
+                onVerifyClick(viewModel.contactId)
+            },
+            onDismiss = {
+                heldSend = null
+                held.cancel()
+            },
+        )
+    }
 
     if (renaming) {
         RenameContactDialog(
@@ -341,7 +372,7 @@ fun ChatScreen(
             }
         },
         onComposerChange = viewModel::updateComposer,
-        onSend = viewModel::send,
+        onSend = { gated { viewModel.send() } },
         onRetry = viewModel::retrySend,
         onReEstablishSession = viewModel::reEstablishSession,
         onAcceptRequest = viewModel::acceptMessageRequest,
@@ -355,14 +386,44 @@ fun ChatScreen(
         onReply = viewModel::startReply,
         onCancelReply = viewModel::cancelReply,
         onReact = viewModel::react,
-        onSendVoice = viewModel::sendVoice,
-        onSendPhoto = viewModel::sendPhoto,
+        onSendVoice = { recording -> gated(onCancel = { recording.file.delete() }) { viewModel.sendVoice(recording) } },
+        onSendPhoto = { uri, hd, caption -> gated { viewModel.sendPhoto(uri, hd, caption) } },
         loadHd = viewModel::loadHd,
-        onSendFile = viewModel::sendFile,
+        onSendFile = { uri -> gated { viewModel.sendFile(uri) } },
         checkMediaAllowed = viewModel::checkMediaAllowed,
         onFileTap = viewModel::onFileTap,
         fileProgress = fileProgress,
         loadMedia = viewModel::loadMedia,
+        verifiedInPerson = contact?.verifiedInPerson,
+        onVerify = { if (isResumed()) onVerifyClick(viewModel.contactId) },
+    )
+}
+
+/** A send held back while the "not verified in person" warning asks first. */
+private class HeldSend(val send: () -> Unit, val cancel: () -> Unit)
+
+/** Shown once per contact, before the first message to someone not verified in person. */
+@Composable
+internal fun NotVerifiedWarningDialog(
+    name: String?,
+    onSendAnyway: () -> Unit,
+    onVerify: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val who = name ?: "this contact"
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.GppMaybe, contentDescription = null, tint = Aurora.colors.warning) },
+        title = { Text("$who isn't verified in person") },
+        text = {
+            Text(
+                "You haven't checked $who's keys face to face, so you can't be sure this chat is really " +
+                    "with them. When you meet, open Verify in person on both phones and hold them together, " +
+                    "or scan each other's codes.\n\nThis warning shows once for $who.",
+            )
+        },
+        confirmButton = { TextButton(onClick = onSendAnyway) { Text("Send anyway") } },
+        dismissButton = { TextButton(onClick = onVerify) { Text("Verify in person") } },
     )
 }
 
@@ -414,6 +475,9 @@ fun ChatContent(
     fileProgress: Map<String, Float> = emptyMap(),
     /** The decrypted media of a message, for its bubble. */
     loadMedia: suspend (String) -> ByteArray? = { null },
+    /** Null while unknown (still loading): the header shows neither state then. */
+    verifiedInPerson: Boolean? = null,
+    onVerify: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -607,6 +671,8 @@ fun ChatContent(
                     onRename = onRename,
                     onDelete = onDelete,
                     onRemoveContact = onRemoveContact,
+                    verifiedInPerson = verifiedInPerson,
+                    onVerify = onVerify,
                 )
             },
         ) { padding ->
@@ -841,6 +907,8 @@ private fun ChatTopBar(
     onRename: () -> Unit,
     onDelete: () -> Unit,
     onRemoveContact: () -> Unit,
+    verifiedInPerson: Boolean? = null,
+    onVerify: () -> Unit = {},
 ) {
     val colors = MaterialTheme.colorScheme
     var showMenu by remember { mutableStateOf(false) }
@@ -867,11 +935,31 @@ private fun ChatTopBar(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        if (isEncrypted) {
+                        if (verifiedInPerson == false) {
+                            // Not checked face to face: say so where the name is, and lead to the check.
+                            Row(
+                                modifier = Modifier.clickable(onClickLabel = "Verify in person", onClick = onVerify),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Rounded.GppMaybe,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp),
+                                    tint = Aurora.colors.warning,
+                                )
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = "Not verified in person",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Aurora.colors.warning,
+                                    maxLines = 1,
+                                )
+                            }
+                        } else if (isEncrypted) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Rounded.Lock,
-                                    contentDescription = null,
+                                    if (verifiedInPerson == true) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
+                                    contentDescription = if (verifiedInPerson == true) "Verified in person" else null,
                                     modifier = Modifier.size(11.dp),
                                     tint = colors.tertiary,
                                 )
@@ -905,6 +993,20 @@ private fun ChatTopBar(
                         onDismissRequest = { showMenu = false },
                         shape = RoundedCornerShape(16.dp),
                     ) {
+                        DropdownMenuItem(
+                            text = { Text(if (verifiedInPerson == true) "Verified in person" else "Verify in person") },
+                            leadingIcon = {
+                                Icon(
+                                    if (verifiedInPerson == true) Icons.Rounded.VerifiedUser else Icons.Rounded.GppMaybe,
+                                    contentDescription = null,
+                                    tint = if (verifiedInPerson == true) Aurora.colors.success else Aurora.colors.warning,
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onVerify()
+                            },
+                        )
                         DropdownMenuItem(
                             text = { Text("Rename") },
                             leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },

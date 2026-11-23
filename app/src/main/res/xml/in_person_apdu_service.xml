@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- In-person verification by NFC (nfc/InPersonNfc.kt). Only on an unlocked phone; the AID is
+     proprietary (F0…) and in the "other" category, so it never shows among payment apps. -->
+<host-apdu-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/nfc_verify_service"
+    android:requireDeviceUnlock="true">
+    <aid-group
+        android:category="other"
+        android:description="@string/nfc_verify_service">
+        <aid-filter android:name="F0534F54544F01" />
+    </aid-group>
+</host-apdu-service>
