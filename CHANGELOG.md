@@ -6,6 +6,13 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.13 — 2026-11-23
+
+- **"Verified by phone" looks like it** — In the chat list, the chat header, your contacts and on the verify screen, a contact verified by phone now has the verified shield in purple with a small phone badge. The phone icon alone looked like there had been a call.
+- **A hung-up call ends on the other phone too** — When you hung up while the other phone's connection had just dropped (say, it was switching networks), the relay thought it had delivered the hangup and that phone kept trying to reconnect the call for up to a minute. The relay now also keeps the hangup (and reject, and busy) for 30 seconds, so the other phone gets it as soon as it's back.
+- **"Close" after a call** — Once a call has ended, the red "Cancel" button, which did nothing then, is a "Close" button that leaves the call screen at once.
+- **Clearer logs for adding in person** — Each in-person add and NFC tap logs its outcome (never keys or names), so a tap that adds without verifying can be explained.
+
 ## 0.7.12 — 2026-11-23
 
 - **One place to verify, with the choice explained** — Tapping "Not verified" under a contact's name, or ⋮ → Verify…, asks how: **In person** (stronger: meet and tap phones or scan their code) or **By phone** (weaker: a call and seven emoji, which relies on knowing their voice). By phone calls them, and the emoji open as soon as the call connects. The Verify in person screen also offers it ("Can't meet?"). In 0.7.11 Verify by phone was hard to find: only on a connected call's screen and in the first-message warning.

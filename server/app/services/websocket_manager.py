@@ -32,6 +32,11 @@ MAX_WS_CONNECTIONS_PER_USER = 5
 # seconds is presumed unread: see park_unconfirmed_offer.
 OFFER_CONFIRM_SECONDS = 3.0
 _CONFIRMING_SIGNALS = frozenset({"call_ringing", "call_busy", "call_reject", "call_hangup"})
+# Signals that end a call. Delivered to a socket, a copy is kept for _PENDING_SIGNAL_TTL as well:
+# a socket that died without closing (a phone losing its network mid-call) still takes the
+# send, and the phone, reconnecting, would otherwise never hear the call is over and keep
+# trying to reconnect it. Phones drop a signal they've already seen (same signature).
+_CALL_ENDING_SIGNALS = frozenset({"call_hangup", "call_reject", "call_busy"})
 _UNCONFIRMED_MAX_AGE = 60.0  # seconds; a safety net, entries normally go within seconds
 # While waiting for an app to show it reads its socket, how often to check whether that
 # socket died meanwhile. A dead phone's kernel answers the relay's send with a reset, so
@@ -411,6 +416,9 @@ class WebSocketManager:
 
         results = await asyncio.gather(*(self._send(recipient_id, ws, payload) for ws in sockets))
         delivered = any(results)
+        if signal_type in _CALL_ENDING_SIGNALS:
+            # Also for the phone's next socket, in case this one was already dead.
+            await self._store_pending_signal(recipient_id, payload, signal_type, sender_id)
         key = (recipient_id, call_id)
         if delivered and expect_answer and signal_type == "call_offer":
             now = time.monotonic()

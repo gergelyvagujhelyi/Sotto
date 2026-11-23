@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sotto.app.domain.model.Contact
+import com.sotto.app.domain.model.trust
 import com.sotto.app.ui.components.AppSnackbarHost
 import com.sotto.app.ui.components.AuroraTextField
 import com.sotto.app.ui.components.ShareCodeActions
@@ -630,12 +631,17 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onOpen: 
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                val (label, tint) = when {
-                    contact.verifiedInPerson -> "Verified in person" to aurora.success
-                    contact.verifiedByCall -> "Verified by phone only" to MaterialTheme.colorScheme.primary
-                    else -> "Not verified" to aurora.warning
+                val trust = contact.trust
+                val label = when (trust) {
+                    com.sotto.app.domain.model.ContactTrust.IN_PERSON -> "Verified in person"
+                    com.sotto.app.domain.model.ContactTrust.BY_PHONE -> "Verified by phone only"
+                    com.sotto.app.domain.model.ContactTrust.NONE -> "Not verified"
                 }
-                Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    com.sotto.app.ui.components.TrustIcon(trust, size = 13.dp)
+                    Spacer(Modifier.width(5.dp))
+                    Text(label, style = MaterialTheme.typography.labelSmall, color = com.sotto.app.ui.components.trustColor(trust), maxLines = 1)
+                }
             }
             Box {
                 var menu by remember { mutableStateOf(false) }

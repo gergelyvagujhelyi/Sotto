@@ -291,15 +291,13 @@ private fun StatusCard(name: String, seed: String, verified: Boolean, byCall: Bo
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.titleMedium)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
+                    com.sotto.app.ui.components.TrustIcon(
                         when {
-                            verified -> Icons.Rounded.VerifiedUser
-                            byCall -> Icons.Rounded.PhoneInTalk
-                            else -> Icons.Rounded.GppMaybe
+                            verified -> com.sotto.app.domain.model.ContactTrust.IN_PERSON
+                            byCall -> com.sotto.app.domain.model.ContactTrust.BY_PHONE
+                            else -> com.sotto.app.domain.model.ContactTrust.NONE
                         },
-                        contentDescription = null,
-                        tint = tint,
-                        modifier = Modifier.size(16.dp),
+                        size = 17.dp,
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(

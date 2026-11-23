@@ -10,10 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.PhoneInTalk
-import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -64,15 +61,7 @@ fun ConversationItem(
                     )
                     if (trust != null) {
                         Spacer(Modifier.width(6.dp))
-                        val (icon, tint, said) = when (trust) {
-                            com.sotto.app.domain.model.ContactTrust.IN_PERSON ->
-                                Triple(Icons.Rounded.VerifiedUser, com.sotto.app.ui.theme.Aurora.colors.success, "Verified in person")
-                            com.sotto.app.domain.model.ContactTrust.BY_PHONE ->
-                                Triple(Icons.Rounded.PhoneInTalk, colors.primary, "Verified by phone only")
-                            com.sotto.app.domain.model.ContactTrust.NONE ->
-                                Triple(Icons.Rounded.GppMaybe, com.sotto.app.ui.theme.Aurora.colors.warning, "Not verified")
-                        }
-                        Icon(imageVector = icon, contentDescription = said, modifier = Modifier.size(14.dp), tint = tint)
+                        TrustIcon(trust, size = 15.dp)
                     } else if (isEncrypted) {
                         Spacer(Modifier.width(6.dp))
                         Icon(

@@ -288,3 +288,27 @@ async def test_a_socket_gets_nothing_until_its_flush():
     assert [json.loads(p)["type"] for p in ws.sent] == ["call_offer"]
     assert mgr.is_online("bob")
     assert await mgr.notify("bob", "receipts")
+
+
+async def test_a_hangup_delivered_to_a_socket_is_kept_for_the_next_one_too():
+    """A socket that died without closing still takes the send; the phone, reconnecting,
+    must still hear that the call is over (it kept trying to reconnect the call)."""
+    mgr = WebSocketManager()
+    stale = FakeSocket()
+    await logged_in(mgr, "bob", stale)
+
+    delivered = await mgr.relay_call_signal("alice", "bob", "call_hangup", "c1", "")
+    assert delivered is True
+
+    # Bob's phone comes back on a new socket: the hangup is there for it.
+    fresh = FakeSocket()
+    await mgr.register("bob", fresh)
+    await mgr.flush_pending_signals("bob", fresh)
+    assert [json.loads(p)["type"] for p in fresh.sent] == ["call_hangup"]
+
+
+async def test_other_delivered_signals_are_not_kept():
+    mgr = WebSocketManager()
+    await logged_in(mgr, "bob", FakeSocket())
+    await mgr.relay_call_signal("alice", "bob", "call_ice_candidate", "c1", "ice")
+    assert "bob" not in mgr._pending_call_signals
