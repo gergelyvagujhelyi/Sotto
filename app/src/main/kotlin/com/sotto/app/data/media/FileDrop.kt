@@ -97,7 +97,12 @@ class FileDrop @Inject constructor(
         val key = SegmentedCrypto.newKey()
         val out = fileFor(name)
         val tmp = File(out.parentFile, out.name + ".tmp")
-        tmp.outputStream().buffered().use { SegmentedCrypto.encrypt(bytes.inputStream(), it, key) }
+        try {
+            tmp.outputStream().buffered().use { SegmentedCrypto.encrypt(bytes.inputStream(), it, key) }
+        } catch (e: Exception) {
+            tmp.delete()
+            throw e
+        }
         if (!tmp.renameTo(out)) {
             tmp.delete()
             throw IOException("Could not store the file")
