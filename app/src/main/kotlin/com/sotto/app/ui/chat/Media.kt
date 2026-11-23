@@ -81,6 +81,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.foundation.layout.offset
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.Message
 import com.sotto.app.media.VoicePlayer
@@ -473,7 +478,7 @@ fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
 
 /** The composer's attach button: a photo (inline) or any file (through the relay's store). */
 @Composable
-internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onHdPhoto: () -> Unit, onFile: () -> Unit) {
+internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onFile: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.size(48.dp)) {
@@ -490,14 +495,6 @@ internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onHdPhoto: () -
                 onClick = {
                     open = false
                     onPhoto()
-                },
-            )
-            androidx.compose.material3.DropdownMenuItem(
-                text = { Text("HD photo") },
-                leadingIcon = { Icon(Icons.Rounded.Hd, contentDescription = null) },
-                onClick = {
-                    open = false
-                    onHdPhoto()
                 },
             )
             androidx.compose.material3.DropdownMenuItem(
@@ -654,6 +651,102 @@ internal fun RecordingBar(
                 ) {
                     Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
                     Icon(Icons.Rounded.Lock, contentDescription = "Slide up to lock", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A picked photo before it's sent, as in WhatsApp: the photo, an HD switch at the top
+ * (off: the shrunk photo only; on: also its full-size copy), and the caption with Send.
+ */
+@Composable
+fun PhotoSendScreen(
+    uri: android.net.Uri,
+    initialCaption: String,
+    initialHd: Boolean,
+    onSend: (caption: String, hd: Boolean) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var caption by remember { mutableStateOf(initialCaption) }
+    var hd by remember { mutableStateOf(initialHd) }
+    val preview by produceState<ImageBitmap?>(null, uri) {
+        value = withContext(Dispatchers.Default) {
+            runCatching { com.sotto.app.media.PhotoShrinker.decodeUpright(context, uri, 2048)?.asImageBitmap() }.getOrNull()
+        }
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .imePadding(),
+        ) {
+            val p = preview
+            if (p != null) {
+                Image(p, contentDescription = "Photo to send", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+            } else {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.align(Alignment.Center))
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onDismiss) {
+                    Icon(androidx.compose.material.icons.Icons.Rounded.Close, contentDescription = "Don't send", tint = Color.White)
+                }
+                Spacer(Modifier.weight(1f))
+                // The quality switch: HD sends the full-size copy too.
+                val hdColors = if (hd) Color.White to Color.Black else Color.White.copy(alpha = 0.16f) to Color.White
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(hdColors.first)
+                        .clickable(role = Role.Switch, onClickLabel = if (hd) "Send in standard quality" else "Send in HD") { hd = !hd }
+                        .semantics { contentDescription = if (hd) "HD on" else "HD off" }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                ) {
+                    Icon(Icons.Rounded.Hd, contentDescription = null, tint = hdColors.second, modifier = Modifier.size(26.dp))
+                }
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.TextField(
+                    value = caption,
+                    onValueChange = { caption = it },
+                    placeholder = { Text("Add a caption") },
+                    maxLines = 4,
+                    shape = RoundedCornerShape(24.dp),
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    Modifier
+                        .size(52.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(Aurora.colors.brand))
+                        .clickable(role = Role.Button, onClickLabel = "Send photo") { onSend(caption.trim(), hd) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(androidx.compose.material.icons.Icons.Rounded.ArrowUpward, contentDescription = "Send photo", tint = Color.White)
                 }
             }
         }

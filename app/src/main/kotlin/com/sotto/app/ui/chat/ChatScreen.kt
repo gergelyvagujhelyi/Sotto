@@ -403,7 +403,7 @@ fun ChatContent(
     onReact: (Message, String) -> Unit = { _, _ -> },
     /** Send a recorded voice message, or the photo picked. */
     onSendVoice: (com.sotto.app.media.VoiceRecording) -> Unit = {},
-    onSendPhoto: (android.net.Uri, Boolean) -> Unit = { _, _ -> },
+    onSendPhoto: (android.net.Uri, Boolean, String) -> Unit = { _, _, _ -> },
     loadHd: suspend (String) -> ByteArray? = { null },
     onSendFile: (android.net.Uri) -> Unit = {},
     /** A file's bubble was tapped. */
@@ -493,10 +493,25 @@ fun ChatContent(
             voicePlayer.stop()
         }
     }
-    // Whether the photo being picked goes in HD (the picker can't say).
-    var pickingHd by rememberSaveable { mutableStateOf(false) }
+    // A picked photo waits in a preview with its caption and the HD switch; the switch
+    // remembers its last setting.
+    var pickedPhoto by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
+    var lastHd by rememberSaveable { mutableStateOf(false) }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) onSendPhoto(uri, pickingHd)
+        if (uri != null) pickedPhoto = uri
+    }
+    pickedPhoto?.let { uri ->
+        PhotoSendScreen(
+            uri = uri,
+            initialCaption = composerText.trim(),
+            initialHd = lastHd,
+            onSend = { caption, hd ->
+                pickedPhoto = null
+                lastHd = hd
+                onSendPhoto(uri, hd, caption)
+            },
+            onDismiss = { pickedPhoto = null },
+        )
     }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onSendFile(uri)
@@ -775,14 +790,7 @@ fun ChatContent(
                         recordElapsedMs = recordElapsed,
                         recordLevel = recordLevel,
                         recordSlide = recordSlide,
-                        onAttachHd = {
-                            pickingHd = true
-                            photoPicker.launch(
-                                androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-                            )
-                        },
                         onAttach = {
-                            pickingHd = false
                             photoPicker.launch(
                                 androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
@@ -1336,7 +1344,6 @@ private fun Composer(
     recordSlide: Offset = Offset.Zero,
     onAttach: () -> Unit = {},
     onAttachFile: () -> Unit = {},
-    onAttachHd: () -> Unit = {},
     onRecordPress: () -> Boolean = { false },
     onRecordRelease: () -> Unit = {},
     onRecordCancel: () -> Unit = {},
@@ -1350,7 +1357,7 @@ private fun Composer(
         verticalAlignment = Alignment.Bottom,
     ) {
         if (recordState == RecordState.IDLE) {
-            AttachButton(enabled = enabled, onPhoto = onAttach, onHdPhoto = onAttachHd, onFile = onAttachFile)
+            AttachButton(enabled = enabled, onPhoto = onAttach, onFile = onAttachFile)
             AuroraTextField(
                 value = text,
                 onValueChange = onTextChange,

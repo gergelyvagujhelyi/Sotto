@@ -36,24 +36,7 @@ object PhotoShrinker {
         maxSide: Int = MAX_SIDE,
         qualities: IntArray = QUALITIES,
     ): ShrunkPhoto? {
-        val resolver = context.contentResolver
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        // A bounds-only decode returns no bitmap, just fills in [bounds].
-        val stream = resolver.openInputStream(uri) ?: return null
-        stream.use { BitmapFactory.decodeStream(it, null, bounds) }
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-
-        val options = BitmapFactory.Options().apply {
-            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxSide)
-        }
-        var bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
-        val orientation = runCatching {
-            resolver.openInputStream(uri)?.use {
-                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-            }
-        }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
-        bitmap = upright(bitmap, orientation)
-
+        val bitmap = decodeUpright(context, uri, maxSide) ?: return null
         var side = maxSide
         while (side >= MIN_SIDE) {
             val scaled = scaleDown(bitmap, side)
@@ -74,6 +57,29 @@ object PhotoShrinker {
         }
         bitmap.recycle()
         return null
+    }
+
+    /**
+     * The picture at [uri], decoded at least [maxSide] px on its long side where it has
+     * that many (a power-of-two step down), and turned upright. Null when it isn't one.
+     */
+    fun decodeUpright(context: Context, uri: Uri, maxSide: Int): Bitmap? {
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        // A bounds-only decode returns no bitmap, just fills in [bounds].
+        val stream = resolver.openInputStream(uri) ?: return null
+        stream.use { BitmapFactory.decodeStream(it, null, bounds) }
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, maxSide)
+        }
+        val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+        val orientation = runCatching {
+            resolver.openInputStream(uri)?.use {
+                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            }
+        }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
+        return upright(bitmap, orientation)
     }
 
     /** The largest power of two that keeps the long side at or above [target]. */

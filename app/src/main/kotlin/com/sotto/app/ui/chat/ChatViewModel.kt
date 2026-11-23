@@ -345,10 +345,13 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    /** Shrinks the photo at [uri] and sends it, with the composer's text as its caption. */
-    fun sendPhoto(uri: android.net.Uri, hd: Boolean = false) {
+    /**
+     * Shrinks the photo at [uri] and sends it with [caption] (from the photo preview, which
+     * starts out with the composer's text); [hd] also sends its full-size copy.
+     */
+    fun sendPhoto(uri: android.net.Uri, hd: Boolean = false, caption: String = "") {
         val replyTo = replyingTo.value
-        val caption = draft.trim()
+        val composer = draft.trim()
         if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
             _sendError.value = "Caption is too long (max ${SendMessageUseCase.MAX_MESSAGE_LENGTH} characters)."
             return
@@ -383,8 +386,8 @@ class ChatViewModel @Inject constructor(
                 ),
                 photo.bytes, caption = caption, replyTo = replyTo, hdBytes = full?.bytes,
             )
-            // The caption went with it.
-            if (sent && caption.isNotEmpty() && draft.trim() == caption) draft = ""
+            // The composer's text went with it as the caption (the preview started with it).
+            if (sent && composer.isNotEmpty() && draft.trim() == composer && caption.contains(composer)) draft = ""
         }
     }
 
