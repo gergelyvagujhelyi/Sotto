@@ -4,9 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-- **Relay: key lookups by members only, when switched on** — With `KEY_LOOKUP_AUTH=true` in `.env`, looking up someone's keys by share code or user id needs a member's sign-in, so an outsider can't confirm an account exists or watch its key changes. Off by default: turn it on once every phone runs 0.7.11, which signs lookups in.
-- **Relay: unused routes gone** — `DELETE /v1/push/register` and call signals sent over the WebSocket; no app ever used them. nginx no longer passes `/metrics` through (it's read inside the container).
-- **Relay README: the endpoint table is complete** — With receipts, attachments, the release call, the invite page and App Links, and who may call each.
+Nothing yet.
 
 ## 0.7.11 — 2026-11-23
 
@@ -25,6 +23,9 @@ Update both phones: with 0.7.10 the code for verifying by phone never appeared, 
 - **Key lookups are signed in** — Looking up someone's keys (adding a contact, checking keys before a message or call) now signs in to the relay like every other request, so the relay can later refuse lookups from non-members. A phone that crashed in the middle of changing its keys still recovers once the relay requires this: it asks again signed with the new keys.
 - **"Your QR code" readable in dark mode** — Its title and the share code under the QR were dark on dark.
 - **Verify by phone from the first-message warning** — The warning before your first message to someone unverified now offers **Verify in person**, **Verify by phone** (it calls them; tap Verify by phone once the call connects) and **Send anyway**.
+- **Relay: key lookups by members only, when switched on** — With `KEY_LOOKUP_AUTH=true` in `.env`, looking up someone's keys by share code or user id needs a member's sign-in, so an outsider can't confirm an account exists or watch its key changes. Off by default: turn it on once every phone runs 0.7.11, which signs lookups in.
+- **Relay: unused routes gone** — `DELETE /v1/push/register` and call signals sent over the WebSocket; no app ever used them. nginx no longer passes `/metrics` through (it's read inside the container).
+- **Relay README: the endpoint table is complete** — With receipts, attachments, the release call, the invite page and App Links, and who may call each.
 
 ## 0.7.10 — 2026-11-23
 
