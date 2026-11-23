@@ -75,12 +75,15 @@ private fun buzz(context: Context) {
     vibrator.vibrate(VibrationEffect.createOneShot(60, VibrationEffect.DEFAULT_AMPLITUDE))
 }
 
-// Short turns, so two phones held together land in opposite roles soon (0.7.20 had
-// 0.3–0.8 s each, which took up to about 1.5 s of keeping still).
-private const val CARD_MS_MIN = 150L
-private const val CARD_MS_MAX = 400L
-private const val READER_MS_MIN = 150L
-private const val READER_MS_MAX = 400L
+// Widely spread turns. A swap needs the phones in opposite roles for long enough to start
+// reading, find the other phone and exchange (about 100–200 ms), and the spread is what gets
+// two phones out of step. Simulated, 0.1–1.0 s beats 0.7.20's 0.3–0.8 s (90% of swaps within
+// about 0.75 s rather than 0.9 s, or 1.5 s rather than 2 s if 200 ms are needed); short turns
+// (0.15–0.4 s) were slower, rarely leaving a long enough gap.
+private const val CARD_MS_MIN = 100L
+private const val CARD_MS_MAX = 1_000L
+private const val READER_MS_MIN = 100L
+private const val READER_MS_MAX = 1_000L
 
 private const val READER_FLAGS =
     NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK
