@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Settings shows the right QR code at once** — The identity QR code in Settings started as the QR of your plain share code and only switched to the live, changing code a moment later, sometimes after a while. It now shows only the live code, which is ready within a fraction of a second: making it no longer unlocks your private keys just to read your public ones, which took most of a second on slower phones.
 
 ## 0.7.21 — 2026-11-23
 

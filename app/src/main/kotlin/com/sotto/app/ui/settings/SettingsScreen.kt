@@ -662,20 +662,22 @@ private fun IdentityCard(
         contentPadding = PaddingValues(20.dp),
     ) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            val qr = liveQr ?: shareCode
-            if (qr != null) {
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(Color.White)
-                        .padding(6.dp),
-                ) {
-                    // Live: scanned in person it adds and verifies you; a picture of it only adds you.
-                    QrCodeImage(content = qr, size = 184.dp)
-                }
-            } else {
-                Box(Modifier.size(196.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(strokeWidth = 2.dp)
+            // Only the live code: the share code's QR (shown here until the first live code was
+            // ready) is a different code, and swapping one for the other looked like a glitch.
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(Color.White)
+                    .padding(6.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (liveQr != null) {
+                    // Scanned in person it adds and verifies you; a picture of it only adds you.
+                    QrCodeImage(content = liveQr, size = 184.dp)
+                } else {
+                    Box(Modifier.size(184.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, color = Color(0xFF6B6B80))
+                    }
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -690,7 +692,7 @@ private fun IdentityCard(
                 style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
                 textAlign = TextAlign.Center,
             )
-            if (liveQr != null) {
+            run {
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = "The QR code changes every second: scanned in person, it adds and verifies you. " +

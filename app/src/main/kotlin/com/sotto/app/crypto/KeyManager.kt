@@ -228,6 +228,16 @@ class KeyManager @Inject constructor(
     }
 
     /**
+     * Our public signing and identity keys, without touching the private ones (no key-store
+     * decrypt): for showing or fingerprinting who we are. Null without an identity.
+     */
+    fun publicIdentityKeys(): Pair<ByteArray, ByteArray>? {
+        val pubSign = encryptedPrefs.getString(KEY_PUBLIC_SIGNING, null)?.hexToBytes() ?: return null
+        val pubId = encryptedPrefs.getString(KEY_PUBLIC_IDENTITY, null)?.hexToBytes() ?: return null
+        return pubSign to pubId
+    }
+
+    /**
      * The raw pair, private keys included: the caller must wipe them. Use
      * [withIdentityKeyPair] instead; a unit test keeps other code off this.
      */
