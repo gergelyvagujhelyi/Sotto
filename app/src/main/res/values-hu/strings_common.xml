@@ -7,17 +7,10 @@
     <string name="common_save">Mentés</string>
     <string name="common_delete">Törlés</string>
     <string name="common_remove">Eltávolítás</string>
-    <string name="common_retry">Újra</string>
     <string name="common_copy">Másolás</string>
-    <string name="common_copied">Kimásolva</string>
     <string name="common_share">Megosztás</string>
     <string name="common_back">Vissza</string>
-    <string name="common_next">Tovább</string>
     <string name="common_continue">Folytatás</string>
-    <string name="common_yes">Igen</string>
-    <string name="common_no">Nem</string>
-    <string name="common_on">Be</string>
     <string name="common_off">Ki</string>
-    <string name="common_more">Továbbiak</string>
     <string name="common_settings">Beállítások</string>
 </resources>

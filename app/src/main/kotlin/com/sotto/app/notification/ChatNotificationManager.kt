@@ -96,7 +96,7 @@ class ChatNotificationManager @Inject constructor(
             messageDao.getUnseenIncomingTexts(id, NotificationCompat.MessagingStyle.MAXIMUM_RETAINED_MESSAGES)
                 .map {
                     val kind = com.sotto.app.domain.model.MediaKind.fromWire(it.mediaKind)
-                    NotifiedMessage(com.sotto.app.domain.model.previewText(kind, it.text, it.mediaName.orEmpty()), it.timestamp)
+                    NotifiedMessage(com.sotto.app.domain.model.previewUiText(kind, it.text, it.mediaName.orEmpty()).resolve(context), it.timestamp)
                 }
         }.orEmpty()
         val content = messageNotificationContent(

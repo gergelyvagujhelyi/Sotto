@@ -93,17 +93,6 @@ fun previewUiText(media: MediaKind?, caption: String, fileName: String = ""): Ui
  * earlier unread messages (ChatNotificationManager) still uses it; it should resolve
  * [previewUiText] with its Context instead.
  */
-@Deprecated("English only; resolve previewUiText with a Context", ReplaceWith("previewUiText(media, caption, fileName)"))
-fun previewText(media: MediaKind?, caption: String, fileName: String = ""): String {
-    val label = when (media) {
-        null -> return caption
-        MediaKind.FILE -> if (fileName.isNotBlank()) "📎 $fileName" else "📎 File"
-        MediaKind.VOICE -> "🎤 Voice message"
-        MediaKind.PHOTO -> "📷 Photo"
-    }
-    return if (caption.isBlank()) label else "$label: ${caption.trim()}"
-}
-
 /**
  * The plaintext of a message carrying a voice message or photo inline (ADR-29): the
  * media, base64, with its caption and, when it answers another message, the reply's
