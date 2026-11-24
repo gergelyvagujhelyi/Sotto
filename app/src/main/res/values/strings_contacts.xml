@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- New chat (adding contacts), the QR code exchange, the scanner and Verify in person. -->
+<resources>
+    <!-- Add contact: errors the view model reports -->
+    <string name="contacts_error_own_share_code">That\'s your own share code. Ask the other person for theirs.</string>
+    <string name="contacts_error_code_mismatch">That code doesn\'t add up: its account and its keys don\'t belong together. Don\'t add them this way.</string>
+    <string name="contacts_error_keys_differ">The keys the relay gave for this person don\'t match their phone. Don\'t add them this way.</string>
+    <string name="contacts_error_add_in_person_failed">Couldn\'t add them. Check your connection and try again.</string>
+    <string name="contacts_error_not_a_share_code">That doesn\'t look like a share code. Check it and try again.</string>
+    <string name="contacts_error_add_failed">Failed to add contact. Check the share code and try again.</string>
+
+    <!-- New chat -->
+    <string name="contacts_new_chat_title">New chat</string>
+    <string name="contacts_add_someone">Add someone</string>
+    <string name="contacts_way_tap_title">Tap phones</string>
+    <string name="contacts_way_tap_subtitle">Both open New chat and hold the phones back to back.</string>
+    <string name="contacts_way_tap_nfc_off">NFC is off. Tap to turn it on.</string>
+    <string name="contacts_way_qr_title">QR code</string>
+    <string name="contacts_way_qr_subtitle">Scan theirs, then they scan yours.</string>
+    <string name="contacts_way_code_title">Enter a share code</string>
+    <string name="contacts_way_code_subtitle">Typed or pasted. They\'re added as not verified.</string>
+    <string name="contacts_verifies_in_person">Verifies in person</string>
+    <string name="contacts_add_contact">Add contact</string>
+    <string name="contacts_your_contacts">Your contacts</string>
+    <string name="contacts_options_for">Options for %1$s</string>
+    <string name="contacts_remove_contact">Remove contact</string>
+    <string name="contacts_paste_share_code">Paste share code</string>
+    <string name="contacts_paste">Paste</string>
+    <string name="contacts_your_share_code">Your share code</string>
+    <string name="contacts_loading">Loading…</string>
+    <string name="contacts_share_code_explainer">Someone can add you with it from anywhere, but then you\'re not verified until you meet.</string>
+    <string name="contacts_set_name_hint">Set your name in Settings so new contacts see who you are.</string>
+    <string name="contacts_your_qr_code">Your QR code</string>
+    <string name="contacts_qr_dialog_hint">On their phone: New chat → Scan their QR code. It changes every second, so only scanning it here, in person, verifies you. A picture of it just adds you.</string>
+    <string name="contacts_adding">Adding…</string>
+    <string name="contacts_hold_phones_together">Hold your phones together</string>
+    <string name="contacts_tap_dialog_body">Ask them to open New chat too. Then hold the backs of the phones together for a moment. You\'ll be added to each other, verified in person.</string>
+
+    <!-- Remove contact -->
+    <string name="contacts_remove_title">Remove %1$s?</string>
+    <string name="contacts_remove_title_unnamed">Remove this contact?</string>
+    <string name="contacts_remove_body">They\'re removed from your contacts, and the chat with them is deleted from this phone. They aren\'t told. If they write to you again, it arrives as a message request.</string>
+
+    <!-- QR code exchange -->
+    <string name="contacts_tab_scan">Scan</string>
+    <string name="contacts_tab_my_code">My code</string>
+    <string name="contacts_scan_their_code">Scan their code</string>
+    <string name="contacts_now_scan_their_code">Now scan their code</string>
+    <string name="contacts_scan_back_hint">They just scanned yours. Scan the code on their phone, so both phones are verified and the chat opens.</string>
+    <string name="contacts_scan_hint">Point the camera at the code on their phone (New chat → QR code → My code). Scanning it in person verifies them.</string>
+    <string name="contacts_not_a_sotto_code">That isn\'t a Sotto code.</string>
+    <string name="contacts_name_verified">%1$s is verified</string>
+    <string name="contacts_your_turn">Your turn: let %1$s scan your code, so their phone verifies you too.</string>
+    <string name="contacts_let_them_scan">Let them scan your code</string>
+    <string name="contacts_live_code_hint">It changes every second: scanned here, in person, it adds and verifies you. A picture of it only adds you.</string>
+    <string name="contacts_done_open_chat">Done, open the chat</string>
+
+    <!-- QR scanner -->
+    <string name="contacts_not_a_share_code_qr">That QR code isn\'t a Sotto share code.</string>
+    <string name="contacts_scan_share_code_title">Scan a share code</string>
+    <string name="contacts_scan_share_code_hint">Point the camera at the QR code on the other person\'s phone.</string>
+    <string name="contacts_flashlight_off">Turn off the flashlight</string>
+    <string name="contacts_flashlight_on">Turn on the flashlight</string>
+    <string name="contacts_camera_needed">Camera access needed</string>
+    <string name="contacts_camera_why">Sotto uses the camera only to read QR codes. Nothing is recorded or sent.</string>
+    <string name="contacts_allow_camera">Allow camera</string>
+    <string name="contacts_open_settings">Open settings</string>
+    <string name="contacts_scan_verify_hint">Point the camera at the code on their Verify in person screen.</string>
+    <string name="contacts_scan_verify_reject">That isn\'t a Verify in person code. On their phone: open your chat, then ⋮ → Verify in person.</string>
+
+    <!-- Verify in person -->
+    <string name="contacts_your_contact">your contact</string>
+    <string name="contacts_verify_title">Verify in person</string>
+    <string name="contacts_verify_no_nfc">This phone has no NFC. Scan each other\'s codes below instead.</string>
+    <string name="contacts_verify_nfc_off">NFC is off. Turn it on to tap phones, or scan each other\'s codes below.</string>
+    <string name="contacts_verify_nfc_hint">On %1$s\'s phone, open your chat and Verify in person too. Then hold the backs of the phones together: one tap checks both phones.</string>
+    <string name="contacts_turn_on_nfc">Turn on NFC</string>
+    <string name="contacts_or_scan_codes">Or scan each other\'s codes</string>
+    <string name="contacts_verify_qr_hint">%1$s scans this code with Verify in person on their phone. Then you scan theirs. It changes every second, so a picture of it won\'t do.</string>
+    <string name="contacts_scan_name_code">Scan %1$s\'s code</string>
+    <string name="contacts_cant_meet">Can\'t meet?</string>
+    <string name="contacts_call_hint">Call %1$s and read seven emoji to each other. It\'s weaker than meeting: the chat will say \"Verified by phone only\".</string>
+    <string name="contacts_verify_by_phone">Verify %1$s by phone</string>
+    <string name="contacts_verify_warning">Only do this with %1$s in front of you. A code sent as a picture or through another app could come from anyone.</string>
+    <string name="contacts_status_in_person">You\'ve checked %1$s\'s keys face to face. You can check again any time.</string>
+    <string name="contacts_status_by_phone">You verified %1$s by phone. Meeting is stronger proof: verify in person when you can.</string>
+    <string name="contacts_show_my_code">Show my code</string>
+
+    <!-- Verify in person: how a check went -->
+    <string name="contacts_outcome_verified_title">%1$s is verified in person</string>
+    <string name="contacts_outcome_verified_nfc">The keys on their phone are the ones this chat uses. Their phone checked yours with the same tap.</string>
+    <string name="contacts_outcome_verified_qr">The keys on their phone are the ones this chat uses. Let them scan your code too, so their phone trusts you as well.</string>
+    <string name="contacts_outcome_other_account_title">This is someone else\'s code</string>
+    <string name="contacts_outcome_other_account_body">It belongs to a different Sotto account from this chat. If this really is %1$s\'s phone, this chat isn\'t with them: don\'t trust it. Otherwise, check that each phone opened the other person\'s chat.</string>
+    <string name="contacts_outcome_keys_differ_title">The keys don\'t match</string>
+    <string name="contacts_outcome_keys_differ_body">%1$s\'s phone has different keys from the ones this chat uses, so someone may be in the middle, such as the relay. Don\'t trust this chat. Remove the contact, then add %1$s again by scanning their share code.</string>
+    <string name="contacts_outcome_cant_check_title">Couldn\'t check right now</string>
+    <string name="contacts_outcome_cant_check_body">%1$s\'s keys may have changed since your phone last saw them, and the relay can\'t be reached to confirm that. Connect to the internet and try again.</string>
+    <string name="contacts_outcome_not_live_title">That code isn\'t live</string>
+    <string name="contacts_outcome_not_live_body">It\'s the right person, but the code is a picture of their screen, not the code on their phone right now (it changes every second). Scan the code on their phone while you\'re together.</string>
+    <string name="contacts_outcome_older_app_title">Their Sotto is older</string>
+    <string name="contacts_outcome_older_app_body">Their keys match, but their Sotto doesn\'t make the live code yet, so a scan can\'t prove it\'s their phone. Update both phones to the latest Sotto, or hold the phones together.</string>
+    <string name="contacts_outcome_not_a_contact_title">%1$s isn\'t a contact</string>
+    <string name="contacts_outcome_not_a_contact_body">This phone has no keys for %1$s to check against.</string>
+</resources>

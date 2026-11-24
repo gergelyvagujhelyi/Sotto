@@ -11,12 +11,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.createBitmap
 import androidx.core.graphics.set
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import com.sotto.app.R
 
 @Composable
 fun QrCodeImage(
@@ -38,7 +40,7 @@ fun QrCodeImage(
     Image(
         bitmap = bitmap.asImageBitmap(),
         filterQuality = androidx.compose.ui.graphics.FilterQuality.None,
-        contentDescription = "QR code for share code",
+        contentDescription = stringResource(R.string.components_share_code_qr),
         modifier = modifier
             .size(size)
             .clip(RoundedCornerShape(12.dp))

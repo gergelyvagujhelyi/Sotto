@@ -32,9 +32,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle
 import com.sotto.app.ui.components.GlassIconButton
@@ -71,15 +73,9 @@ fun QrExchangeScreen(
                 onBack = onClose,
                 onScanned = onScanned,
                 accept = { text -> com.sotto.app.crypto.InPersonCode.parse(text)?.encode() ?: shareCodeFromQr(text) },
-                title = if (scanBack) "Now scan their code" else "Scan their code",
-                hint = if (scanBack) {
-                    "They just scanned yours. Scan the code on their phone, so both phones are verified " +
-                        "and the chat opens."
-                } else {
-                    "Point the camera at the code on their phone (New chat → QR code → My code). " +
-                        "Scanning it in person verifies them."
-                },
-                rejectMessage = "That isn't a Sotto code.",
+                title = stringResource(if (scanBack) R.string.contacts_now_scan_their_code else R.string.contacts_scan_their_code),
+                hint = stringResource(if (scanBack) R.string.contacts_scan_back_hint else R.string.contacts_scan_hint),
+                rejectMessage = stringResource(R.string.contacts_not_a_sotto_code),
             )
             QrTabs(tab, onTab, Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 12.dp))
         }
@@ -118,7 +114,7 @@ private fun MyCode(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                GlassIconButton(icon = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", onClick = onClose)
+                GlassIconButton(icon = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.common_back), onClick = onClose)
             }
             QrTabs(tab, onTab, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
             Column(
@@ -129,17 +125,17 @@ private fun MyCode(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.VerifiedUser, contentDescription = null, tint = Aurora.colors.success, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("$yourTurnFor is verified", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+                        Text(stringResource(R.string.contacts_name_verified, yourTurnFor), style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
                     }
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Your turn: let $yourTurnFor scan your code, so their phone verifies you too.",
+                        stringResource(R.string.contacts_your_turn, yourTurnFor),
                         style = MaterialTheme.typography.bodyMedium,
                         color = colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
                 } else {
-                    Text("Let them scan your code", style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
+                    Text(stringResource(R.string.contacts_let_them_scan), style = MaterialTheme.typography.titleMedium, color = colors.onSurface)
                 }
                 Spacer(Modifier.height(20.dp))
                 if (liveQr != null) {
@@ -159,14 +155,14 @@ private fun MyCode(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "It changes every second: scanned here, in person, it adds and verifies you. A picture of it only adds you.",
+                    stringResource(R.string.contacts_live_code_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
                 if (yourTurnFor != null) {
                     Spacer(Modifier.height(24.dp))
-                    GradientButton(text = "Done, open the chat", onClick = onDone, modifier = Modifier.fillMaxWidth())
+                    GradientButton(text = stringResource(R.string.contacts_done_open_chat), onClick = onDone, modifier = Modifier.fillMaxWidth())
                 }
             }
         }
@@ -183,10 +179,10 @@ internal fun QrTabs(tab: QrTab, onTab: (QrTab) -> Unit, modifier: Modifier = Mod
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        for ((value, label) in listOf(QrTab.SCAN to "Scan", QrTab.MINE to "My code")) {
+        for ((value, labelRes) in listOf(QrTab.SCAN to R.string.contacts_tab_scan, QrTab.MINE to R.string.contacts_tab_my_code)) {
             val selected = value == tab
             Text(
-                label,
+                stringResource(labelRes),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (selected) Color.Black else Color.White,
                 modifier = Modifier

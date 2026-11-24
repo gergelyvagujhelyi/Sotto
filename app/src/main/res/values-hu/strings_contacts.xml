@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Add contact: errors the view model reports -->
+    <string name="contacts_error_own_share_code">Ez a saját megosztási kódod. Kérd el a másik fél kódját.</string>
+    <string name="contacts_error_code_mismatch">Ez a kód nem stimmel: a fiókja és a kulcsai nem tartoznak össze. Így ne add hozzá.</string>
+    <string name="contacts_error_keys_differ">A szervertől kapott kulcsok nem egyeznek a telefonján lévőkkel. Így ne add hozzá.</string>
+    <string name="contacts_error_add_in_person_failed">Nem sikerült hozzáadni. Ellenőrizd a kapcsolatot, és próbáld újra.</string>
+    <string name="contacts_error_not_a_share_code">Ez nem tűnik megosztási kódnak. Ellenőrizd, és próbáld újra.</string>
+    <string name="contacts_error_add_failed">Nem sikerült hozzáadni az ismerőst. Ellenőrizd a megosztási kódot, és próbáld újra.</string>
+
+    <!-- New chat -->
+    <string name="contacts_new_chat_title">Új beszélgetés</string>
+    <string name="contacts_add_someone">Ismerős hozzáadása</string>
+    <string name="contacts_way_tap_title">Telefonok összeérintése</string>
+    <string name="contacts_way_tap_subtitle">Mindketten nyissátok meg az Új beszélgetést, és érintsétek össze a telefonok hátát.</string>
+    <string name="contacts_way_tap_nfc_off">Az NFC ki van kapcsolva. Koppints a bekapcsoláshoz.</string>
+    <string name="contacts_way_qr_title">QR-kód</string>
+    <string name="contacts_way_qr_subtitle">Olvasd be az övét, aztán ő a tiédet.</string>
+    <string name="contacts_way_code_title">Megosztási kód megadása</string>
+    <string name="contacts_way_code_subtitle">Begépelve vagy beillesztve. Nem ellenőrzött ismerős lesz.</string>
+    <string name="contacts_verifies_in_person">Személyesen ellenőriz</string>
+    <string name="contacts_add_contact">Ismerős hozzáadása</string>
+    <string name="contacts_your_contacts">Ismerőseid</string>
+    <string name="contacts_options_for">Lehetőségek: %1$s</string>
+    <string name="contacts_remove_contact">Ismerős eltávolítása</string>
+    <string name="contacts_paste_share_code">Megosztási kód beillesztése</string>
+    <string name="contacts_paste">Beillesztés</string>
+    <string name="contacts_your_share_code">Megosztási kódod</string>
+    <string name="contacts_loading">Betöltés…</string>
+    <string name="contacts_share_code_explainer">Bárki hozzáadhat vele bárhonnan, de amíg nem találkoztok, nem leszel ellenőrizve.</string>
+    <string name="contacts_set_name_hint">Add meg a neved a Beállításokban, hogy az új ismerőseid lássák, ki vagy.</string>
+    <string name="contacts_your_qr_code">QR-kódod</string>
+    <string name="contacts_qr_dialog_hint">Az ő telefonján: Új beszélgetés → QR-kód beolvasása. Másodpercenként változik, ezért csak az itt, személyesen beolvasott kód ellenőriz. Egy róla készült kép csak hozzáad.</string>
+    <string name="contacts_adding">Hozzáadás…</string>
+    <string name="contacts_hold_phones_together">Érintsétek össze a telefonokat</string>
+    <string name="contacts_tap_dialog_body">Kérd meg, hogy ő is nyissa meg az Új beszélgetést. Aztán egy pillanatra érintsétek össze a telefonok hátát. Egymás ismerősei lesztek, személyesen ellenőrizve.</string>
+
+    <!-- Remove contact -->
+    <string name="contacts_remove_title">%1$s eltávolítása?</string>
+    <string name="contacts_remove_title_unnamed">Eltávolítod ezt az ismerőst?</string>
+    <string name="contacts_remove_body">Lekerül az ismerőseid közül, és a vele folytatott beszélgetés törlődik erről a telefonról. Erről nem kap értesítést. Ha újra ír neked, üzenetkérésként érkezik.</string>
+
+    <!-- QR code exchange -->
+    <string name="contacts_tab_scan">Beolvasás</string>
+    <string name="contacts_tab_my_code">Kódom</string>
+    <string name="contacts_scan_their_code">Olvasd be a kódját</string>
+    <string name="contacts_now_scan_their_code">Most olvasd be az ő kódját</string>
+    <string name="contacts_scan_back_hint">Ő már beolvasta a tiédet. Olvasd be a telefonján lévő kódot, hogy mindkét telefon ellenőrizve legyen, és megnyíljon a beszélgetés.</string>
+    <string name="contacts_scan_hint">Irányítsd a kamerát a telefonján lévő kódra (Új beszélgetés → QR-kód → Kódom). Ha személyesen olvasod be, ellenőrzöd őt.</string>
+    <string name="contacts_not_a_sotto_code">Ez nem Sotto-kód.</string>
+    <string name="contacts_name_verified">%1$s ellenőrizve</string>
+    <string name="contacts_your_turn">Te jössz: hadd olvassa be %1$s a kódodat, hogy az ő telefonja is ellenőrizzen téged.</string>
+    <string name="contacts_let_them_scan">Hadd olvassa be a kódodat</string>
+    <string name="contacts_live_code_hint">Másodpercenként változik: ha itt, személyesen olvassák be, hozzáad és ellenőriz is. Egy róla készült kép csak hozzáad.</string>
+    <string name="contacts_done_open_chat">Kész, tovább a beszélgetéshez</string>
+
+    <!-- QR scanner -->
+    <string name="contacts_not_a_share_code_qr">Ez a QR-kód nem Sotto megosztási kód.</string>
+    <string name="contacts_scan_share_code_title">Megosztási kód beolvasása</string>
+    <string name="contacts_scan_share_code_hint">Irányítsd a kamerát a másik telefonon lévő QR-kódra.</string>
+    <string name="contacts_flashlight_off">Zseblámpa kikapcsolása</string>
+    <string name="contacts_flashlight_on">Zseblámpa bekapcsolása</string>
+    <string name="contacts_camera_needed">Kamera-hozzáférés szükséges</string>
+    <string name="contacts_camera_why">A Sotto csak QR-kódok beolvasására használja a kamerát. Semmit nem rögzít és nem küld el.</string>
+    <string name="contacts_allow_camera">Kamera engedélyezése</string>
+    <string name="contacts_open_settings">Beállítások megnyitása</string>
+    <string name="contacts_scan_verify_hint">Irányítsd a kamerát az ő Ellenőrzés személyesen képernyőjén lévő kódra.</string>
+    <string name="contacts_scan_verify_reject">Ez nem személyes ellenőrzési kód. Az ő telefonján: nyisd meg a közös beszélgetést, majd ⋮ → Ellenőrzés személyesen.</string>
+
+    <!-- Verify in person -->
+    <string name="contacts_your_contact">ismerősöd</string>
+    <string name="contacts_verify_title">Ellenőrzés személyesen</string>
+    <string name="contacts_verify_no_nfc">Ebben a telefonban nincs NFC. Olvassátok be inkább egymás kódját lent.</string>
+    <string name="contacts_verify_nfc_off">Az NFC ki van kapcsolva. Kapcsold be az összeérintéshez, vagy olvassátok be egymás kódját lent.</string>
+    <string name="contacts_verify_nfc_hint">%1$s telefonján is nyisd meg a közös beszélgetést, azon belül az Ellenőrzés személyesen lehetőséget. Aztán érintsétek össze a telefonok hátát: egy érintés mindkét telefont ellenőrzi.</string>
+    <string name="contacts_turn_on_nfc">NFC bekapcsolása</string>
+    <string name="contacts_or_scan_codes">Vagy olvassátok be egymás kódját</string>
+    <string name="contacts_verify_qr_hint">%1$s a saját telefonján, az Ellenőrzés személyesen képernyőn beolvassa ezt a kódot. Aztán te az övét. Másodpercenként változik, így egy kép róla nem elég.</string>
+    <string name="contacts_scan_name_code">%1$s kódjának beolvasása</string>
+    <string name="contacts_cant_meet">Nem tudtok találkozni?</string>
+    <string name="contacts_call_hint">Hívás közben %1$s és te felolvastok egymásnak hét emojit. Ez gyengébb a találkozásnál: a beszélgetésben „Csak hívással ellenőrizve” fog állni.</string>
+    <string name="contacts_verify_by_phone">%1$s ellenőrzése hívással</string>
+    <string name="contacts_verify_warning">Csak akkor csináld, ha %1$s ott van veled szemben. Egy képként vagy másik appon át küldött kód bárkitől jöhet.</string>
+    <string name="contacts_status_in_person">%1$s kulcsait személyesen ellenőrizted. Bármikor újra ellenőrizheted.</string>
+    <string name="contacts_status_by_phone">%1$s kulcsait hívással ellenőrizted. A találkozás erősebb bizonyíték: ha tudod, ellenőrizd személyesen is.</string>
+    <string name="contacts_show_my_code">Kódom mutatása</string>
+
+    <!-- Verify in person: how a check went -->
+    <string name="contacts_outcome_verified_title">%1$s személyesen ellenőrizve</string>
+    <string name="contacts_outcome_verified_nfc">A telefonján lévő kulcsok azok, amelyeket ez a beszélgetés használ. Az ő telefonja ugyanazzal az érintéssel a tiédet is ellenőrizte.</string>
+    <string name="contacts_outcome_verified_qr">A telefonján lévő kulcsok azok, amelyeket ez a beszélgetés használ. Hadd olvassa be ő is a kódodat, hogy az ő telefonja is megbízzon benned.</string>
+    <string name="contacts_outcome_other_account_title">Ez valaki más kódja</string>
+    <string name="contacts_outcome_other_account_body">Egy másik Sotto-fiókhoz tartozik, nem ahhoz, akivel ez a beszélgetés folyik. Ha ez tényleg %1$s telefonja, akkor ez a beszélgetés nem vele zajlik: ne bízz benne. Különben ellenőrizd, hogy mindkét telefonon a másik fél beszélgetése van-e megnyitva.</string>
+    <string name="contacts_outcome_keys_differ_title">A kulcsok nem egyeznek</string>
+    <string name="contacts_outcome_keys_differ_body">%1$s telefonján más kulcsok vannak, mint amiket ez a beszélgetés használ, így lehet, hogy valaki – például a szerver – közbeékelődött. Ne bízz ebben a beszélgetésben. Távolítsd el az ismerőst, majd add hozzá újra a megosztási kódja beolvasásával.</string>
+    <string name="contacts_outcome_cant_check_title">Most nem sikerült ellenőrizni</string>
+    <string name="contacts_outcome_cant_check_body">%1$s kulcsai megváltozhattak, mióta a telefonod utoljára látta őket, és a szerver nem érhető el, hogy ezt megerősítse. Csatlakozz az internethez, és próbáld újra.</string>
+    <string name="contacts_outcome_not_live_title">Ez a kód nem élő</string>
+    <string name="contacts_outcome_not_live_body">A személy stimmel, de a kód csak egy kép a képernyőjéről, nem a telefonján épp látható kód (az másodpercenként változik). Olvasd be a telefonján lévő kódot, amíg együtt vagytok.</string>
+    <string name="contacts_outcome_older_app_title">Régebbi a Sottója</string>
+    <string name="contacts_outcome_older_app_body">A kulcsai egyeznek, de az ő Sottója még nem készít élő kódot, így a beolvasás nem bizonyítja, hogy az ő telefonjáról van szó. Frissítsétek mindkét telefonon a Sottót, vagy érintsétek össze a telefonokat.</string>
+    <string name="contacts_outcome_not_a_contact_title">%1$s nincs az ismerőseid között</string>
+    <string name="contacts_outcome_not_a_contact_body">Ezen a telefonon nincsenek meg %1$s kulcsai, amelyekkel össze lehetne vetni.</string>
+</resources>

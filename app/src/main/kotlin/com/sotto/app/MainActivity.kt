@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.compose.ui.res.stringResource
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -108,18 +109,13 @@ class MainActivity : ComponentActivity() {
                 if (showDbResetDialog) {
                     AlertDialog(
                         onDismissRequest = { /* must press OK */ },
-                        title = { Text("Local data was reset") },
+                        title = { Text(stringResource(R.string.components_db_reset_title)) },
                         text = {
-                            Text(
-                                "The local database could not be opened and had to be recreated. " +
-                                "Messages and contacts stored on this device have been lost. " +
-                                "Your identity is unaffected. Re-add contacts with their share codes " +
-                                "to verify them again."
-                            )
+                            Text(stringResource(R.string.components_db_reset_body))
                         },
                         confirmButton = {
                             TextButton(onClick = { showDbResetDialog = false }) {
-                                Text("OK")
+                                Text(stringResource(R.string.common_ok))
                             }
                         },
                     )
@@ -288,8 +284,8 @@ class MainActivity : ComponentActivity() {
                 return
             }
             MemberInviteAction.OwnInvite -> OWN_INVITE_MESSAGE
-            is MemberInviteAction.AlreadyMember -> "You already have an account on ${action.relayName}."
-            is MemberInviteAction.OtherRelay -> "This invite is for ${action.relayName}, not your relay."
+            is MemberInviteAction.AlreadyMember -> getString(R.string.components_invite_already_member, action.relayName)
+            is MemberInviteAction.OtherRelay -> getString(R.string.components_invite_other_relay, action.relayName)
         }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }

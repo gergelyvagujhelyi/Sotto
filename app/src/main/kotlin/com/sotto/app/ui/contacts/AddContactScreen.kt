@@ -63,6 +63,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sotto.app.R
 import com.sotto.app.domain.model.Contact
 import com.sotto.app.domain.model.trust
 import com.sotto.app.ui.components.AppSnackbarHost
@@ -86,6 +88,7 @@ import com.sotto.app.ui.components.QrCodeImage
 import com.sotto.app.ui.components.SectionLabel
 import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.components.SoftButtonTone
+import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.theme.Aurora
 
 /**
@@ -290,10 +293,10 @@ fun AddContactContent(
                 TopAppBar(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.common_back))
                         }
                     },
-                    title = { Text("New chat") },
+                    title = { Text(stringResource(R.string.contacts_new_chat_title)) },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = Color.Transparent,
                         scrolledContainerColor = MaterialTheme.colorScheme.background,
@@ -319,17 +322,17 @@ fun AddContactContent(
             ) {
                 // How to add someone: the two in-person ways first, since only they verify.
                 item(key = "ways") {
-                    SectionLabel("Add someone", Modifier.padding(start = 4.dp))
+                    SectionLabel(stringResource(R.string.contacts_add_someone), Modifier.padding(start = 4.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         val busy = state is AddContactState.Loading
                         if (nfcAdapter != null) {
                             WayRow(
                                 icon = Icons.Rounded.Nfc,
-                                title = "Tap phones",
+                                title = stringResource(R.string.contacts_way_tap_title),
                                 subtitle = if (nfcOn) {
-                                    "Both open New chat and hold the phones back to back."
+                                    stringResource(R.string.contacts_way_tap_subtitle)
                                 } else {
-                                    "NFC is off. Tap to turn it on."
+                                    stringResource(R.string.contacts_way_tap_nfc_off)
                                 },
                                 verifies = true,
                                 position = RowPosition.FIRST,
@@ -347,8 +350,8 @@ fun AddContactContent(
                         }
                         WayRow(
                             icon = Icons.Rounded.QrCodeScanner,
-                            title = "QR code",
-                            subtitle = "Scan theirs, then they scan yours.",
+                            title = stringResource(R.string.contacts_way_qr_title),
+                            subtitle = stringResource(R.string.contacts_way_qr_subtitle),
                             verifies = true,
                             position = if (nfcAdapter != null) RowPosition.MIDDLE else RowPosition.FIRST,
                             enabled = !busy,
@@ -356,8 +359,8 @@ fun AddContactContent(
                         )
                         WayRow(
                             icon = Icons.Rounded.Keyboard,
-                            title = "Enter a share code",
-                            subtitle = "Typed or pasted. They're added as not verified.",
+                            title = stringResource(R.string.contacts_way_code_title),
+                            subtitle = stringResource(R.string.contacts_way_code_subtitle),
                             position = RowPosition.LAST,
                             enabled = !busy,
                             onClick = { entering = !entering },
@@ -368,12 +371,12 @@ fun AddContactContent(
                         ShareCodeField(
                             value = shareCodeInput,
                             onValueChange = onShareCodeChange,
-                            errorMessage = (state as? AddContactState.Error)?.message,
+                            errorMessage = (state as? AddContactState.Error)?.message?.asString(),
                             onSubmit = { if (canSubmit) onSubmit() },
                         )
                         Spacer(Modifier.height(12.dp))
                         GradientButton(
-                            text = "Add contact",
+                            text = stringResource(R.string.contacts_add_contact),
                             icon = Icons.Rounded.PersonAdd,
                             onClick = onSubmit,
                             enabled = shareCodeInput.isNotBlank(),
@@ -394,7 +397,7 @@ fun AddContactContent(
                             )
                             Spacer(Modifier.width(6.dp))
                             Text(
-                                text = state.message,
+                                text = state.message.asString(),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                             )
@@ -406,7 +409,7 @@ fun AddContactContent(
                 if (contacts.isNotEmpty()) {
                     item(key = "contacts_header") {
                         SectionLabel(
-                            "Your contacts",
+                            stringResource(R.string.contacts_your_contacts),
                             Modifier.padding(start = 4.dp, top = 16.dp),
                             trailing = {
                                 Text(
@@ -476,26 +479,26 @@ private fun MyShareCodeCard(
             )
             Spacer(Modifier.width(8.dp))
             Text(
-                text = "Your share code",
+                text = stringResource(R.string.contacts_your_share_code),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = myShareCode ?: "Loading...",
+            text = myShareCode ?: stringResource(R.string.contacts_loading),
             style = MaterialTheme.typography.titleLarge.copy(fontFamily = FontFamily.Monospace),
         )
         Spacer(Modifier.height(6.dp))
         Text(
-            text = "Someone can add you with it from anywhere, but then you're not verified until you meet.",
+            text = stringResource(R.string.contacts_share_code_explainer),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (showNameHint) {
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Set your name in Settings so new contacts see who you are.",
+                text = stringResource(R.string.contacts_set_name_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -534,7 +537,7 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrConte
         ) {
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                 // A Dialog gives its content no text colour of its own: say it, or dark mode shows dark on dark.
-                Text("Your QR code", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text(stringResource(R.string.contacts_your_qr_code), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(20.dp))
                 if (qrContent != null) {
                     QrCodeImage(content = qrContent, size = 240.dp)
@@ -551,14 +554,13 @@ internal fun ShareCodeQrDialog(shareCode: String, onDismiss: () -> Unit, qrConte
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "On their phone: New chat → Scan their QR code. It changes every second, so only " +
-                        "scanning it here, in person, verifies you. A picture of it just adds you.",
+                    text = stringResource(R.string.contacts_qr_dialog_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(20.dp))
-                SoftButton(text = "Done", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+                SoftButton(text = stringResource(R.string.common_done), onClick = onDismiss, modifier = Modifier.fillMaxWidth())
             }
         }
     }
@@ -575,7 +577,7 @@ private fun ShareCodeField(
     AuroraTextField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = "Paste share code",
+        placeholder = stringResource(R.string.contacts_paste_share_code),
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
@@ -594,7 +596,7 @@ private fun ShareCodeField(
                 onClick = { clipboard.getText()?.text?.trim()?.let { onValueChange(it) } },
                 modifier = Modifier.padding(end = 4.dp),
             ) {
-                Icon(Icons.Rounded.ContentPaste, contentDescription = "Paste", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Rounded.ContentPaste, contentDescription = stringResource(R.string.contacts_paste), tint = MaterialTheme.colorScheme.primary)
             }
         },
     )
@@ -632,11 +634,7 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onOpen: 
                     overflow = TextOverflow.Ellipsis,
                 )
                 val trust = contact.trust
-                val label = when (trust) {
-                    com.sotto.app.domain.model.ContactTrust.IN_PERSON -> "Verified in person"
-                    com.sotto.app.domain.model.ContactTrust.BY_PHONE -> "Verified by phone only"
-                    com.sotto.app.domain.model.ContactTrust.NONE -> "Not verified"
-                }
+                val label = com.sotto.app.ui.components.trustLabel(trust)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     com.sotto.app.ui.components.TrustIcon(trust, size = 13.dp)
                     Spacer(Modifier.width(5.dp))
@@ -646,7 +644,7 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onOpen: 
             Box {
                 var menu by remember { mutableStateOf(false) }
                 IconButton(onClick = { menu = true }) {
-                    Icon(Icons.Rounded.MoreVert, contentDescription = "Options for ${contact.displayName}")
+                    Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.contacts_options_for, contact.displayName))
                 }
                 DropdownMenu(
                     expanded = menu,
@@ -654,7 +652,7 @@ private fun ContactRow(contact: Contact, first: Boolean, last: Boolean, onOpen: 
                     shape = RoundedCornerShape(16.dp),
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Remove contact") },
+                        text = { Text(stringResource(R.string.contacts_remove_contact)) },
                         leadingIcon = {
                             Icon(Icons.Rounded.PersonRemove, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                         },
@@ -703,7 +701,7 @@ private fun WayRow(
                 Spacer(Modifier.width(8.dp))
                 Icon(
                     Icons.Rounded.VerifiedUser,
-                    contentDescription = "Verifies in person",
+                    contentDescription = stringResource(R.string.contacts_verifies_in_person),
                     tint = Aurora.colors.success,
                     modifier = Modifier.size(18.dp),
                 )
@@ -718,19 +716,18 @@ private fun TapPhonesDialog(adding: Boolean, onDismiss: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.Nfc, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-        title = { Text(if (adding) "Adding…" else "Hold your phones together") },
+        title = { Text(stringResource(if (adding) R.string.contacts_adding else R.string.contacts_hold_phones_together)) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    "Ask them to open New chat too. Then hold the backs of the phones together for a " +
-                        "moment. You'll be added to each other, verified in person.",
+                    stringResource(R.string.contacts_tap_dialog_body),
                     textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(20.dp))
                 androidx.compose.material3.CircularProgressIndicator(strokeWidth = 3.dp, modifier = Modifier.size(32.dp))
             }
         },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 

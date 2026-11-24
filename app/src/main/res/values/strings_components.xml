@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared components, navigation and the main activity. -->
+<resources>
+    <!-- How far a contact is verified (TrustIcon, trustLabel) -->
+    <string name="components_trust_in_person">Verified in person</string>
+    <string name="components_trust_by_phone">Verified by phone only</string>
+    <string name="components_trust_none">Not verified</string>
+
+    <string name="components_share_code_copied">Share code copied</string>
+    <string name="components_share_code_qr">QR code for share code</string>
+
+    <!-- Message request actions -->
+    <string name="components_request_accept">Accept</string>
+    <string name="components_request_reject">Reject</string>
+    <string name="components_request_block">Block</string>
+
+    <!-- Invite scanner -->
+    <string name="components_scan_invite_title">Scan an invite</string>
+    <string name="components_scan_invite_hint">Point the camera at the invite QR on the other person\'s phone (their Settings, Invite someone).</string>
+    <string name="components_not_an_invite">That QR code isn\'t a Sotto invite.</string>
+
+    <!-- Main activity -->
+    <string name="components_db_reset_title">Local data was reset</string>
+    <string name="components_db_reset_body">The local database could not be opened and had to be recreated. Messages and contacts stored on this device have been lost. Your identity is unaffected. Re-add contacts with their share codes to verify them again.</string>
+    <string name="components_invite_already_member">You already have an account on %1$s.</string>
+    <string name="components_invite_other_relay">This invite is for %1$s, not your relay.</string>
+</resources>

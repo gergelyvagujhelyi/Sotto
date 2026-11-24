@@ -1,11 +1,13 @@
 package com.sotto.app.ui.contacts
 
+import com.sotto.app.R
 import com.sotto.app.domain.model.Contact
 import com.sotto.app.domain.model.Identity
 import com.sotto.app.domain.repository.ConversationRepository
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.usecase.AddContactUseCase
 import com.sotto.app.domain.usecase.SendMyNameUseCase
+import com.sotto.app.ui.text.UiText
 import io.mockk.Runs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -90,7 +92,7 @@ class AddContactViewModelTest {
         val vm = viewModel()
         vm.addInPerson(theirCode)
 
-        assertTrue(vm.state.value is AddContactState.Error)
+        assertEquals(AddContactState.Error(UiText.res(R.string.contacts_error_keys_differ)), vm.state.value)
         coVerify(exactly = 1) { conversations.removeContact(theirCode.userId) }
         coVerify(exactly = 0) { sendMyName(any()) }
     }
@@ -168,7 +170,7 @@ class AddContactViewModelTest {
         val vm = viewModel()
         vm.addInPerson(theirCode, viaQr = false)
 
-        assertTrue(vm.state.value is AddContactState.Error)
+        assertEquals(AddContactState.Error(UiText.res(R.string.contacts_error_code_mismatch)), vm.state.value)
         coVerify(exactly = 1) { conversations.removeContact(mallory.userId) }
     }
 
@@ -181,7 +183,7 @@ class AddContactViewModelTest {
         val vm = viewModel()
         vm.addInPerson(theirCode)
 
-        assertTrue(vm.state.value is AddContactState.Error)
+        assertEquals(AddContactState.Error(UiText.res(R.string.contacts_error_keys_differ)), vm.state.value)
         coVerify(exactly = 0) { conversations.removeContact(any()) }
     }
 

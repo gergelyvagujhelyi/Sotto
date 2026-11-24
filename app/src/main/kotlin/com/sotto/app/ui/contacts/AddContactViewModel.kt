@@ -2,11 +2,13 @@ package com.sotto.app.ui.contacts
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sotto.app.R
 import com.sotto.app.domain.model.Contact
 import com.sotto.app.domain.repository.ConversationRepository
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.usecase.AddContactUseCase
 import com.sotto.app.domain.usecase.SendMyNameUseCase
+import com.sotto.app.ui.text.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -89,9 +91,7 @@ class AddContactViewModel @Inject constructor(
                 if (contact.userId != code.userId) {
                     // The code names one account and carries another's fingerprint: never keep either.
                     if (added) conversationRepository.removeContact(contact.userId)
-                    _state.value = AddContactState.Error(
-                        "That code doesn't add up: its account and its keys don't belong together. Don't add them this way.",
-                    )
+                    _state.value = AddContactState.Error(UiText.res(R.string.contacts_error_code_mismatch))
                     return@launch
                 }
                 // A QR code must be live (it changes every second); NFC reaches only a phone held close.
@@ -127,14 +127,12 @@ class AddContactViewModel @Inject constructor(
                         // KeysDiffer, OtherAccount, NotAContact: the relay's keys aren't the ones on
                         // their phone. Don't keep what this added.
                         if (added) conversationRepository.removeContact(contact.userId)
-                        _state.value = AddContactState.Error(
-                            "The keys the relay gave for this person don't match their phone. Don't add them this way.",
-                        )
+                        _state.value = AddContactState.Error(UiText.res(R.string.contacts_error_keys_differ))
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AddContactVM", "Failed to add contact in person", e)
-                _state.value = AddContactState.Error("Couldn't add them. Check your connection and try again.")
+                _state.value = AddContactState.Error(UiText.res(R.string.contacts_error_add_in_person_failed))
             }
         }
     }
@@ -176,7 +174,7 @@ class AddContactViewModel @Inject constructor(
         // Share codes are exactly 16 base64url characters; anything else can't be one
         // (and must not be put into the request path as-is).
         if (!SHARE_CODE_PATTERN.matches(code)) {
-            _state.value = AddContactState.Error("That doesn't look like a share code. Check it and try again.")
+            _state.value = AddContactState.Error(UiText.res(R.string.contacts_error_not_a_share_code))
             return
         }
 
@@ -199,7 +197,7 @@ class AddContactViewModel @Inject constructor(
                 _shareCodeInput.value = ""
             } catch (e: Exception) {
                 android.util.Log.e("AddContactVM", "Failed to add contact", e)
-                _state.value = AddContactState.Error("Failed to add contact. Check the share code and try again.")
+                _state.value = AddContactState.Error(UiText.res(R.string.contacts_error_add_failed))
             }
         }
     }
@@ -210,7 +208,7 @@ class AddContactViewModel @Inject constructor(
 }
 
 /** Shown when the user tries to add their own share code. */
-const val OWN_SHARE_CODE_MESSAGE = "That's your own share code. Ask the other person for theirs."
+val OWN_SHARE_CODE_MESSAGE: UiText = UiText.res(R.string.contacts_error_own_share_code)
 
 sealed interface AddContactState {
     data object Idle : AddContactState
@@ -220,5 +218,5 @@ sealed interface AddContactState {
      * so both phones are verified (the screen shows our code before opening the chat).
      */
     data class Success(val contact: Contact, val conversationId: String, val swapRoles: Boolean = false) : AddContactState
-    data class Error(val message: String) : AddContactState
+    data class Error(val message: UiText) : AddContactState
 }

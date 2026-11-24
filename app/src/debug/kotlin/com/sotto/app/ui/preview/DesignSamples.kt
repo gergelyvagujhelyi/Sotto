@@ -157,7 +157,7 @@ internal fun DesignSample(name: String) {
         "add-contact", "add-contact-error", "add-contact-qr" -> AddContactContent(
             shareCodeInput = if (name == "add-contact-error") "not-a-code" else "",
             state = if (name == "add-contact-error") {
-                AddContactState.Error("No user found for that share code.")
+                AddContactState.Error(com.sotto.app.ui.text.UiText.Plain("No user found for that share code."))
             } else {
                 AddContactState.Idle
             },
