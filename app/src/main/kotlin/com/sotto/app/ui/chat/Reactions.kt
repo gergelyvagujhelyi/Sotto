@@ -1,5 +1,7 @@
 package com.sotto.app.ui.chat
 
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -128,12 +130,12 @@ private fun QuickReactions(current: String?, onPick: (String) -> Unit, onMore: (
                 .size(40.dp)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                .clickable(onClickLabel = "More reactions", role = Role.Button, onClick = onMore),
+                .clickable(onClickLabel = stringResource(R.string.chat_more_reactions), role = Role.Button, onClick = onMore),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Rounded.Add,
-                contentDescription = "More reactions",
+                contentDescription = stringResource(R.string.chat_more_reactions),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(22.dp),
             )
@@ -143,6 +145,11 @@ private fun QuickReactions(current: String?, onPick: (String) -> Unit, onMore: (
 
 @Composable
 private fun EmojiChoice(emoji: String, selected: Boolean, onClick: () -> Unit, size: Int = 40) {
+    val description = if (selected) {
+        stringResource(R.string.chat_reaction_yours, emoji)
+    } else {
+        stringResource(R.string.chat_reaction_pick, emoji)
+    }
     Box(
         Modifier
             .size(size.dp)
@@ -153,7 +160,7 @@ private fun EmojiChoice(emoji: String, selected: Boolean, onClick: () -> Unit, s
             .clickable(role = Role.Button, onClick = onClick)
             .semantics {
                 this.selected = selected
-                contentDescription = if (selected) "$emoji, your reaction. Tap to take it back" else "React $emoji"
+                contentDescription = description
             },
         contentAlignment = Alignment.Center,
     ) {

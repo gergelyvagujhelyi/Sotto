@@ -1,6 +1,8 @@
 package com.sotto.app.domain
 
 import com.sotto.app.data.repository.reactionNotificationText
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ProfilePayload
@@ -94,9 +96,12 @@ class ReactionPayloadTest {
 
     @Test
     fun `the notification names the emoji and quotes the message`() {
-        assertEquals("Reacted ❤️ to \"See you at 6\"", reactionNotificationText("❤️", "  See you\n at 6 "))
-        val long = reactionNotificationText("👍", "a".repeat(100))
-        assertTrue(long, long.endsWith("…\"") && long.length < 80)
-        assertEquals("Reacted 👍 to your message", reactionNotificationText("👍", ""))
+        assertEquals(
+            UiText.res(R.string.chat_reaction_notification_quote, "❤️", "See you at 6"),
+            reactionNotificationText("❤️", "  See you\n at 6 "),
+        )
+        val long = (reactionNotificationText("👍", "a".repeat(100)) as UiText.Res).args[1] as String
+        assertTrue(long, long.endsWith("…") && long.length == 60)
+        assertEquals(UiText.res(R.string.chat_reaction_notification, "👍"), reactionNotificationText("👍", ""))
     }
 }

@@ -3,7 +3,9 @@ package com.sotto.app.data.media
 import com.sotto.app.domain.model.FilePayload
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MediaPayload
-import com.sotto.app.domain.model.previewText
+import com.sotto.app.domain.model.previewUiText
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -95,9 +97,13 @@ class FileDropTest {
 
     @Test
     fun `a file is named in the chat list`() {
-        assertEquals("📎 Semester.mp4", previewText(MediaKind.FILE, "", "Semester.mp4"))
-        assertEquals("📎 Semester.mp4: Från stugan", previewText(MediaKind.FILE, "Från stugan", "Semester.mp4"))
-        assertEquals("📎 File", previewText(MediaKind.FILE, ""))
+        val named = UiText.res(R.string.chat_media_file_named, "Semester.mp4")
+        assertEquals(named, previewUiText(MediaKind.FILE, "", "Semester.mp4"))
+        assertEquals(
+            UiText.res(R.string.chat_media_with_caption, named, "Från stugan"),
+            previewUiText(MediaKind.FILE, "Från stugan", "Semester.mp4"),
+        )
+        assertEquals(UiText.res(R.string.chat_media_file), previewUiText(MediaKind.FILE, ""))
     }
 
     @Test

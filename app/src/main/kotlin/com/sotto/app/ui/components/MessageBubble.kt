@@ -1,5 +1,7 @@
 package com.sotto.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -200,7 +202,7 @@ fun MessageBubble(
         if (failed) {
             // The label says "tap to retry", so it retries too, not just the bubble.
             Text(
-                text = "Not delivered · Tap to retry",
+                text = stringResource(R.string.chat_not_delivered),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.error,
                 modifier = Modifier
@@ -296,7 +298,7 @@ internal fun BubbleSurface(
                 when {
                     onLongClick != null || onDoubleClick != null -> Modifier.combinedClickable(
                         onClickLabel = null,
-                        onLongClickLabel = if (onLongClick != null) "React" else null,
+                        onLongClickLabel = if (onLongClick != null) stringResource(R.string.chat_react) else null,
                         onLongClick = onLongClick,
                         onDoubleClick = onDoubleClick,
                         onClick = onClick ?: {},
@@ -368,8 +370,11 @@ class BubbleGestures(val onLongClick: (() -> Unit)?, val onDoubleClick: (() -> U
 
 val LocalBubbleGestures = compositionLocalOf { BubbleGestures(null, null) }
 
-/** The reactions on a bubble: the contact's emoji and the user's, each null when they gave none. */
-data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String = "Them") {
+/**
+ * The reactions on a bubble: the contact's emoji and the user's, each null when they gave none.
+ * [theirName] null: "Them".
+ */
+data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String? = null) {
     val isEmpty: Boolean get() = theirs == null && mine == null
 }
 
@@ -385,9 +390,10 @@ private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, mod
         reactions.theirs != null && reactions.theirs == reactions.mine -> "${reactions.mine} 2"
         else -> listOfNotNull(reactions.theirs, reactions.mine).joinToString(" ")
     }
+    val theirName = reactions.theirName ?: stringResource(R.string.chat_them)
     val description = listOfNotNull(
-        reactions.theirs?.let { "${reactions.theirName} reacted $it" },
-        reactions.mine?.let { "You reacted $it" },
+        reactions.theirs?.let { stringResource(R.string.chat_reaction_theirs_description, theirName, it) },
+        reactions.mine?.let { stringResource(R.string.chat_reaction_mine_description, it) },
     ).joinToString(", ")
     Text(
         text = label,
@@ -397,7 +403,7 @@ private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, mod
             .clip(shape)
             .background(colors.surfaceContainerHigh, shape)
             .border(1.dp, Aurora.colors.glassBorder, shape)
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Change your reaction", onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.chat_reaction_change), onClick = onClick) else Modifier)
             .semantics { contentDescription = description }
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
@@ -465,7 +471,7 @@ private fun QuoteBlock(quote: BubbleQuote, isOutgoing: Boolean, textColor: Color
             .height(IntrinsicSize.Min)
             .clip(shape)
             .background(textColor.copy(alpha = 0.1f))
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Go to message", onClick = onClick) else Modifier),
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.chat_quote_go_to), onClick = onClick) else Modifier),
     ) {
         Box(
             Modifier
@@ -482,7 +488,7 @@ private fun QuoteBlock(quote: BubbleQuote, isOutgoing: Boolean, textColor: Color
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = quote.text.ifBlank { "Message" },
+                text = quote.text.ifBlank { stringResource(R.string.chat_quote_fallback) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = textColor.copy(alpha = 0.8f),
                 maxLines = 2,
@@ -626,7 +632,7 @@ private fun rememberLinked(text: String, color: Color, enabled: Boolean): Annota
                             uriHandler.openUri(link.url)
                         } catch (_: IllegalArgumentException) {
                             // No browser (or other app) for it.
-                            Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.chat_no_app_for_link), Toast.LENGTH_SHORT).show()
                         }
                     },
                     link.range.first,

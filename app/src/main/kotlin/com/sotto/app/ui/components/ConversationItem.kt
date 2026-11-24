@@ -1,5 +1,7 @@
 package com.sotto.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -66,7 +68,7 @@ fun ConversationItem(
                         Spacer(Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Rounded.Lock,
-                            contentDescription = "Encrypted",
+                            contentDescription = stringResource(R.string.conversations_encrypted),
                             modifier = Modifier.size(12.dp),
                             tint = colors.onSurfaceVariant.copy(alpha = 0.7f),
                         )

@@ -95,13 +95,13 @@ class TransferWorker @AssistedInject constructor(
         val context = applicationContext
         NotificationManagerCompat.from(context).createNotificationChannel(
             NotificationChannelCompat.Builder(CHANNEL, NotificationManagerCompat.IMPORTANCE_LOW)
-                .setName("File transfers")
-                .setDescription("Files being sent or downloaded")
+                .setName(context.getString(R.string.chat_transfer_channel))
+                .setDescription(context.getString(R.string.chat_transfer_channel_description))
                 .build(),
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(if (upload) "Sending a file" else "Receiving a file")
+            .setContentTitle(context.getString(if (upload) R.string.chat_transfer_sending else R.string.chat_transfer_receiving))
             .setProgress(100, percent ?: 0, percent == null)
             .setOngoing(true)
             .setSilent(true)

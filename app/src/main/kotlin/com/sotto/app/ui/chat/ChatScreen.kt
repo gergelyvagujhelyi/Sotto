@@ -146,6 +146,12 @@ import com.sotto.app.ui.components.AppSnackbarHost
 import com.sotto.app.ui.components.AuroraTextField
 import com.sotto.app.ui.components.clockTime
 import com.sotto.app.ui.components.dayLabel
+import com.sotto.app.ui.components.DateFormats
+import com.sotto.app.ui.components.rememberDateFormats
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.components.glass
 import com.sotto.app.ui.components.rememberToday
 import kotlinx.datetime.LocalTime
@@ -210,9 +216,9 @@ fun ChatScreen(
             val canOpen = openContext.packageManager.queryIntentActivities(view, 0).isNotEmpty()
             if (canOpen) {
                 try {
-                    openContext.startActivity(android.content.Intent.createChooser(view, "Open with"))
+                    openContext.startActivity(android.content.Intent.createChooser(view, openContext.getString(R.string.chat_open_with)))
                 } catch (_: android.content.ActivityNotFoundException) {
-                    viewModel.reportError("No app on this phone can open this file.")
+                    viewModel.reportError(UiText.res(R.string.chat_error_no_app_for_file))
                 }
             } else {
                 saving = opened
@@ -292,7 +298,7 @@ fun ChatScreen(
     ) { granted ->
         if (granted) {
             if (verifyAfterPermission) com.sotto.app.call.VerifyOnConnect.arm(viewModel.contactId)
-            onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: "Unknown")
+            onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: context.getString(R.string.chat_unknown_contact))
         }
         verifyAfterPermission = false
     }
@@ -323,7 +329,7 @@ fun ChatScreen(
     // Show error snackbar
     LaunchedEffect(sendError) {
         sendError?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(it.resolve(context))
             viewModel.clearError()
         }
     }
@@ -339,7 +345,7 @@ fun ChatScreen(
             == PackageManager.PERMISSION_GRANTED
         ) {
             if (verify) com.sotto.app.call.VerifyOnConnect.arm(viewModel.contactId)
-            onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: "Unknown")
+            onCallClick(viewModel.contactId, conversation?.contactDisplayName ?: context.getString(R.string.chat_unknown_contact))
         } else {
             verifyAfterPermission = verify
             micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -451,32 +457,32 @@ internal fun VerifyChoiceDialog(
     onByPhone: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val who = name ?: "this contact"
+    val who = name ?: stringResource(R.string.chat_this_contact)
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.GppMaybe, contentDescription = null, tint = Aurora.colors.warning) },
-        title = { Text("Verify $who") },
+        title = { Text(if (name != null) stringResource(R.string.chat_verify_title, name) else stringResource(R.string.chat_verify_title_unnamed)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 VerifyChoice(
                     icon = Icons.Rounded.VerifiedUser,
                     tint = Aurora.colors.success,
-                    title = "In person",
-                    badge = "Stronger",
-                    body = "Meet, then tap your phones together or scan the code on their phone.",
+                    title = stringResource(R.string.chat_verify_in_person),
+                    badge = stringResource(R.string.chat_verify_stronger),
+                    body = stringResource(R.string.chat_verify_in_person_body),
                     onClick = onInPerson,
                 )
                 VerifyChoice(
                     icon = Icons.Rounded.PhoneInTalk,
                     tint = MaterialTheme.colorScheme.primary,
-                    title = "By phone",
-                    badge = if (verifiedByPhone) "Done · weaker" else "Weaker",
-                    body = "Call $who and read seven emoji to each other. It relies on knowing their voice.",
+                    title = stringResource(R.string.chat_verify_by_phone),
+                    badge = stringResource(if (verifiedByPhone) R.string.chat_verify_done_weaker else R.string.chat_verify_weaker),
+                    body = stringResource(R.string.chat_verify_by_phone_body, who),
                     onClick = onByPhone,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -524,23 +530,19 @@ internal fun NotVerifiedWarningDialog(
     /** Calls them, to verify by phone once the call connects. */
     onVerifyByPhone: () -> Unit = {},
 ) {
-    val who = name ?: "this contact"
+    val who = name ?: stringResource(R.string.chat_this_contact)
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.GppMaybe, contentDescription = null, tint = Aurora.colors.warning) },
-        title = { Text("$who isn't verified") },
-        text = {
-            Text(
-                "You haven't checked $who's keys, so you can't be sure this chat is really with them. " +
-                    "Verify in person when you meet, or verify by phone in a call now (weaker: it relies on " +
-                    "knowing their voice).\n\nThis warning shows once for $who.",
-            )
+        title = {
+            Text(if (name != null) stringResource(R.string.chat_not_verified_title, name) else stringResource(R.string.chat_not_verified_title_unnamed))
         },
+        text = { Text(stringResource(R.string.chat_not_verified_body, who)) },
         confirmButton = {
             Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = onVerify) { Text("Verify in person") }
-                TextButton(onClick = onVerifyByPhone) { Text("Verify by phone") }
-                TextButton(onClick = onSendAnyway) { Text("Send anyway") }
+                TextButton(onClick = onVerify) { Text(stringResource(R.string.chat_verify_in_person_action)) }
+                TextButton(onClick = onVerifyByPhone) { Text(stringResource(R.string.chat_verify_by_phone_action)) }
+                TextButton(onClick = onSendAnyway) { Text(stringResource(R.string.chat_send_anyway)) }
             }
         },
     )
@@ -637,7 +639,7 @@ fun ChatContent(
             if (recording != null) {
                 onSendVoice(recording)
             } else if (send) {
-                recordScope.launch { snackbarHostState.showSnackbar("Hold to record, let go to send.") }
+                recordScope.launch { snackbarHostState.showSnackbar(context.getString(R.string.chat_hold_to_record)) }
             }
         }
     }
@@ -653,7 +655,7 @@ fun ChatContent(
             recordState = RecordState.HOLDING
             recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
         } else {
-            recordScope.launch { snackbarHostState.showSnackbar("The microphone is busy.") }
+            recordScope.launch { snackbarHostState.showSnackbar(context.getString(R.string.chat_microphone_busy)) }
         }
         started
     }
@@ -692,7 +694,7 @@ fun ChatContent(
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onSendFile(uri)
     }
-    val quoteName = contactName ?: "Them"
+    val quoteName = contactName ?: stringResource(R.string.chat_them)
     val scope = rememberCoroutineScope()
     // The message a tapped quote led to, tinted for a moment.
     var highlighted by remember { mutableStateOf<String?>(null) }
@@ -703,16 +705,17 @@ fun ChatContent(
         }
     }
     val today = rememberToday()
+    val dates = rememberDateFormats()
     // Built off the main thread, so a long history doesn't cost a frame on every
     // new message. Until the first pass finishes the list is just empty.
     // Null until the first pass is done. [ChatRowsBuilt.history] tells rows made from the
     // stored history apart from the empty list shown while it's still loading, so that the
     // history is never taken for messages that just arrived.
-    val built by produceState<ChatRowsBuilt?>(initialValue = null, messages, historyLoaded, isEncrypted, today) {
+    val built by produceState<ChatRowsBuilt?>(initialValue = null, messages, historyLoaded, isEncrypted, today, dates) {
         val loaded = historyLoaded
         value = ChatRowsBuilt(
             rows = withContext(Dispatchers.Default) {
-                buildChatRows(messages, showEncryptionNotice = isEncrypted, today = today)
+                buildChatRows(messages, showEncryptionNotice = isEncrypted, today = today, dates = dates)
             },
             history = loaded,
         )
@@ -780,7 +783,7 @@ fun ChatContent(
             containerColor = Color.Transparent,
             topBar = {
                 ChatTopBar(
-                    name = contactName ?: "Chat",
+                    name = contactName ?: stringResource(R.string.chat_title_fallback),
                     avatarSeed = avatarSeed,
                     isEncrypted = isEncrypted,
                     encryptionInfo = encryptionInfo,
@@ -830,7 +833,7 @@ fun ChatContent(
                                     onQuoteClick = { targetId ->
                                         val index = newestFirst.indexOfFirst { it.key == "m:$targetId" }
                                         if (index < 0) {
-                                            scope.launch { snackbarHostState.showSnackbar("That message isn't on this phone any more.") }
+                                            scope.launch { snackbarHostState.showSnackbar(context.getString(R.string.chat_quote_not_here)) }
                                         } else {
                                             scope.launch { listState.animateScrollToItem(index) }
                                             highlighted = targetId
@@ -871,14 +874,14 @@ fun ChatContent(
                             SessionNotice.AccountDeleted -> NoticeCard(
                                 icon = Icons.Rounded.PersonOff,
                                 tint = MaterialTheme.colorScheme.error,
-                                title = "Account deleted",
-                                body = "This user has deleted their account.",
+                                title = stringResource(R.string.chat_account_deleted),
+                                body = stringResource(R.string.chat_error_peer_deleted),
                                 modifier = guard,
                             )
                             SessionNotice.Reestablishing -> NoticeCard(
                                 icon = Icons.Rounded.Key,
                                 tint = MaterialTheme.colorScheme.primary,
-                                title = "Re-establishing secure session...",
+                                title = stringResource(R.string.chat_reestablishing),
                                 body = null,
                                 loading = true,
                                 modifier = guard,
@@ -886,8 +889,8 @@ fun ChatContent(
                             SessionNotice.KeysRotated -> NoticeCard(
                                 icon = Icons.Rounded.Key,
                                 tint = Aurora.colors.warning,
-                                title = "Peer rotated keys",
-                                body = "Tap to resume sending.",
+                                title = stringResource(R.string.chat_keys_rotated),
+                                body = stringResource(R.string.chat_keys_rotated_body),
                                 onClick = onReEstablishSession,
                                 modifier = guard,
                             )
@@ -903,11 +906,11 @@ fun ChatContent(
                         NoticeCard(
                             icon = Icons.Rounded.Block,
                             tint = MaterialTheme.colorScheme.error,
-                            title = "You blocked this contact",
-                            body = "Their messages and calls are not delivered.",
+                            title = stringResource(R.string.chat_blocked_title),
+                            body = stringResource(R.string.chat_blocked_body),
                             modifier = Modifier.blockTouches(isExiting),
                         ) {
-                            SoftButton(text = "Unblock", onClick = onUnblock, compact = true, modifier = Modifier.weight(1f))
+                            SoftButton(text = stringResource(R.string.chat_unblock), onClick = onUnblock, compact = true, modifier = Modifier.weight(1f))
                         }
                     }
 
@@ -922,8 +925,8 @@ fun ChatContent(
                         NoticeCard(
                             icon = Icons.Rounded.MarkChatUnread,
                             tint = MaterialTheme.colorScheme.primary,
-                            title = "Message request",
-                            body = "This is a message request. Accept to reply.",
+                            title = stringResource(R.string.chat_request_title),
+                            body = stringResource(R.string.chat_request_body),
                             modifier = Modifier.blockTouches(isExiting),
                         ) {
                             MessageRequestActions(onAccept = onAcceptRequest, onReject = onRejectRequest, onBlock = onBlock)
@@ -959,10 +962,10 @@ fun ChatContent(
                         placeholder = when {
                             // The text is still on its way out of the box.
                             flight != null -> ""
-                            isBlocked -> "Contact blocked"
-                            peerDeleted -> "User deleted their account"
-                            needsSessionReset -> "Tap banner to resume sending"
-                            else -> "Message"
+                            isBlocked -> stringResource(R.string.chat_composer_blocked)
+                            peerDeleted -> stringResource(R.string.chat_composer_peer_deleted)
+                            needsSessionReset -> stringResource(R.string.chat_composer_keys_rotated)
+                            else -> stringResource(R.string.chat_composer_hint)
                         },
                         onTextPlaced = { composerTextOrigin[0] = it },
                         recordState = recordState,
@@ -1044,7 +1047,7 @@ private fun ChatTopBar(
             ),
             navigationIcon = {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.common_back))
                 }
             },
             title = {
@@ -1063,7 +1066,7 @@ private fun ChatTopBar(
                             // A code compared in a call is said too, as the weaker proof it is.
                             val tint = if (verifiedByCall) colors.primary else Aurora.colors.warning
                             Row(
-                                modifier = Modifier.clickable(onClickLabel = "Verify in person", onClick = onVerify),
+                                modifier = Modifier.clickable(onClickLabel = stringResource(R.string.chat_verify_in_person_action), onClick = onVerify),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 com.sotto.app.ui.components.TrustIcon(
@@ -1073,7 +1076,7 @@ private fun ChatTopBar(
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    text = if (verifiedByCall) "Verified by phone only" else "Not verified",
+                                    text = stringResource(if (verifiedByCall) R.string.chat_verified_by_phone_only else R.string.chat_not_verified),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = tint,
                                     maxLines = 1,
@@ -1083,7 +1086,7 @@ private fun ChatTopBar(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     if (verifiedInPerson == true) Icons.Rounded.VerifiedUser else Icons.Rounded.Lock,
-                                    contentDescription = if (verifiedInPerson == true) "Verified in person" else null,
+                                    contentDescription = if (verifiedInPerson == true) stringResource(R.string.chat_verified_in_person) else null,
                                     modifier = Modifier.size(11.dp),
                                     tint = colors.tertiary,
                                 )
@@ -1103,14 +1106,14 @@ private fun ChatTopBar(
                 if (!isBlocked) {
                     GlassIconButton(
                         icon = Icons.Rounded.Call,
-                        contentDescription = "Voice call",
+                        contentDescription = stringResource(R.string.chat_voice_call),
                         onClick = onCall,
                         tint = colors.primary,
                     )
                 }
                 Box {
                     IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "More options")
+                        Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.chat_more_options))
                     }
                     DropdownMenu(
                         expanded = showMenu,
@@ -1118,7 +1121,7 @@ private fun ChatTopBar(
                         shape = RoundedCornerShape(16.dp),
                     ) {
                         DropdownMenuItem(
-                            text = { Text(if (verifiedInPerson == true) "Verified in person" else "Verify…") },
+                            text = { Text(stringResource(if (verifiedInPerson == true) R.string.chat_verified_in_person else R.string.chat_menu_verify)) },
                             leadingIcon = {
                                 Icon(
                                     if (verifiedInPerson == true) Icons.Rounded.VerifiedUser else Icons.Rounded.GppMaybe,
@@ -1132,7 +1135,7 @@ private fun ChatTopBar(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Rename") },
+                            text = { Text(stringResource(R.string.chat_menu_rename)) },
                             leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
                             onClick = {
                                 showMenu = false
@@ -1140,7 +1143,7 @@ private fun ChatTopBar(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text(if (isBlocked) "Unblock" else "Block") },
+                            text = { Text(stringResource(if (isBlocked) R.string.chat_unblock else R.string.chat_block)) },
                             leadingIcon = {
                                 Icon(
                                     Icons.Rounded.Block,
@@ -1154,7 +1157,7 @@ private fun ChatTopBar(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Delete chat") },
+                            text = { Text(stringResource(R.string.chat_menu_delete_chat)) },
                             leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = colors.error) },
                             onClick = {
                                 showMenu = false
@@ -1162,7 +1165,7 @@ private fun ChatTopBar(
                             },
                         )
                         DropdownMenuItem(
-                            text = { Text("Remove contact") },
+                            text = { Text(stringResource(R.string.chat_menu_remove_contact)) },
                             leadingIcon = { Icon(Icons.Rounded.PersonRemove, contentDescription = null, tint = colors.error) },
                             onClick = {
                                 showMenu = false
@@ -1184,18 +1187,13 @@ internal fun BlockContactDialog(name: String?, onConfirm: () -> Unit, onDismiss:
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.Block, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-        title = { Text("Block ${name ?: "this contact"}?") },
-        text = {
-            Text(
-                "You won't receive their messages or calls. They aren't told. " +
-                    "You can unblock them later in Settings."
-            )
-        },
+        title = { Text(if (name != null) stringResource(R.string.chat_block_title, name) else stringResource(R.string.chat_block_title_unnamed)) },
+        text = { Text(stringResource(R.string.chat_block_body)) },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Block", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.chat_block), color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
 }
@@ -1206,18 +1204,13 @@ internal fun DeleteChatDialog(name: String?, onConfirm: () -> Unit, onDismiss: (
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-        title = { Text("Delete this chat?") },
-        text = {
-            Text(
-                "Its messages and calls are deleted from this phone. ${name ?: "They"} keeps " +
-                    "their copy, and a new message from them starts a new chat."
-            )
-        },
+        title = { Text(stringResource(R.string.chat_delete_title)) },
+        text = { Text(stringResource(R.string.chat_delete_body, name ?: stringResource(R.string.chat_they))) },
         confirmButton = {
-            TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.common_delete), color = MaterialTheme.colorScheme.error) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
 }
@@ -1237,13 +1230,13 @@ internal fun RenameContactDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
-        title = { Text("Rename contact") },
+        title = { Text(stringResource(R.string.chat_rename_title)) },
         text = {
             Column {
                 AuroraTextField(
                     value = name,
                     onValueChange = { if (it.codePointCount(0, it.length) <= DisplayNames.MAX_LENGTH) name = it },
-                    placeholder = "Name",
+                    placeholder = stringResource(R.string.chat_rename_placeholder),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Words,
@@ -1255,17 +1248,17 @@ internal fun RenameContactDialog(
                 Spacer(Modifier.height(12.dp))
                 Text(
                     text = if (theirOwnName != null && theirOwnName != currentName) {
-                        "They call themselves \u201c$theirOwnName\u201d. Only you see the name you set here."
+                        stringResource(R.string.chat_rename_their_name, theirOwnName)
                     } else {
-                        "Only you see this name."
+                        stringResource(R.string.chat_rename_only_you)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(name) }) { Text(stringResource(R.string.common_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -1310,7 +1303,7 @@ private sealed interface ChatRow {
  * bubble only needs HH:mm), and consecutive bubbles from one side, minutes apart,
  * marked as a group.
  */
-private fun buildChatRows(messages: List<Message>, showEncryptionNotice: Boolean, today: LocalDate): List<ChatRow> {
+private fun buildChatRows(messages: List<Message>, showEncryptionNotice: Boolean, today: LocalDate, dates: DateFormats): List<ChatRow> {
     val tz = TimeZone.currentSystemDefault()
     val rows = ArrayList<ChatRow>(messages.size + 8)
     if (showEncryptionNotice) rows += ChatRow.EncryptionNotice
@@ -1320,7 +1313,7 @@ private fun buildChatRows(messages: List<Message>, showEncryptionNotice: Boolean
         val local = message.timestamp.toLocalDateTime(tz)
         val sameDay = local.date == previousDate
         if (!sameDay) {
-            rows += ChatRow.DayHeader(dayLabel(local.date, today), key = "d:${local.date}")
+            rows += ChatRow.DayHeader(dayLabel(local.date, today, dates), key = "d:${local.date}")
         }
         val grouped = sameDay && previous != null &&
             previous.isBubble && message.isBubble &&
@@ -1396,8 +1389,8 @@ private fun ChatRowItem(
                 ) {
                     MessageBubble(
                         text = when {
-                            message.state == MessageState.REJECTED -> "⛔ Message rejected (unsigned or unverifiable)"
-                            message.state == MessageState.DECRYPT_FAILED -> "⚠ Could not decrypt this message"
+                            message.state == MessageState.REJECTED -> stringResource(R.string.chat_message_rejected)
+                            message.state == MessageState.DECRYPT_FAILED -> stringResource(R.string.chat_message_undecryptable)
                             message.media != null -> message.plaintext.trim()
                             message.plaintext.isEmpty() -> "..."
                             else -> message.plaintext
@@ -1482,8 +1475,7 @@ private fun EncryptionNotice(modifier: Modifier = Modifier) {
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                text = "Messages and calls are end-to-end encrypted. No one outside this chat, " +
-                    "not even the relay server, can read them.",
+                text = stringResource(R.string.chat_encryption_notice),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Start,
@@ -1663,7 +1655,7 @@ private fun SendButton(enabled: Boolean, onClick: () -> Unit) {
     ) {
         Icon(
             Icons.Rounded.ArrowUpward,
-            contentDescription = "Send",
+            contentDescription = stringResource(R.string.chat_send),
             tint = if (enabled) Color.White else colors.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier.size(24.dp),
         )

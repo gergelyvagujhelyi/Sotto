@@ -1,5 +1,7 @@
 package com.sotto.app.ui.conversations
 
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -58,6 +60,7 @@ import com.sotto.app.ui.components.MessageRequestActions
 import com.sotto.app.ui.components.SectionLabel
 import com.sotto.app.ui.components.TagChip
 import com.sotto.app.ui.components.listTimestamp
+import com.sotto.app.ui.components.rememberDateFormats
 import com.sotto.app.ui.components.rememberToday
 import com.sotto.app.ui.theme.Aurora
 
@@ -110,6 +113,7 @@ fun ConversationsContent(
     val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     val isEmpty = conversations.isEmpty() && messageRequests.isEmpty()
     val today = rememberToday()
+    val dates = rememberDateFormats()
 
     AuroraBackground(Modifier.fillMaxSize(), style = AuroraStyle.Header) {
         Scaffold(
@@ -117,10 +121,10 @@ fun ConversationsContent(
             containerColor = Color.Transparent,
             topBar = {
                 CollapsingTitleTopBar(
-                    title = "Chats",
+                    title = stringResource(R.string.conversations_title),
                     scrollBehavior = scrollBehavior,
                     actions = {
-                        GlassIconButton(Icons.Rounded.Settings, contentDescription = "Settings", onClick = onSettings)
+                        GlassIconButton(Icons.Rounded.Settings, contentDescription = stringResource(R.string.common_settings), onClick = onSettings)
                         Spacer(Modifier.width(8.dp))
                     },
                 )
@@ -129,7 +133,7 @@ fun ConversationsContent(
                 // Always shown: it is the only way to add a contact, and the empty
                 // state may be scrolled or squeezed (landscape, split screen).
                 GradientFab(
-                    text = "New chat",
+                    text = stringResource(R.string.conversations_new_chat),
                     icon = Icons.Rounded.Edit,
                     expanded = fabExpanded,
                     onClick = onAddContact,
@@ -140,9 +144,8 @@ fun ConversationsContent(
                 Column(Modifier.padding(padding)) {
                     EmptyState(
                         icon = Icons.AutoMirrored.Rounded.Chat,
-                        title = "No conversations yet",
-                        subtitle = "Tap New chat and enter someone's share code to start a private, " +
-                            "end-to-end encrypted conversation.",
+                        title = stringResource(R.string.conversations_empty_title),
+                        subtitle = stringResource(R.string.conversations_empty_body),
                     )
                 }
             } else {
@@ -163,7 +166,7 @@ fun ConversationsContent(
                     if (messageRequests.isNotEmpty()) {
                         item(key = "h:requests") {
                             SectionLabel(
-                                "Message requests",
+                                stringResource(R.string.conversations_requests),
                                 modifier = Modifier.animateItem(),
                                 trailing = { TagChip(messageRequests.size.toString(), highlighted = true) },
                             )
@@ -173,7 +176,7 @@ fun ConversationsContent(
                                 displayName = request.contactDisplayName,
                                 avatarSeed = request.contactId,
                                 lastMessage = request.lastMessagePreview,
-                                timestamp = request.lastMessageTimestamp?.let { listTimestamp(it, today) },
+                                timestamp = request.lastMessageTimestamp?.let { listTimestamp(it, today, dates) },
                                 onAccept = { onAcceptRequest(request.id) },
                                 onReject = { onRejectRequest(request.id) },
                                 onBlock = { onBlockRequest(request) },
@@ -184,7 +187,7 @@ fun ConversationsContent(
                         }
                         if (conversations.isNotEmpty()) {
                             item(key = "h:chats") {
-                                SectionLabel("Chats", modifier = Modifier.animateItem())
+                                SectionLabel(stringResource(R.string.conversations_chats), modifier = Modifier.animateItem())
                             }
                         }
                     }
@@ -193,7 +196,7 @@ fun ConversationsContent(
                             displayName = conversation.contactDisplayName,
                             avatarSeed = conversation.contactId,
                             lastMessage = conversation.lastMessagePreview,
-                            timestamp = conversation.lastMessageTimestamp?.let { listTimestamp(it, today) },
+                            timestamp = conversation.lastMessageTimestamp?.let { listTimestamp(it, today, dates) },
                             unreadCount = conversation.unreadCount,
                             isEncrypted = conversation.isEncrypted,
                             trust = trust[conversation.contactId],
@@ -234,7 +237,7 @@ private fun MessageRequestCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Wants to message you",
+                    text = stringResource(R.string.conversations_request_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

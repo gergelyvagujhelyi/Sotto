@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The chat: messages, media, reactions, dialogs, and what it says when something fails. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Chat screen: top bar and menu -->
+    <string name="chat_title_fallback">Beszélgetés</string>
+    <string name="chat_unknown_contact">Ismeretlen</string>
+    <string name="chat_voice_call">Hanghívás</string>
+    <string name="chat_more_options">További lehetőségek</string>
+    <string name="chat_not_verified">Nincs ellenőrizve</string>
+    <string name="chat_verified_by_phone_only">Csak hívással ellenőrizve</string>
+    <string name="chat_verified_in_person">Személyesen ellenőrizve</string>
+    <string name="chat_menu_verify">Ellenőrzés…</string>
+    <string name="chat_menu_rename">Átnevezés</string>
+    <string name="chat_block">Letiltás</string>
+    <string name="chat_unblock">Letiltás feloldása</string>
+    <string name="chat_menu_delete_chat">Beszélgetés törlése</string>
+    <string name="chat_menu_remove_contact">Ismerős eltávolítása</string>
+
+    <!-- Verifying a contact. chat_this_contact stands in for a name not known yet. -->
+    <string name="chat_this_contact">ez az ismerős</string>
+    <string name="chat_verify_title">%1$s ellenőrzése</string>
+    <string name="chat_verify_title_unnamed">Ismerős ellenőrzése</string>
+    <string name="chat_verify_in_person">Személyesen</string>
+    <string name="chat_verify_stronger">Erősebb</string>
+    <string name="chat_verify_in_person_body">Találkozzatok, aztán érintsétek össze a telefonokat, vagy olvasd be a kódot az ő telefonjáról.</string>
+    <string name="chat_verify_by_phone">Hívással</string>
+    <string name="chat_verify_weaker">Gyengébb</string>
+    <string name="chat_verify_done_weaker">Kész · gyengébb</string>
+    <!-- Leaves the name out: it is in the title, and a name would need a case ending. -->
+    <string name="chat_verify_by_phone_body" tools:ignore="StringFormatCount">Hívd fel, és olvassatok fel egymásnak hét emojit. Ez azon múlik, hogy felismered-e a hangját.</string>
+    <string name="chat_verify_in_person_action">Ellenőrzés személyesen</string>
+    <string name="chat_verify_by_phone_action">Ellenőrzés hívással</string>
+    <string name="chat_not_verified_title">%1$s nincs ellenőrizve</string>
+    <string name="chat_not_verified_title_unnamed">Az ismerős nincs ellenőrizve</string>
+    <!-- Leaves the name out: it is in the title, and a name would need a case ending. -->
+    <string name="chat_not_verified_body" tools:ignore="StringFormatCount">Még nem ellenőrizted a kulcsait, így nem lehetsz biztos benne, hogy tényleg vele beszélsz. Ellenőrizd személyesen, amikor találkoztok, vagy most hívással (ez gyengébb: azon múlik, hogy felismered-e a hangját).\n\nEz a figyelmeztetés ismerősönként csak egyszer jelenik meg.</string>
+    <string name="chat_send_anyway">Küldés így is</string>
+
+    <!-- Dialogs -->
+    <string name="chat_block_title">%1$s letiltása?</string>
+    <string name="chat_block_title_unnamed">Letiltod ezt az ismerőst?</string>
+    <string name="chat_block_body">Nem kapod meg az üzeneteit és a hívásait. Ő erről nem kap értesítést. A letiltást később a Beállításokban feloldhatod.</string>
+    <string name="chat_delete_title">Törlöd ezt a beszélgetést?</string>
+    <string name="chat_delete_body">Az üzenetek és a hívások törlődnek erről a telefonról. %1$s megtartja a saját példányát, és ha új üzenetet küld, új beszélgetés indul.</string>
+    <string name="chat_they">Ő</string>
+    <string name="chat_rename_title">Ismerős átnevezése</string>
+    <string name="chat_rename_placeholder">Név</string>
+    <string name="chat_rename_their_name">Saját magát így nevezi: „%1$s”. Az itt megadott nevet csak te látod.</string>
+    <string name="chat_rename_only_you">Ezt a nevet csak te látod.</string>
+
+    <!-- Banners and the composer -->
+    <string name="chat_account_deleted">Fiók törölve</string>
+    <string name="chat_reestablishing">Biztonságos kapcsolat helyreállítása…</string>
+    <string name="chat_keys_rotated">Az ismerős kulcsot cserélt</string>
+    <string name="chat_keys_rotated_body">Koppints a küldés folytatásához.</string>
+    <string name="chat_blocked_title">Letiltottad ezt az ismerőst</string>
+    <string name="chat_blocked_body">Az üzenetei és a hívásai nem jutnak el hozzád.</string>
+    <string name="chat_request_title">Üzenetkérés</string>
+    <string name="chat_request_body">Ez egy üzenetkérés. Fogadd el, ha válaszolni szeretnél.</string>
+    <string name="chat_composer_hint">Üzenet</string>
+    <string name="chat_composer_blocked">Ismerős letiltva</string>
+    <string name="chat_composer_peer_deleted">A felhasználó törölte a fiókját</string>
+    <string name="chat_composer_keys_rotated">Koppints a sávra a folytatáshoz</string>
+    <string name="chat_send">Küldés</string>
+    <string name="chat_encryption_notice">Az üzenetek és a hívások végponttól végpontig titkosítottak. Rajtatok kívül senki, még a szerver sem olvashatja őket.</string>
+    <string name="chat_hold_to_record">Tartsd lenyomva a felvételhez, engedd el a küldéshez.</string>
+    <string name="chat_microphone_busy">A mikrofon foglalt.</string>
+    <string name="chat_mic_description">Tartsd lenyomva hangüzenet felvételéhez</string>
+    <string name="chat_recording_delete">Felvétel törlése</string>
+    <string name="chat_recording_slide_to_cancel">‹ Húzd el a megszakításhoz</string>
+    <string name="chat_recording_slide_to_lock">Húzd fel a rögzítéshez</string>
+
+    <!-- Messages -->
+    <string name="chat_message_rejected">⛔ Elutasított üzenet (aláíratlan vagy nem ellenőrizhető)</string>
+    <string name="chat_message_undecryptable">⚠ Ezt az üzenetet nem sikerült visszafejteni</string>
+    <string name="chat_not_delivered">Nincs kézbesítve · Koppints az újraküldéshez</string>
+    <string name="chat_unknown_payload">Ehhez az üzenethez újabb Sotto kell. Frissítsd a Sottót, hogy lásd.</string>
+    <string name="chat_no_app_for_link">Egy alkalmazás sem tudja megnyitni ezt a linket</string>
+    <string name="chat_you">Te</string>
+    <string name="chat_them">Ő</string>
+    <string name="chat_reply">Válasz</string>
+    <string name="chat_reply_cancel">Válasz elvetése</string>
+    <string name="chat_quote_go_to">Ugrás az üzenethez</string>
+    <string name="chat_quote_fallback">Üzenet</string>
+    <string name="chat_quote_not_here">Ez az üzenet már nincs meg ezen a telefonon.</string>
+
+    <!-- Reactions -->
+    <string name="chat_react">Reagálás</string>
+    <string name="chat_more_reactions">További reakciók</string>
+    <string name="chat_reaction_pick">Reagálás: %1$s</string>
+    <string name="chat_reaction_yours">%1$s, a reakciód. Koppints a visszavonáshoz</string>
+    <string name="chat_reaction_theirs_description">%1$s reakciója: %2$s</string>
+    <string name="chat_reaction_mine_description">A reakciód: %1$s</string>
+    <string name="chat_reaction_change">Reakció módosítása</string>
+    <string name="chat_reaction_notification">Reagált (%1$s) az üzenetedre</string>
+    <string name="chat_reaction_notification_quote">Reagált (%1$s) erre: „%2$s”</string>
+
+    <!-- Events in the chat -->
+    <string name="chat_event_keys_rotated_local">Lecserélted a kulcsaidat</string>
+    <string name="chat_event_keys_rotated_remote">Az ismerős lecserélte a kulcsait</string>
+    <string name="chat_event_account_deleted">Az ismerős törölte a fiókját</string>
+    <string name="chat_event_keys_changed">Megváltoztak a kulcsok</string>
+    <string name="chat_call_missed">Nem fogadott hívás</string>
+    <string name="chat_call_unanswered">Nem vette fel</string>
+    <string name="chat_call_failed">Sikertelen hívás</string>
+    <string name="chat_call_voice">Hanghívás</string>
+    <string name="chat_call_outgoing">Kimenő hívás</string>
+    <string name="chat_call_incoming">Bejövő hívás</string>
+    <string name="chat_call_duration_minutes">%1$d p %2$d mp</string>
+    <string name="chat_call_duration_seconds">%1$d mp</string>
+
+    <!-- Media: previews (chat list, notifications, quotes) and bubbles -->
+    <string name="chat_media_voice">🎤 Hangüzenet</string>
+    <string name="chat_media_photo">📷 Fénykép</string>
+    <string name="chat_media_file">📎 Fájl</string>
+    <string name="chat_preview_wants_to_connect">Kapcsolatba lépne veled</string>
+    <string name="chat_request_media_voice">🎤 Hangüzenetet küldött, mielőtt elfogadtad a kérést, ezért nem érkezett meg. Kérd meg, hogy küldje újra.</string>
+    <string name="chat_request_media_photo">📷 Fényképet küldött, mielőtt elfogadtad a kérést, ezért nem érkezett meg. Kérd meg, hogy küldje újra.</string>
+    <string name="chat_request_media_file">📎 Fájlt küldött, mielőtt elfogadtad a kérést, ezért nem érkezett meg. Kérd meg, hogy küldje újra.</string>
+    <string name="chat_voice_message">Hangüzenet</string>
+    <string name="chat_voice_play">Lejátszás</string>
+    <string name="chat_voice_pause">Szünet</string>
+    <string name="chat_voice_play_description">Hangüzenet lejátszása</string>
+    <string name="chat_voice_pause_description">Hangüzenet szüneteltetése</string>
+    <string name="chat_voice_cant_play">Ez a hangüzenet nem játszható le</string>
+    <string name="chat_photo">Fénykép</string>
+    <string name="chat_photo_hd_description">HD fénykép</string>
+    <string name="chat_photo_open">Fénykép megnyitása</string>
+    <string name="chat_photo_close">Fénykép bezárása</string>
+    <string name="chat_hd_download">HD letöltése · %1$s</string>
+    <string name="chat_hd_downloading">HD letöltése…</string>
+    <string name="chat_hd_downloading_percent">HD letöltése: %1$d%%</string>
+    <string name="chat_hd_gone">A HD-másolat már nem érhető el</string>
+    <string name="chat_photo_to_send">Küldendő fénykép</string>
+    <string name="chat_photo_caption_hint">Képaláírás hozzáadása</string>
+    <string name="chat_photo_send">Fénykép küldése</string>
+    <string name="chat_photo_dont_send">Ne küldd el</string>
+    <string name="chat_photo_send_hd">Küldés HD-ben</string>
+    <string name="chat_photo_send_standard">Küldés normál minőségben</string>
+    <string name="chat_photo_hd_on">HD be</string>
+    <string name="chat_photo_hd_off">HD ki</string>
+    <string name="chat_attach">Fénykép vagy fájl csatolása</string>
+    <string name="chat_attach_photo">Fénykép</string>
+    <string name="chat_attach_file">Fájl vagy videó</string>
+    <string name="chat_file">Fájl</string>
+    <string name="chat_file_sending_percent">Küldés: %1$d%%</string>
+    <string name="chat_file_downloading_percent">Letöltés: %1$d%%</string>
+    <string name="chat_file_waiting_upload">Feltöltésre vár…</string>
+    <string name="chat_file_not_uploaded">Nincs feltöltve</string>
+    <string name="chat_file_waiting_download">Letöltésre vár…</string>
+    <string name="chat_file_sending_directly">Közvetlen küldés…</string>
+    <string name="chat_file_coming_directly">Közvetlenül érkezik…</string>
+    <string name="chat_file_tap_to_download">Koppints a letöltéshez</string>
+    <string name="chat_file_gone">Már nem érhető el</string>
+    <string name="chat_file_not_downloaded_yet">Még nem töltötte le</string>
+    <string name="chat_file_delivered">Kézbesítve</string>
+    <string name="chat_file_tap_to_open">Koppints a megnyitáshoz</string>
+    <string name="chat_open_with">Megnyitás ezzel</string>
+    <string name="chat_file_saved">Mentve.</string>
+    <string name="chat_transfer_channel">Fájlátvitel</string>
+    <string name="chat_transfer_channel_description">Küldés vagy letöltés alatt álló fájlok</string>
+    <string name="chat_transfer_sending">Fájl küldése</string>
+    <string name="chat_transfer_receiving">Fájl fogadása</string>
+
+    <!-- Why something could not be sent or opened (snackbar) -->
+    <string name="chat_error_conversation_gone">Ez a beszélgetés már nem létezik.</string>
+    <string name="chat_error_blocked_send">Letiltottad ezt az ismerőst. Oldd fel a letiltást, ha üzenni szeretnél neki.</string>
+    <string name="chat_error_blocked_react">Letiltottad ezt az ismerőst. Oldd fel a letiltást, ha reagálni szeretnél.</string>
+    <string name="chat_error_peer_deleted">Ez a felhasználó törölte a fiókját.</string>
+    <string name="chat_error_keys_rotated">Az ismerős kulcsot cserélt. Koppints a fenti sávra a küldés folytatásához.</string>
+    <string name="chat_error_accept_before_reply">Válasz előtt fogadd el az üzenetkérést.</string>
+    <string name="chat_error_accept_before_react">Reagálás előtt fogadd el az üzenetkérést.</string>
+    <string name="chat_error_media_before_accept">Hangüzenetet, fényképet és fájlt akkor küldhetsz, ha elfogadta a kérésedet.</string>
+    <plurals name="chat_error_caption_too_long">
+        <item quantity="one">A képaláírás túl hosszú (legfeljebb %1$d karakter).</item>
+        <item quantity="other">A képaláírás túl hosszú (legfeljebb %1$d karakter).</item>
+    </plurals>
+    <plurals name="chat_error_message_too_long">
+        <item quantity="one">Az üzenet túl hosszú (legfeljebb %1$d karakter).</item>
+        <item quantity="other">Az üzenet túl hosszú (legfeljebb %1$d karakter).</item>
+    </plurals>
+    <string name="chat_error_send_message">Nem sikerült elküldeni az üzenetet</string>
+    <string name="chat_error_send_voice">Nem sikerült elküldeni a hangüzenetet</string>
+    <string name="chat_error_send_photo">Nem sikerült elküldeni a fényképet</string>
+    <string name="chat_error_send_file">Nem sikerült elküldeni a fájlt</string>
+    <string name="chat_error_send_reaction">Nem sikerült elküldeni a reakciót. Ellenőrizd a kapcsolatot, és próbáld újra.</string>
+    <string name="chat_error_retry">Az újraküldés nem sikerült</string>
+    <string name="chat_error_reestablish">Nem sikerült helyreállítani a kapcsolatot. Próbáld újra.</string>
+    <string name="chat_error_file_max_size">A fájl legfeljebb %1$d MB lehet.</string>
+    <string name="chat_error_relay_no_files">Ez a szerver nem fogad fájlokat.</string>
+    <string name="chat_error_monthly_limit">Ebben a hónapban elérted a szerver küldési keretét.</string>
+    <string name="chat_error_relay_storage_full">A szerver fájltárhelye most megtelt.</string>
+    <string name="chat_error_file_too_large">Ez a fájl túl nagy ehhez a szerverhez.</string>
+    <string name="chat_error_file_not_here">Ez a fájl nincs meg ezen a telefonon.</string>
+    <string name="chat_error_download_failed">Nem sikerült letölteni a fájlt. Próbáld újra.</string>
+    <string name="chat_error_file_not_saved">Nem sikerült menteni a fájlt.</string>
+    <string name="chat_error_photo_unreadable">Nem sikerült megnyitni a képet.</string>
+    <string name="chat_error_hd_failed">Nem sikerült HD-másolatot készíteni, ezért a fénykép normál minőségben megy el.</string>
+    <string name="chat_error_no_app_for_file">Ezen a telefonon egyik alkalmazás sem tudja megnyitni ezt a fájlt.</string>
+
+    <!-- Day separators. The patterns are java.time DateTimeFormatter patterns; month and day names come from chat_date_locale (a BCP 47 tag), the language of this translation. -->
+    <string name="chat_date_today">Ma</string>
+    <string name="chat_date_yesterday">Tegnap</string>
+    <string name="chat_date_locale">hu</string>
+    <string name="chat_date_weekday">EEEE</string>
+    <string name="chat_date_this_year">MMM d., EEEE</string>
+    <string name="chat_date_other_year">yyyy. MMM d.</string>
+</resources>

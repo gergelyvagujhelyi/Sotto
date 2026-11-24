@@ -1,5 +1,8 @@
 package com.sotto.app.ui.chat
 
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
+import com.sotto.app.ui.text.asString
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
@@ -90,10 +93,11 @@ internal fun SwipeToReply(
     val reply by rememberUpdatedState(onReply)
     // How far it's dragged towards the end, in px (always >= 0).
     var drag by remember { mutableFloatStateOf(0f) }
+    val replyLabel = stringResource(R.string.chat_reply)
     Box(
         modifier
             .semantics {
-                customActions = listOf(CustomAccessibilityAction("Reply") { reply(); true })
+                customActions = listOf(CustomAccessibilityAction(replyLabel) { reply(); true })
             }
             .pointerInput(rtl) {
                 fun settle() {
@@ -161,8 +165,11 @@ internal fun Modifier.replyHighlight(active: Boolean): Modifier {
 }
 
 /** What a bubble shows of the message this one replies to: "You" or [contactName], and its start. */
-internal fun Message.bubbleQuote(contactName: String): BubbleQuote? =
-    replyTo?.let { BubbleQuote(author = if (it.toOwn) "You" else contactName, text = it.quote, toOwn = it.toOwn) }
+@Composable
+internal fun Message.bubbleQuote(contactName: String): BubbleQuote? {
+    val you = stringResource(R.string.chat_you)
+    return replyTo?.let { BubbleQuote(author = if (it.toOwn) you else contactName, text = it.quote, toOwn = it.toOwn) }
+}
 
 /**
  * Above the composer while replying: who wrote [message] and its first line, with a
@@ -195,14 +202,14 @@ internal fun ReplyPreview(message: Message, contactName: String, onCancel: () ->
                 .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
         ) {
             Text(
-                text = if (message.isOutgoing) "You" else contactName,
+                text = if (message.isOutgoing) stringResource(R.string.chat_you) else contactName,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = accent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = ReplyPayload.quoteOf(message.preview),
+                text = ReplyPayload.quoteOf(message.preview.asString()),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,
@@ -210,7 +217,7 @@ internal fun ReplyPreview(message: Message, contactName: String, onCancel: () ->
             )
         }
         IconButton(onClick = onCancel) {
-            Icon(Icons.Rounded.Close, contentDescription = "Cancel reply", tint = colors.onSurfaceVariant)
+            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.chat_reply_cancel), tint = colors.onSurfaceVariant)
         }
     }
 }
