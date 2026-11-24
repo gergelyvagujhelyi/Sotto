@@ -60,6 +60,11 @@ else:
     _handler.setFormatter(_JsonFormatter())
     logging.basicConfig(level=logging.INFO, handlers=[_handler])
 
+# The HTTP client logs every request the relay makes at INFO (each push sent, each release
+# check): noise, and a timeline of pushes. Only its warnings and errors are kept.
+for _name in ("httpx", "httpcore"):
+    logging.getLogger(_name).setLevel(logging.WARNING)
+
 
 async def _run_alembic_upgrade() -> None:
     """Run Alembic migrations to bring the database schema up to date.
