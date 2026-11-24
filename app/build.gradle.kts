@@ -174,6 +174,12 @@ android {
         jvmTarget = "17"
     }
 
+    androidResources {
+        // The per-app language list (Android 13+ Settings > Apps > Sotto > Language), built
+        // from res/values (English, see res/resources.properties) and each values-<lang>.
+        generateLocaleConfig = true
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
