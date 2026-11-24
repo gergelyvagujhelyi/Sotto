@@ -4,6 +4,10 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.7.24 — 2026-11-24
+
 - **The update notice shows on every screen** — When your relay runs a newer Sotto, a bar at the top of every screen says so, not only a card in the chat list. Once the app update is out it's violet ("Sotto 0.7.24 is ready · Update") and a tap opens SourceDrop to install it; while it's still on its way it's a calm grey ("Sotto 0.7.24 is on its way · Why?") and a tap explains that some things may not work until then. With a call going on, it sits under the call bar.
 
 ## 0.7.23 — 2026-11-24
