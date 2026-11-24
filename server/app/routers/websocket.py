@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import verify_token
-from app.config import WS_IDLE_TIMEOUT_SECONDS
+from app import config
 from app.database import get_db
 from app.models.db import Identity
 from app.services import app_release as app_release_service
@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 
 _MAX_AUTH_MESSAGE_BYTES = 8192      # Auth and ping, the only messages the socket takes
 
+
+def idle_timeout_seconds(has_push: bool) -> int:
+    """How long a socket may stay quiet. A phone with push gets a push for anything a dead
+    socket would swallow, but only once the socket is closed, so its socket is closed soon.
+    A phone without push has nothing else (config.WS_NO_PUSH_IDLE_TIMEOUT_SECONDS)."""
+    return config.WS_IDLE_TIMEOUT_SECONDS if has_push else config.WS_NO_PUSH_IDLE_TIMEOUT_SECONDS
 
 
 @router.websocket("/v1/ws")
@@ -84,7 +90,7 @@ async def websocket_endpoint(
 
         claimed_user_id = parts[0]
         result = await db.execute(
-            select(Identity.public_signing_key, Identity.pqc_signing_key).where(
+            select(Identity.public_signing_key, Identity.pqc_signing_key, Identity.fcm_token).where(
                 Identity.user_id == claimed_user_id
             )
         )
@@ -100,7 +106,8 @@ async def websocket_endpoint(
             )
             await websocket.close(code=4003)
             return
-        pub_key_b64, pqc_signing_key_b64 = row
+        pub_key_b64, pqc_signing_key_b64, fcm_token = row
+        idle_timeout = idle_timeout_seconds(bool(fcm_token))
 
         try:
             user_id = verify_token(token, pub_key_b64, pqc_signing_key_b64 or "")
@@ -152,7 +159,7 @@ async def websocket_endpoint(
             try:
                 raw = await asyncio.wait_for(
                     websocket.receive_text(),
-                    timeout=WS_IDLE_TIMEOUT_SECONDS,
+                    timeout=idle_timeout,
                 )
             except asyncio.TimeoutError:
                 await websocket.close(code=4008, reason="Idle timeout")

@@ -27,4 +27,15 @@ class ConnectUnlessWorkingTest {
     fun `waiting out a retry delay always connects now`() {
         assertTrue(shouldReconnect(SocketState.IDLE, sinceStateMs = 0, sinceFrameMs = 0))
     }
+
+    @Test
+    fun `screens skip their poll only while the socket is open and the relay spoke lately`() {
+        assertTrue(socketIsLive(SocketState.OPEN, sinceFrameMs = 20_000))
+        assertTrue(socketIsLive(SocketState.OPEN, sinceFrameMs = QUIET_MS))
+        // Quiet too long: maybe dead, so poll as before.
+        assertFalse(socketIsLive(SocketState.OPEN, sinceFrameMs = QUIET_MS + 1))
+        // Not open: the poll is all there is.
+        assertFalse(socketIsLive(SocketState.CONNECTING, sinceFrameMs = 0))
+        assertFalse(socketIsLive(SocketState.IDLE, sinceFrameMs = 0))
+    }
 }

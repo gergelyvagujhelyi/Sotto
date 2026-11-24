@@ -9,7 +9,7 @@ load_dotenv()
 
 # The release this relay belongs to: the app's versionName in app/build.gradle.kts, so
 # /health tells which code a relay runs. tests/test_version.py keeps the two in step.
-RELAY_VERSION = "0.7.22"
+RELAY_VERSION = "0.7.23"
 
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL", "sqlite+aiosqlite:///./sotto.db"
@@ -36,6 +36,12 @@ NEW_ACCOUNTS_PENDING_TOTAL: int = int(os.getenv("NEW_ACCOUNTS_PENDING_TOTAL", "1
 MAX_REQUEST_BODY_BYTES: int = int(os.getenv("MAX_REQUEST_BODY_BYTES", str(2 * 1024 * 1024)))  # 2 MB
 CORS_ORIGINS: list = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 WS_IDLE_TIMEOUT_SECONDS: int = int(os.getenv("WS_IDLE_TIMEOUT_SECONDS", "300"))  # 5 min
+# For a phone with no push token (no Google Play services): its socket is its only way to
+# hear of messages and calls, and while it sleeps its pings stop. After 5 minutes it found the
+# socket closed at every wake (each Wi-Fi lease renewal, say) and logged in again, all day long.
+# A socket kept longer hears of messages at once: an incoming frame wakes the phone. Nothing
+# is held back by a socket that went dead meanwhile, as there's no push to hold back.
+WS_NO_PUSH_IDLE_TIMEOUT_SECONDS: int = int(os.getenv("WS_NO_PUSH_IDLE_TIMEOUT_SECONDS", "1800"))  # 30 min
 # Accept each auth token once (refuse replays). Off until every phone runs 0.7.3 or later:
 # older apps sometimes sign two requests in the same millisecond, giving identical tokens.
 # A merge to develop deploys the relay at once, so this is turned on in .env, not here.

@@ -154,3 +154,57 @@ def test_signals_sent_while_the_socket_is_still_logging_in_come_after_auth_ok(mo
             hangup = json.loads(ws.receive_text())
     assert hangup["type"] == "call_hangup" and hangup["call_id"] == "c1"
     assert sent_meanwhile == [False, False]  # not delivered: a message would get its push
+
+
+def _register_push_sync(tc, user: dict) -> None:
+    from tests.auth_helpers import make_auth_header
+
+    resp = tc.post(
+        "/v1/push/register",
+        json={"token": "fcm_token_for_ws_test", "platform": "android"},
+        headers=make_auth_header(user["private_key"], user["user_id"]),
+    )
+    assert resp.status_code == 200
+
+
+def _quiet_then_ping(tc, user: dict, quiet_s: float) -> dict:
+    """Logs in, says nothing for [quiet_s], then pings: the answer, or the close."""
+    from starlette.websockets import WebSocketDisconnect
+
+    with tc.websocket_connect("/v1/ws") as ws:
+        ws.send_text(json.dumps({"type": "auth", "token": _make_token(user["private_key"], user["user_id"])}))
+        assert json.loads(ws.receive_text())["type"] == "auth_ok"
+        time.sleep(quiet_s)
+        try:
+            ws.send_text(json.dumps({"type": "ping"}))
+            return json.loads(ws.receive_text())
+        except WebSocketDisconnect as e:
+            return {"closed": e.code}
+
+
+def test_a_phone_without_push_keeps_its_quiet_socket_longer(monkeypatch):
+    """The Note 9 (no Google Play services) slept 5 minutes between Wi-Fi lease renewals,
+    found its socket closed every time and logged in again, all day. Without push the
+    socket is all it has, so it may stay quiet for longer; with push it's closed as before,
+    so the push isn't held back by a dead socket."""
+    from starlette.testclient import TestClient
+    from app import config
+    from app.main import app
+
+    monkeypatch.setattr(config, "WS_IDLE_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(config, "WS_NO_PUSH_IDLE_TIMEOUT_SECONDS", 5)
+    with TestClient(app) as tc:
+        no_push = _bootstrap_user_sync(tc, "ws_no_push")
+        with_push = _bootstrap_user_sync(tc, "ws_with_push")
+        _register_push_sync(tc, with_push)
+
+        assert _quiet_then_ping(tc, no_push, 0.8) == {"type": "pong"}
+        assert _quiet_then_ping(tc, with_push, 0.8) == {"closed": 4008}
+
+
+def test_idle_timeouts_by_push():
+    from app import config
+    from app.routers.websocket import idle_timeout_seconds
+
+    assert idle_timeout_seconds(True) == config.WS_IDLE_TIMEOUT_SECONDS == 300
+    assert idle_timeout_seconds(False) == config.WS_NO_PUSH_IDLE_TIMEOUT_SECONDS == 1800

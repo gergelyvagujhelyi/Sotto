@@ -6,6 +6,12 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.23 — 2026-11-24
+
+- **Phones without Google Play services stay connected** — On a phone without push (such as a LineageOS phone without Google apps), Background connection kept the socket open only while the phone was awake: its pings stopped during sleep, the relay closed the socket after 5 minutes, and the phone logged in again at every wake (every 5 minutes on a Wi-Fi with short DHCP leases), all day. The relay now keeps such a socket open for 30 minutes of quiet, so new messages wake the phone at once instead of waiting for its next wake. Phones with push keep the 5 minutes: for them a dead socket would hold back the push.
+- **Fewer fetches while Sotto is open** — The chat list and an open chat no longer ask the relay for messages every 10–15 seconds while the connection is up: the relay announces every message on it. They still poll when the connection is down.
+- **Relay: cheaper reconnects and less idle work** — Phones can resume their TLS session for 4 hours (was 5 minutes), so a reconnect skips the full handshake, and the database health check runs every 30 s instead of every 5 s.
+
 ## 0.7.22 — 2026-11-23
 
 - **Settings shows the right QR code at once** — The identity QR code in Settings started as the QR of your plain share code and only switched to the live, changing code a moment later, sometimes after a while. It now shows only the live code, which is ready within a fraction of a second: making it no longer unlocks your private keys just to read your public ones, which took most of a second on slower phones. If no live code can be made for a few seconds (say, during a key change), the share code's QR stands in.

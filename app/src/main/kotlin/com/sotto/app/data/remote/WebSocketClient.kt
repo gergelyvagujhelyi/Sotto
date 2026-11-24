@@ -139,6 +139,12 @@ class WebSocketClient @Inject constructor(
      * post-quantum signature in the few seconds a push allows. A socket that went quiet (a frozen
      * app's, or one on a route that died) is replaced, as [ensureConnected] does.
      */
+    /**
+     * Whether the socket is open and the relay spoke on it lately (a pong comes every 25 s). The
+     * relay then announces every new message on it, so a screen needn't poll for them.
+     */
+    fun isLive(): Boolean = socketIsLive(socketState, SystemClock.elapsedRealtime() - lastFrameAt)
+
     @Synchronized
     fun connectUnlessWorking() {
         val now = SystemClock.elapsedRealtime()
@@ -331,6 +337,9 @@ internal const val QUIET_MS = 35_000L
  * while waiting out a retry delay, a connect that has taken over [CONNECT_GRACE_MS], and an open
  * socket that has been quiet for over [QUIET_MS].
  */
+internal fun socketIsLive(state: SocketState, sinceFrameMs: Long): Boolean =
+    state == SocketState.OPEN && sinceFrameMs <= QUIET_MS
+
 internal fun shouldReconnect(state: SocketState, sinceStateMs: Long, sinceFrameMs: Long): Boolean = when (state) {
     SocketState.IDLE -> true
     SocketState.CONNECTING -> sinceStateMs > CONNECT_GRACE_MS

@@ -29,6 +29,7 @@ class ConversationsViewModel @Inject constructor(
     private val messageRepository: MessageRepository,
     private val sendMyName: SendMyNameUseCase,
     appUpdates: AppUpdates,
+    private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
 ) : ViewModel() {
 
     /** Whether the relay runs a newer Sotto, and whether that one is out yet. */
@@ -61,12 +62,15 @@ class ConversationsViewModel @Inject constructor(
     /**
      * Poll for new messages; the screen runs this only while it is resumed.
      * WebSocket and FCM provide real-time delivery when available; this poll
-     * covers emulators and unreliable push environments.
+     * covers emulators and unreliable push environments. It skips its turn while
+     * the socket is live: the relay announces each message there, and the
+     * reconnect after a dead socket fetches what was missed. Polling regardless
+     * was thousands of empty fetches a day from a phone left on this screen.
      */
     suspend fun pollWhileVisible() {
         while (true) {
             try {
-                messageRepository.fetchPendingFromServer()
+                if (!webSocketClient.isLive()) messageRepository.fetchPendingFromServer()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
