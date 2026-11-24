@@ -60,6 +60,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var backgroundConnection: com.sotto.app.connection.BackgroundConnection
     @Inject lateinit var pendingInvite: com.sotto.app.connection.PendingInvite
     @Inject lateinit var relayConfig: com.sotto.app.connection.RelayConfig
+    @Inject lateinit var appUpdates: com.sotto.app.update.AppUpdates
 
     private val _deepLinkIntent = mutableStateOf<Intent?>(null)
 
@@ -217,6 +218,11 @@ class MainActivity : ComponentActivity() {
                 val currentEntry by navController.currentBackStackEntryAsState()
                 val onCallScreen = currentEntry?.destination?.route == Routes.CALL
                 val ongoingCall = incomingCall?.takeIf { callLive && !onCallScreen && startDestination == Routes.CONVERSATIONS }
+                // The relay runs a newer Sotto: a bar above every screen says so (and, once the
+                // app is out, opens SourceDrop). Below the call bar when both show.
+                val appUpdate by appUpdates.state.collectAsState()
+                val update = appUpdate.takeIf { startDestination == Routes.CONVERSATIONS } ?: com.sotto.app.update.AppUpdate.None
+                val anyBar = ongoingCall != null || update != com.sotto.app.update.AppUpdate.None
                 Column(Modifier.fillMaxSize()) {
                     ongoingCall?.let { call ->
                         OngoingCallBar(call, onClick = {
@@ -225,14 +231,15 @@ class MainActivity : ComponentActivity() {
                             }
                         })
                     }
-                    // The bar covers the status bar, so the screens below mustn't pad for it again.
+                    com.sotto.app.ui.update.AppUpdateBar(update, underStatusBar = ongoingCall == null)
+                    // The top bar covers the status bar, so the screens below mustn't pad for it again.
                     // Clipped: the aurora backgrounds paint their glow past their top edge,
                     // which tinted the bar and its text.
                     Box(
                         Modifier
                             .weight(1f)
                             .clipToBounds()
-                            .consumeWindowInsets(if (ongoingCall != null) WindowInsets.statusBars else WindowInsets(0)),
+                            .consumeWindowInsets(if (anyBar) WindowInsets.statusBars else WindowInsets(0)),
                     ) {
                         startDestination?.let { dest ->
                             ChatNavGraph(
