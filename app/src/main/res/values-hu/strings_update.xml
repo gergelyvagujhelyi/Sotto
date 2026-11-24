@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_ready">Elérhető a Sotto %1$s</string>
+    <string name="update_on_its_way">Hamarosan jön a Sotto %1$s</string>
+    <string name="update_action">Frissítés</string>
+    <string name="update_action_label">Frissítés a SourceDroppal</string>
+    <string name="update_why">Miért?</string>
+    <string name="update_why_label">Miért</string>
+    <string name="update_on_its_way_title">Hamarosan jön egy frissítés</string>
+    <string name="update_on_its_way_text">A szervered már a Sotto %1$s verzióját futtatja, ami újabb ennél az alkalmazásnál (%2$s). Amíg meg nem jelenik az alkalmazás frissítése, előfordulhat, hogy néhány dolog nem működik. Értesítést kapsz, amikor elérhető.</string>
+    <string name="update_channel_name">Alkalmazásfrissítések</string>
+    <string name="update_channel_description">Amikor megjelenik a Sotto új verziója</string>
+    <string name="update_notification_text">A szervered már ezt futtatja. Koppints, és frissíts a SourceDroppal.</string>
+</resources>

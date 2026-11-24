@@ -11,8 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,8 +33,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +46,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.layout.Layout
@@ -61,33 +61,35 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
+import com.sotto.app.R
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.ui.theme.Aurora
 import com.sotto.app.ui.theme.LocalReduceMotion
+import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
-import kotlinx.coroutines.launch
 
 /**
  * A chat bubble. Sent messages are filled with the brand gradient; received ones
@@ -200,7 +202,7 @@ fun MessageBubble(
         if (failed) {
             // The label says "tap to retry", so it retries too, not just the bubble.
             Text(
-                text = "Not delivered · Tap to retry",
+                text = stringResource(R.string.chat_not_delivered),
                 style = MaterialTheme.typography.labelSmall,
                 color = colors.error,
                 modifier = Modifier
@@ -296,7 +298,7 @@ internal fun BubbleSurface(
                 when {
                     onLongClick != null || onDoubleClick != null -> Modifier.combinedClickable(
                         onClickLabel = null,
-                        onLongClickLabel = if (onLongClick != null) "React" else null,
+                        onLongClickLabel = if (onLongClick != null) stringResource(R.string.chat_react) else null,
                         onLongClick = onLongClick,
                         onDoubleClick = onDoubleClick,
                         onClick = onClick ?: {},
@@ -368,8 +370,11 @@ class BubbleGestures(val onLongClick: (() -> Unit)?, val onDoubleClick: (() -> U
 
 val LocalBubbleGestures = compositionLocalOf { BubbleGestures(null, null) }
 
-/** The reactions on a bubble: the contact's emoji and the user's, each null when they gave none. */
-data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String = "Them") {
+/**
+ * The reactions on a bubble: the contact's emoji and the user's, each null when they gave none.
+ * [theirName] null: "Them".
+ */
+data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String? = null) {
     val isEmpty: Boolean get() = theirs == null && mine == null
 }
 
@@ -386,8 +391,11 @@ private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, mod
         else -> listOfNotNull(reactions.theirs, reactions.mine).joinToString(" ")
     }
     val description = listOfNotNull(
-        reactions.theirs?.let { "${reactions.theirName} reacted $it" },
-        reactions.mine?.let { "You reacted $it" },
+        reactions.theirs?.let { emoji ->
+            reactions.theirName?.let { stringResource(R.string.chat_reaction_theirs_description, it, emoji) }
+                ?: stringResource(R.string.chat_reaction_theirs_description_unnamed, emoji)
+        },
+        reactions.mine?.let { stringResource(R.string.chat_reaction_mine_description, it) },
     ).joinToString(", ")
     Text(
         text = label,
@@ -397,7 +405,7 @@ private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, mod
             .clip(shape)
             .background(colors.surfaceContainerHigh, shape)
             .border(1.dp, Aurora.colors.glassBorder, shape)
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Change your reaction", onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.chat_reaction_change), onClick = onClick) else Modifier)
             .semantics { contentDescription = description }
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
@@ -465,7 +473,7 @@ private fun QuoteBlock(quote: BubbleQuote, isOutgoing: Boolean, textColor: Color
             .height(IntrinsicSize.Min)
             .clip(shape)
             .background(textColor.copy(alpha = 0.1f))
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = "Go to message", onClick = onClick) else Modifier),
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.chat_quote_go_to), onClick = onClick) else Modifier),
     ) {
         Box(
             Modifier
@@ -482,7 +490,7 @@ private fun QuoteBlock(quote: BubbleQuote, isOutgoing: Boolean, textColor: Color
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = quote.text.ifBlank { "Message" },
+                text = quote.text.ifBlank { stringResource(R.string.chat_quote_fallback) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = textColor.copy(alpha = 0.8f),
                 maxLines = 2,
@@ -594,7 +602,17 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
     }
     Icon(
         imageVector = icon,
-        contentDescription = state.name.lowercase(),
+        contentDescription = stringResource(
+            when (state) {
+                MessageState.SENDING -> R.string.chat_state_sending
+                MessageState.DELIVERED -> R.string.chat_state_delivered
+                MessageState.SEEN -> R.string.chat_state_seen
+                MessageState.FAILED -> R.string.chat_state_failed
+                MessageState.DECRYPT_FAILED -> R.string.chat_state_decrypt_failed
+                MessageState.REJECTED -> R.string.chat_state_rejected
+                else -> R.string.chat_state_sent
+            },
+        ),
         tint = tint,
         modifier = Modifier.size(15.dp),
     )
@@ -626,7 +644,7 @@ private fun rememberLinked(text: String, color: Color, enabled: Boolean): Annota
                             uriHandler.openUri(link.url)
                         } catch (_: IllegalArgumentException) {
                             // No browser (or other app) for it.
-                            Toast.makeText(context, "No app can open this link", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.chat_no_app_for_link), Toast.LENGTH_SHORT).show()
                         }
                     },
                     link.range.first,

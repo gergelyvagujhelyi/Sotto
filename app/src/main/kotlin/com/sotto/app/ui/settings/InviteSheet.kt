@@ -25,31 +25,39 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.ui.components.GradientButton
 import com.sotto.app.ui.components.QrCodeImage
 import com.sotto.app.ui.components.SoftButton
+import com.sotto.app.ui.components.appLanguage
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.resolve
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** An invite ready to hand over: its one link (also in the QR) and until when it works. */
 data class InviteShare(val link: String, val expiresAt: String) {
-    /** "26 Nov", in the phone's time zone; the raw value if it can't be read. */
-    val expiresLabel: String
-        get() = runCatching {
-            DateTimeFormatter.ofPattern("d MMM").withZone(ZoneId.systemDefault()).format(Instant.parse(expiresAt))
-        }.getOrDefault(expiresAt)
+    /**
+     * "26 Nov" ([pattern], the language's way of writing a day: settings_invite_date_pattern,
+     * with month names in [locale], the app's language), in the phone's time zone; the raw
+     * value if it can't be read.
+     */
+    fun expiresLabel(pattern: String, locale: Locale): String = runCatching {
+        DateTimeFormatter.ofPattern(pattern, locale).withZone(ZoneId.systemDefault()).format(Instant.parse(expiresAt))
+    }.getOrDefault(expiresAt)
 
     /**
      * A message for any chat app: the link alone does it all. With Sotto installed it opens the
      * app; otherwise the relay's page offers the download, then opens the invite in Sotto.
+     * In the sender's language, with the last day as [expiresLabel] wrote it.
      */
-    fun shareText(): String =
-        "Join me on Sotto, an end-to-end encrypted messenger: $link\n\n" +
-            "The invite works once, until $expiresLabel."
+    fun shareText(expiresLabel: String): UiText = UiText.res(R.string.settings_invite_share_text, link, expiresLabel)
 }
 
 /** A fresh invite: its QR for any camera, and Copy link / Share for sending it as a message. */
@@ -58,6 +66,7 @@ data class InviteShare(val link: String, val expiresAt: String) {
 fun InviteSheet(invite: InviteShare, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val expires = invite.expiresLabel(stringResource(R.string.settings_invite_date_pattern), appLanguage(LocalContext.current))
     // Fully open: half-open, the code and the buttons sat below the screen's edge.
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(
@@ -67,11 +76,10 @@ fun InviteSheet(invite: InviteShare, onDismiss: () -> Unit) {
                 .padding(bottom = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("Invite someone", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.settings_invite_title), style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(8.dp))
             Text(
-                "They scan this with their camera, or you send them the link. " +
-                    "It works once, until ${invite.expiresLabel}, and adds you as their contact.",
+                stringResource(R.string.settings_invite_sheet_text, expires),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -87,17 +95,18 @@ fun InviteSheet(invite: InviteShare, onDismiss: () -> Unit) {
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 SoftButton(
-                    text = "Copy link",
+                    text = stringResource(R.string.settings_invite_copy_link),
                     icon = Icons.Rounded.ContentCopy,
                     onClick = { clipboard.setText(AnnotatedString(invite.link)) },
                     modifier = Modifier.weight(1f),
                 )
                 GradientButton(
-                    text = "Share",
+                    text = stringResource(R.string.common_share),
                     icon = Icons.Rounded.Share,
                     onClick = {
-                        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, invite.shareText())
-                        context.startActivity(Intent.createChooser(send, "Send the invite"))
+                        val send = Intent(Intent.ACTION_SEND).setType("text/plain")
+                            .putExtra(Intent.EXTRA_TEXT, invite.shareText(expires).resolve(context))
+                        context.startActivity(Intent.createChooser(send, context.getString(R.string.settings_invite_send_chooser)))
                     },
                     modifier = Modifier.weight(1f),
                 )

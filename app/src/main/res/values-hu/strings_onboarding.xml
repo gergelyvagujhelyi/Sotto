@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Welcome -->
+    <string name="onboarding_welcome_subtitle">Privát üzenetküldés posztkvantumos biztonsággal.</string>
+    <string name="onboarding_get_started">Kezdjük</string>
+    <string name="onboarding_feature_no_phone_title">Se e-mail, se telefonszám.</string>
+    <string name="onboarding_feature_no_phone_body">Az identitásod egy kriptográfiai kulcs, amely ezen az eszközön készül.</string>
+    <string name="onboarding_feature_pq_title">Posztkvantumos titkosítás</string>
+    <string name="onboarding_feature_pq_body">Hibrid ML-KEM-768 + X25519, végponttól végpontig.</string>
+    <string name="onboarding_feature_no_tracking_title">Nincs követés</string>
+    <string name="onboarding_feature_no_tracking_body">A szerver mindig csak titkosított borítékokat lát.</string>
+
+    <!-- Privacy -->
+    <string name="onboarding_privacy_title">Így véd a Sotto</string>
+    <string name="onboarding_privacy_understand">Értem</string>
+    <string name="onboarding_privacy_device_title">Csak ezen az eszközön</string>
+    <string name="onboarding_privacy_device_body">Az identitásod csak ezen az eszközön létezik.</string>
+    <string name="onboarding_privacy_encrypted_title">Titkosítva indul útnak</string>
+    <string name="onboarding_privacy_encrypted_body">Az üzenetek titkosítva hagyják el a telefonodat.</string>
+    <string name="onboarding_privacy_relay_title">Vak szerver</string>
+    <string name="onboarding_privacy_relay_body">A szerver csak titkosított borítékokat lát – az üzeneteidet nem tudja elolvasni.</string>
+    <string name="onboarding_privacy_warning">Fontos: ha biztonsági mentés nélkül elveszíted ezt az eszközt, az identitásod és az üzenetelőzményeid nem állíthatók vissza.</string>
+
+    <!-- Key type -->
+    <string name="onboarding_keys_title">Válassz kulcstípust</string>
+    <string name="onboarding_keys_subtitle">Ez dönti el, milyen kriptográfiai algoritmusok védik az identitásodat.</string>
+    <string name="onboarding_keys_pq_title">Posztkvantumos</string>
+    <string name="onboarding_keys_pq_description">Véd a jövő kvantumszámítógépei ellen. NIST-szabványos algoritmusokat használ, mellettük biztonsági hálóként a klasszikus titkosítás is ott van.</string>
+    <string name="onboarding_keys_recommended">Ajánlott</string>
+    <string name="onboarding_keys_standard_title">Normál</string>
+    <string name="onboarding_keys_standard_description">Bevált, gyors, és milliók bíznak benne.</string>
+    <string name="onboarding_keys_legacy">Hagyományos</string>
+
+    <!-- Invite and relay -->
+    <string name="onboarding_invite_title">A meghívód</string>
+    <string name="onboarding_invite_subtitle">A Sottóba meghívóval lehet bekerülni. Koppints a kapott meghívólinkre, illeszd be ide, vagy olvasd be a meghívó QR-kódját. Saját szervert indítasz? Írd be a címét.</string>
+    <string name="onboarding_checking">Ellenőrzés…</string>
+    <string name="onboarding_invite_placeholder">Meghívólink</string>
+    <string name="onboarding_scan_invite">Meghívó QR-kód beolvasása</string>
+    <string name="onboarding_join_title">Csatlakozol ehhez a szerverhez?</string>
+    <string name="onboarding_join_subtitle">A fiókod itt lesz: %1$s. Az üzemeltetője látja, ki kivel és mikor beszél, de azt soha, hogy mit mondtok. Csak akkor folytasd, ha megbízol abban, aki ide küldött.</string>
+    <string name="onboarding_join_invite_included">A meghívód már benne van.</string>
+    <string name="onboarding_join_button">Csatlakozás: %1$s</string>
+    <string name="onboarding_other_relay">Másik szerver használata</string>
+    <string name="onboarding_not_an_invite">Ez nem meghívólink. Illeszd be a teljes linket, amit kaptál.</string>
+    <string name="onboarding_relay_unreachable">Nem érhető el: %1$s. Ellenőrizd a címet és a kapcsolatot.</string>
+    <string name="onboarding_not_a_relay">Ez nem Sotto-szerver: %1$s.</string>
+    <string name="onboarding_host_invite_only">%1$s csak meghívólinkkel fogad új tagokat. Kérj egyet valakitől, aki már rajta van.</string>
+    <string name="onboarding_invite_required">Ez a szerver csak meghívólinkkel fogad új tagokat. Kérj egyet valakitől, aki már rajta van.</string>
+    <string name="onboarding_invite_invalid">Ez a meghívó nem érvényes ezen a szerveren. Kérj újat.</string>
+    <string name="onboarding_invite_used">Ezt a meghívót már felhasználták. Kérj újat.</string>
+    <string name="onboarding_invite_expired">Ez a meghívó lejárt. Kérj újat.</string>
+
+    <!-- Name -->
+    <string name="onboarding_name_title">A neved</string>
+    <string name="onboarding_name_subtitle">Nem kötelező. Akiket hozzáadsz, végponttól végpontig titkosítva kapják meg; a szerver sosem látja. Később a Beállításokban módosíthatod.</string>
+    <string name="onboarding_name_placeholder">A neved</string>
+    <string name="onboarding_skip">Kihagyás</string>
+
+    <!-- Notifications -->
+    <string name="onboarding_notifications_title">Értesítések</string>
+    <string name="onboarding_notifications_subtitle">Engedélyezd az értesítéseket, hogy akkor is megkapd az üzeneteket, ha az alkalmazás a háttérben van.</string>
+    <string name="onboarding_notifications_allow">Értesítések engedélyezése</string>
+    <string name="onboarding_notifications_lock_title">A lezárási képernyőn</string>
+    <string name="onboarding_notifications_lock_body">Az értesítések mutatják a feladót és az üzenetet. Bármelyiket elrejtheted a Beállításokban.</string>
+
+    <!-- Creating the identity -->
+    <string name="onboarding_generating">Identitás létrehozása…</string>
+    <string name="onboarding_generating_subtitle">A kulcsaid ezen az eszközön készülnek</string>
+    <string name="onboarding_error_title">Valami hiba történt</string>
+    <string name="onboarding_retry">Újra</string>
+    <string name="onboarding_create_failed">Nem sikerült létrehozni az identitást. Próbáld újra.</string>
+</resources>

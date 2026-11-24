@@ -43,6 +43,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -51,12 +52,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.ReplyPayload
+import com.sotto.app.domain.model.quoteUiText
 import com.sotto.app.ui.components.BubbleQuote
+import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.theme.Aurora
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** How far a bubble is dragged before letting go replies to it. */
 private val ReplyThreshold = 64.dp
@@ -90,10 +94,11 @@ internal fun SwipeToReply(
     val reply by rememberUpdatedState(onReply)
     // How far it's dragged towards the end, in px (always >= 0).
     var drag by remember { mutableFloatStateOf(0f) }
+    val replyLabel = stringResource(R.string.chat_reply)
     Box(
         modifier
             .semantics {
-                customActions = listOf(CustomAccessibilityAction("Reply") { reply(); true })
+                customActions = listOf(CustomAccessibilityAction(replyLabel) { reply(); true })
             }
             .pointerInput(rtl) {
                 fun settle() {
@@ -161,8 +166,11 @@ internal fun Modifier.replyHighlight(active: Boolean): Modifier {
 }
 
 /** What a bubble shows of the message this one replies to: "You" or [contactName], and its start. */
-internal fun Message.bubbleQuote(contactName: String): BubbleQuote? =
-    replyTo?.let { BubbleQuote(author = if (it.toOwn) "You" else contactName, text = it.quote, toOwn = it.toOwn) }
+@Composable
+internal fun Message.bubbleQuote(contactName: String): BubbleQuote? {
+    val you = stringResource(R.string.chat_you)
+    return replyTo?.let { BubbleQuote(author = if (it.toOwn) you else contactName, text = quoteUiText(it.quote).asString(), toOwn = it.toOwn) }
+}
 
 /**
  * Above the composer while replying: who wrote [message] and its first line, with a
@@ -195,14 +203,14 @@ internal fun ReplyPreview(message: Message, contactName: String, onCancel: () ->
                 .padding(start = 12.dp, top = 8.dp, bottom = 8.dp),
         ) {
             Text(
-                text = if (message.isOutgoing) "You" else contactName,
+                text = if (message.isOutgoing) stringResource(R.string.chat_you) else contactName,
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = accent,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = ReplyPayload.quoteOf(message.preview),
+                text = ReplyPayload.quoteOf(message.preview.asString()),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 maxLines = 1,
@@ -210,7 +218,7 @@ internal fun ReplyPreview(message: Message, contactName: String, onCancel: () ->
             )
         }
         IconButton(onClick = onCancel) {
-            Icon(Icons.Rounded.Close, contentDescription = "Cancel reply", tint = colors.onSurfaceVariant)
+            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.chat_reply_cancel), tint = colors.onSurfaceVariant)
         }
     }
 }

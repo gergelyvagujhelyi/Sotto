@@ -50,13 +50,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.sotto.app.R
 import com.sotto.app.crypto.InPersonResult
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle
@@ -91,7 +93,7 @@ fun VerifyInPersonScreen(
     val myQr by viewModel.myQr.collectAsState()
     val outcome by viewModel.outcome.collectAsState()
     val checking by viewModel.checking.collectAsState()
-    val name = contact?.displayName ?: "your contact"
+    val name = contact?.displayName ?: stringResource(R.string.contacts_your_contact)
     val context = LocalContext.current
     val activity = context as? Activity
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -159,10 +161,10 @@ fun VerifyInPersonScreen(
                 TopAppBar(
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.common_back))
                         }
                     },
-                    title = { Text("Verify in person") },
+                    title = { Text(stringResource(R.string.contacts_verify_title)) },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
                 )
             },
@@ -183,17 +185,16 @@ fun VerifyInPersonScreen(
                 )
 
                 Column {
-                    SectionLabel("Hold your phones together", Modifier.padding(start = 4.dp))
+                    SectionLabel(stringResource(R.string.contacts_hold_phones_together), Modifier.padding(start = 4.dp))
                     GlassCard(Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Nfc, contentDescription = null, tint = colors.primary, modifier = Modifier.size(32.dp))
                             Spacer(Modifier.width(14.dp))
                             Text(
                                 text = when {
-                                    nfcAdapter == null -> "This phone has no NFC. Scan each other's codes below instead."
-                                    !nfcOn -> "NFC is off. Turn it on to tap phones, or scan each other's codes below."
-                                    else -> "On $name's phone, open your chat and Verify in person too. Then hold the " +
-                                        "backs of the phones together: one tap checks both phones."
+                                    nfcAdapter == null -> stringResource(R.string.contacts_verify_no_nfc)
+                                    !nfcOn -> stringResource(R.string.contacts_verify_nfc_off)
+                                    else -> stringResource(R.string.contacts_verify_nfc_hint, name)
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                             )
@@ -201,7 +202,7 @@ fun VerifyInPersonScreen(
                         if (nfcAdapter != null && !nfcOn) {
                             Spacer(Modifier.height(12.dp))
                             SoftButton(
-                                text = "Turn on NFC",
+                                text = stringResource(R.string.contacts_turn_on_nfc),
                                 onClick = { runCatching { context.startActivity(Intent(Settings.ACTION_NFC_SETTINGS)) } },
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -210,21 +211,20 @@ fun VerifyInPersonScreen(
                 }
 
                 Column {
-                    SectionLabel("Or scan each other's codes", Modifier.padding(start = 4.dp))
+                    SectionLabel(stringResource(R.string.contacts_or_scan_codes), Modifier.padding(start = 4.dp))
                     GlassCard(Modifier.fillMaxWidth(), contentPadding = PaddingValues(20.dp)) {
                         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                             myQr?.let { QrCodeImage(content = it, size = 220.dp) }
                             Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "$name scans this code with Verify in person on their phone. " +
-                                    "Then you scan theirs. It changes every second, so a picture of it won't do.",
+                                text = stringResource(R.string.contacts_verify_qr_hint, name),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
                             )
                             Spacer(Modifier.height(16.dp))
                             SoftButton(
-                                text = "Scan $name's code",
+                                text = stringResource(R.string.contacts_scan_name_code, name),
                                 onClick = onScan,
                                 icon = Icons.Rounded.QrCodeScanner,
                                 tone = SoftButtonTone.Accent,
@@ -237,7 +237,7 @@ fun VerifyInPersonScreen(
 
                 if (contact?.verifiedInPerson != true) {
                     Column {
-                        SectionLabel("Can't meet?", Modifier.padding(start = 4.dp))
+                        SectionLabel(stringResource(R.string.contacts_cant_meet), Modifier.padding(start = 4.dp))
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -248,14 +248,13 @@ fun VerifyInPersonScreen(
                                 )
                                 Spacer(Modifier.width(14.dp))
                                 Text(
-                                    "Call $name and read seven emoji to each other. It's weaker than meeting: " +
-                                        "the chat will say \"Verified by phone only\".",
+                                    stringResource(R.string.contacts_call_hint, name),
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                             }
                             Spacer(Modifier.height(12.dp))
                             SoftButton(
-                                text = "Verify $name by phone",
+                                text = stringResource(R.string.contacts_verify_by_phone, name),
                                 onClick = { onVerifyByPhone(viewModel.contactId, name) },
                                 icon = Icons.Rounded.PhoneInTalk,
                                 modifier = Modifier.fillMaxWidth(),
@@ -265,8 +264,7 @@ fun VerifyInPersonScreen(
                 }
 
                 Text(
-                    text = "Only do this with $name in front of you. A code sent as a picture or through " +
-                        "another app could come from anyone.",
+                    text = stringResource(R.string.contacts_verify_warning, name),
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
@@ -301,11 +299,13 @@ private fun StatusCard(name: String, seed: String, verified: Boolean, byCall: Bo
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        when {
-                            verified -> "Verified in person"
-                            byCall -> "Verified by phone only"
-                            else -> "Not verified"
-                        },
+                        stringResource(
+                            when {
+                                verified -> R.string.components_trust_in_person
+                                byCall -> R.string.components_trust_by_phone
+                                else -> R.string.components_trust_none
+                            },
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = tint,
                     )
@@ -315,11 +315,7 @@ private fun StatusCard(name: String, seed: String, verified: Boolean, byCall: Bo
         if (verified || byCall) {
             Spacer(Modifier.height(10.dp))
             Text(
-                if (verified) {
-                    "You've checked $name's keys face to face. You can check again any time."
-                } else {
-                    "You verified $name by phone. Meeting is stronger proof: verify in person when you can."
-                },
+                stringResource(if (verified) R.string.contacts_status_in_person else R.string.contacts_status_by_phone, name),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -334,55 +330,44 @@ private fun OutcomeDialog(outcome: VerifyOutcome, name: String, onDismiss: () ->
         InPersonResult.Verified -> Quad(
             Icons.Rounded.VerifiedUser,
             Aurora.colors.success,
-            "$name is verified in person",
-            "The keys on their phone are the ones this chat uses. " + if (outcome.viaNfc) {
-                "Their phone checked yours with the same tap."
-            } else {
-                "Let them scan your code too, so their phone trusts you as well."
-            },
+            stringResource(R.string.contacts_outcome_verified_title, name),
+            stringResource(if (outcome.viaNfc) R.string.contacts_outcome_verified_nfc else R.string.contacts_outcome_verified_qr),
         )
         InPersonResult.OtherAccount -> Quad(
             Icons.Rounded.GppBad,
             colors.error,
-            "This is someone else's code",
-            "It belongs to a different Sotto account from this chat. If this really is $name's phone, " +
-                "this chat isn't with them: don't trust it. Otherwise, check that each phone opened the " +
-                "other person's chat.",
+            stringResource(R.string.contacts_outcome_other_account_title),
+            stringResource(R.string.contacts_outcome_other_account_body, name),
         )
         InPersonResult.KeysDiffer -> Quad(
             Icons.Rounded.GppBad,
             colors.error,
-            "The keys don't match",
-            "$name's phone has different keys from the ones this chat uses, so someone may be in the " +
-                "middle, such as the relay. Don't trust this chat. Remove the contact, then add $name " +
-                "again by scanning their share code.",
+            stringResource(R.string.contacts_outcome_keys_differ_title),
+            stringResource(R.string.contacts_outcome_keys_differ_body, name),
         )
         InPersonResult.CantCheck -> Quad(
             Icons.Rounded.WifiOff,
             Aurora.colors.warning,
-            "Couldn't check right now",
-            "$name's keys may have changed since your phone last saw them, and the relay can't be " +
-                "reached to confirm that. Connect to the internet and try again.",
+            stringResource(R.string.contacts_outcome_cant_check_title),
+            stringResource(R.string.contacts_outcome_cant_check_body, name),
         )
         InPersonResult.NotLive -> Quad(
             Icons.Rounded.GppMaybe,
             Aurora.colors.warning,
-            "That code isn't live",
-            "It's the right person, but the code is a picture of their screen, not the code on their " +
-                "phone right now (it changes every second). Scan the code on their phone while you're together.",
+            stringResource(R.string.contacts_outcome_not_live_title),
+            stringResource(R.string.contacts_outcome_not_live_body),
         )
         InPersonResult.OlderApp -> Quad(
             Icons.Rounded.GppMaybe,
             Aurora.colors.warning,
-            "Their Sotto is older",
-            "Their keys match, but their Sotto doesn't make the live code yet, so a scan can't prove " +
-                "it's their phone. Update both phones to the latest Sotto, or hold the phones together.",
+            stringResource(R.string.contacts_outcome_older_app_title),
+            stringResource(R.string.contacts_outcome_older_app_body),
         )
         InPersonResult.NotAContact -> Quad(
             Icons.Rounded.GppMaybe,
             Aurora.colors.warning,
-            "$name isn't a contact",
-            "This phone has no keys for $name to check against.",
+            stringResource(R.string.contacts_outcome_not_a_contact_title, name),
+            stringResource(R.string.contacts_outcome_not_a_contact_body, name),
         )
     }
     val done = outcome.result == InPersonResult.Verified
@@ -392,10 +377,10 @@ private fun OutcomeDialog(outcome: VerifyOutcome, name: String, onDismiss: () ->
         title = { Text(title, textAlign = TextAlign.Center) },
         text = { Text(body) },
         confirmButton = {
-            TextButton(onClick = { onDismiss(); if (done) onDone() }) { Text(if (done) "Done" else "OK") }
+            TextButton(onClick = { onDismiss(); if (done) onDone() }) { Text(stringResource(if (done) R.string.common_done else R.string.common_ok)) }
         },
         dismissButton = if (done && !outcome.viaNfc) {
-            { TextButton(onClick = onDismiss) { Text("Show my code") } }
+            { TextButton(onClick = onDismiss) { Text(stringResource(R.string.contacts_show_my_code)) } }
         } else {
             null
         },

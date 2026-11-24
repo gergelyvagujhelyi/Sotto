@@ -1,8 +1,10 @@
 package com.sotto.app.call
 
 import android.media.AudioDeviceInfo
+import com.sotto.app.R
 import com.sotto.app.domain.model.AudioRoute
 import com.sotto.app.domain.model.AudioRouteKind
+import com.sotto.app.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -10,7 +12,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AudioRoutesTest {
-    private fun route(id: Int, kind: AudioRouteKind, name: String) = AudioRoute(id, kind, name, routeKey(kind, name))
+    private fun route(id: Int, kind: AudioRouteKind, name: String) = AudioRoute(id, kind, UiText.Plain(name), routeKey(kind, name))
 
     private val phone = route(1, AudioRouteKind.EARPIECE, "Phone")
     private val speaker = route(2, AudioRouteKind.SPEAKER, "Speaker")
@@ -41,7 +43,10 @@ class AudioRoutesTest {
             RouteCandidate(41, AudioRouteKind.BLUETOOTH, "Galaxy Buds3 Pro ", AudioDeviceInfo.TYPE_BLE_HEADSET),
         )
         val merged = mergeRoutes(candidates, currentId = 41)
-        assertEquals(listOf("Phone", "Speaker", "Galaxy Buds3 Pro"), merged.routes.map { it.name })
+        assertEquals(
+            listOf(UiText.res(R.string.call_route_phone), UiText.res(R.string.call_route_speaker), UiText.Plain("Galaxy Buds3 Pro")),
+            merged.routes.map { it.name },
+        )
         val budsRoute = merged.routes.last()
         assertEquals(41, budsRoute.id)
         assertEquals(listOf(41, 30), merged.members[budsRoute.key])
@@ -144,10 +149,10 @@ class AudioRoutesTest {
 
     @Test
     fun `labels use the device's own name where it has one`() {
-        assertEquals("Phone", routeLabel(AudioRouteKind.EARPIECE, "SM-N960F"))
-        assertEquals("Speaker", routeLabel(AudioRouteKind.SPEAKER, "SM-N960F"))
-        assertEquals("Galaxy Buds3 Pro", routeLabel(AudioRouteKind.BLUETOOTH, " Galaxy Buds3 Pro "))
-        assertEquals("Bluetooth", routeLabel(AudioRouteKind.BLUETOOTH, ""))
-        assertEquals("Headset", routeLabel(AudioRouteKind.WIRED, null))
+        assertEquals(UiText.res(R.string.call_route_phone), routeLabel(AudioRouteKind.EARPIECE, "SM-N960F"))
+        assertEquals(UiText.res(R.string.call_route_speaker), routeLabel(AudioRouteKind.SPEAKER, "SM-N960F"))
+        assertEquals(UiText.Plain("Galaxy Buds3 Pro"), routeLabel(AudioRouteKind.BLUETOOTH, " Galaxy Buds3 Pro "))
+        assertEquals(UiText.res(R.string.call_route_bluetooth), routeLabel(AudioRouteKind.BLUETOOTH, ""))
+        assertEquals(UiText.res(R.string.call_route_headset), routeLabel(AudioRouteKind.WIRED, null))
     }
 }

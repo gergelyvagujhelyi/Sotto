@@ -24,17 +24,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.sotto.app.di.DatabaseModule
 import com.sotto.app.call.CallManager
+import com.sotto.app.call.CallNotifier
+import com.sotto.app.di.DatabaseModule
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.InviteLink
 import com.sotto.app.domain.model.MemberInviteAction
-import com.sotto.app.domain.model.OWN_INVITE_MESSAGE
 import com.sotto.app.domain.model.actionForMember
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.repository.SettingsRepository
@@ -44,6 +45,7 @@ import com.sotto.app.ui.contacts.PREFILLED_SHARE_CODE_KEY
 import com.sotto.app.ui.navigation.ChatNavGraph
 import com.sotto.app.ui.navigation.Routes
 import com.sotto.app.ui.theme.SottoTheme
+import com.sotto.app.update.AppUpdateNotifier
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -61,6 +63,9 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var pendingInvite: com.sotto.app.connection.PendingInvite
     @Inject lateinit var relayConfig: com.sotto.app.connection.RelayConfig
     @Inject lateinit var appUpdates: com.sotto.app.update.AppUpdates
+    @Inject lateinit var chatNotifications: ChatNotificationManager
+    @Inject lateinit var callNotifier: CallNotifier
+    @Inject lateinit var appUpdateNotifier: AppUpdateNotifier
 
     private val _deepLinkIntent = mutableStateOf<Intent?>(null)
 
@@ -97,6 +102,12 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Notification channels keep the name they were made with. A language switch recreates
+        // this activity but not the process, so name them again in the language now shown.
+        chatNotifications.createNotificationChannels()
+        callNotifier.createChannels()
+        appUpdateNotifier.createChannel(onlyIfExists = true)
+
         val reduceAnimations = settingsRepository.getPrivacySettings().map { it.reduceAnimations }
         setContent {
             val reduceMotion by reduceAnimations.collectAsState(initial = false)
@@ -108,18 +119,13 @@ class MainActivity : ComponentActivity() {
                 if (showDbResetDialog) {
                     AlertDialog(
                         onDismissRequest = { /* must press OK */ },
-                        title = { Text("Local data was reset") },
+                        title = { Text(stringResource(R.string.components_db_reset_title)) },
                         text = {
-                            Text(
-                                "The local database could not be opened and had to be recreated. " +
-                                "Messages and contacts stored on this device have been lost. " +
-                                "Your identity is unaffected. Re-add contacts with their share codes " +
-                                "to verify them again."
-                            )
+                            Text(stringResource(R.string.components_db_reset_body))
                         },
                         confirmButton = {
                             TextButton(onClick = { showDbResetDialog = false }) {
-                                Text("OK")
+                                Text(stringResource(R.string.common_ok))
                             }
                         },
                     )
@@ -287,9 +293,9 @@ class MainActivity : ComponentActivity() {
                 navController.currentBackStackEntry?.savedStateHandle?.set(PREFILLED_SHARE_CODE_KEY, action.shareCode)
                 return
             }
-            MemberInviteAction.OwnInvite -> OWN_INVITE_MESSAGE
-            is MemberInviteAction.AlreadyMember -> "You already have an account on ${action.relayName}."
-            is MemberInviteAction.OtherRelay -> "This invite is for ${action.relayName}, not your relay."
+            MemberInviteAction.OwnInvite -> getString(R.string.settings_invite_own)
+            is MemberInviteAction.AlreadyMember -> getString(R.string.components_invite_already_member, action.relayName)
+            is MemberInviteAction.OtherRelay -> getString(R.string.components_invite_other_relay, action.relayName)
         }
         Toast.makeText(this, message, Toast.LENGTH_LONG).show()
     }

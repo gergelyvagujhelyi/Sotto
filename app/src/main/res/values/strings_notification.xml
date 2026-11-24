@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notifications: message and missed-call notifications, their channels, the background connection. -->
+<resources>
+    <string name="notification_channel_messages">Messages</string>
+    <string name="notification_channel_messages_description">New message notifications</string>
+    <string name="notification_channel_missed_calls">Missed Calls</string>
+    <string name="notification_channel_missed_calls_description">Missed call notifications</string>
+    <string name="notification_channel_background">Background connection</string>
+    <string name="notification_channel_background_description">Shown while Sotto stays connected for messages and calls</string>
+
+    <!-- The user, in a chat notification's conversation -->
+    <string name="notification_you">You</string>
+    <string name="notification_new_messages_summary">New messages</string>
+    <string name="notification_new_reaction">New reaction</string>
+    <plurals name="notification_new_messages">
+        <item quantity="one">New message</item>
+        <item quantity="other">%d new messages</item>
+    </plurals>
+    <plurals name="notification_new_messages_and_reaction">
+        <item quantity="one">New message and a reaction</item>
+        <item quantity="other">%d new messages and a reaction</item>
+    </plurals>
+    <plurals name="notification_missed_calls">
+        <item quantity="one">Missed call</item>
+        <item quantity="other">%d missed calls</item>
+    </plurals>
+
+    <string name="notification_background_connected">Connected for messages and calls</string>
+    <string name="notification_checking_messages">Checking for messages</string>
+</resources>

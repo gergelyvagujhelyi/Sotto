@@ -1,12 +1,14 @@
 package com.sotto.app.domain
 
+import com.sotto.app.R
 import com.sotto.app.data.media.MediaCrypto
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MediaPayload
 import com.sotto.app.domain.model.MessageMedia
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.UnknownPayload
-import com.sotto.app.domain.model.previewText
+import com.sotto.app.domain.model.previewUiText
+import com.sotto.app.ui.text.UiText
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -92,9 +94,12 @@ class MediaPayloadTest {
 
     @Test
     fun `chats, notifications and quotes name the media`() {
-        assertEquals("🎤 Voice message", previewText(MediaKind.VOICE, ""))
-        assertEquals("📷 Photo: At the lake", previewText(MediaKind.PHOTO, " At the lake "))
-        assertEquals("Hi", previewText(null, "Hi"))
+        assertEquals(UiText.res(R.string.chat_media_voice), previewUiText(MediaKind.VOICE, ""))
+        assertEquals(
+            UiText.res(R.string.chat_media_with_caption, UiText.res(R.string.chat_media_photo), "At the lake"),
+            previewUiText(MediaKind.PHOTO, " At the lake "),
+        )
+        assertEquals(UiText.Plain("Hi"), previewUiText(null, "Hi"))
     }
 
     @Test

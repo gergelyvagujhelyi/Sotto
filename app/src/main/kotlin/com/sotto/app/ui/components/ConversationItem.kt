@@ -18,9 +18,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 
 @Composable
 fun ConversationItem(
@@ -66,7 +68,7 @@ fun ConversationItem(
                         Spacer(Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.Rounded.Lock,
-                            contentDescription = "Encrypted",
+                            contentDescription = stringResource(R.string.conversations_encrypted),
                             modifier = Modifier.size(12.dp),
                             tint = colors.onSurfaceVariant.copy(alpha = 0.7f),
                         )

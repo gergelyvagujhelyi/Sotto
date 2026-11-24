@@ -1,10 +1,16 @@
 package com.sotto.app.ui.settings
 
+import android.app.LocaleManager
 import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.PowerManager
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,43 +37,27 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material.icons.rounded.Animation
-import androidx.compose.material.icons.rounded.Badge
-import androidx.compose.material.icons.rounded.BatteryAlert
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Dns
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Hearing
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.SwapCalls
-import androidx.compose.material.icons.rounded.WifiTethering
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.core.net.toUri
-import androidx.lifecycle.compose.LifecycleResumeEffect
-import com.sotto.app.domain.model.DisplayNames
-import com.sotto.app.ui.components.AuroraTextField
-import com.sotto.app.ui.components.CollapsingTitleTopBar
-import com.sotto.app.ui.components.ShareCodeActions
-import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.ui.text.style.TextOverflow
-import com.sotto.app.domain.model.BlockedUser
-import com.sotto.app.ui.components.GradientAvatar
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
+import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Autorenew
+import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.SwapCalls
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -83,11 +74,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,25 +87,44 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailabilityLight
 import com.sotto.app.BuildConfig
+import com.sotto.app.R
+import com.sotto.app.domain.model.BlockedUser
 import com.sotto.app.domain.model.DisappearingDuration
+import com.sotto.app.domain.model.DisplayNames
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.ui.components.AppSnackbarHost
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle
+import com.sotto.app.ui.components.AuroraTextField
+import com.sotto.app.ui.components.CollapsingTitleTopBar
 import com.sotto.app.ui.components.GlassCard
+import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.QrCodeImage
 import com.sotto.app.ui.components.SectionLabel
+import com.sotto.app.ui.components.ShareCodeActions
 import com.sotto.app.ui.components.SoftButton
+import com.sotto.app.ui.text.asString
+import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.theme.Aurora
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailabilityLight
 
 @Composable
 fun SettingsScreen(
@@ -166,7 +177,7 @@ fun SettingsScreen(
     val inviteContext = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(inviteError) {
         val message = inviteError ?: return@LaunchedEffect
-        android.widget.Toast.makeText(inviteContext, message, android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(inviteContext, message.resolve(inviteContext), android.widget.Toast.LENGTH_LONG).show()
         viewModel.inviteErrorShown()
     }
     var editingName by rememberSaveable { mutableStateOf(false) }
@@ -190,16 +201,16 @@ fun SettingsScreen(
     wipeError?.let { error ->
         AlertDialog(
             onDismissRequest = { /* must choose an action */ },
-            title = { Text("Server unreachable") },
-            text = { Text(error) },
+            title = { Text(stringResource(R.string.settings_wipe_unreachable_title)) },
+            text = { Text(error.asString()) },
             confirmButton = {
                 TextButton(onClick = { viewModel.retryWipe() }) {
-                    Text("Retry")
+                    Text(stringResource(R.string.settings_wipe_retry))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.forceWipeLocal() }) {
-                    Text("Delete Anyway", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.settings_wipe_anyway), color = MaterialTheme.colorScheme.error)
                 }
             },
         )
@@ -209,23 +220,16 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = viewModel::cancelRotateKeys,
             icon = { Icon(Icons.Rounded.Autorenew, contentDescription = null) },
-            title = { Text("Rotate identity keys?") },
-            text = {
-                Text(
-                    "This generates new signing and encryption keys and a new share code. " +
-                        "Every contact sees that your keys changed and has to accept them " +
-                        "before your chats continue. Only needed if you think your keys " +
-                        "were exposed."
-                )
-            },
+            title = { Text(stringResource(R.string.settings_rotate_title)) },
+            text = { Text(stringResource(R.string.settings_rotate_text)) },
             confirmButton = {
                 TextButton(onClick = viewModel::confirmRotateKeys) {
-                    Text("Rotate")
+                    Text(stringResource(R.string.settings_rotate_confirm))
                 }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::cancelRotateKeys) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -234,11 +238,11 @@ fun SettingsScreen(
     rotationError?.let { error ->
         AlertDialog(
             onDismissRequest = viewModel::dismissRotationError,
-            title = { Text("Key rotation failed") },
-            text = { Text(error) },
+            title = { Text(stringResource(R.string.settings_rotate_failed_title)) },
+            text = { Text(error.asString()) },
             confirmButton = {
                 TextButton(onClick = viewModel::dismissRotationError) {
-                    Text("OK")
+                    Text(stringResource(R.string.common_ok))
                 }
             },
         )
@@ -248,20 +252,25 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = viewModel::cancelRetention,
             icon = { Icon(Icons.Rounded.History, contentDescription = null) },
-            title = { Text("Keep messages for ${retentionLabel(days)}?") },
+            title = {
+                Text(
+                    if (days == 365) stringResource(R.string.settings_retention_title_year)
+                    else pluralStringResource(R.plurals.settings_retention_title_days, days, days)
+                )
+            },
             text = {
                 Text(
-                    "Messages older than ${retentionLabel(days)} are deleted from this device now, " +
-                        "and from then on as they reach that age. This can't be undone."
+                    if (days == 365) stringResource(R.string.settings_retention_text_year)
+                    else pluralStringResource(R.plurals.settings_retention_text_days, days, days)
                 )
             },
             confirmButton = {
                 TextButton(onClick = viewModel::confirmRetention) {
-                    Text("Delete older messages", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.settings_retention_confirm), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = viewModel::cancelRetention) { Text("Cancel") }
+                TextButton(onClick = viewModel::cancelRetention) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -270,21 +279,16 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = viewModel::cancelWipe,
             icon = { Icon(Icons.Rounded.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Wipe all local data?") },
-            text = {
-                Text(
-                    "This will permanently delete your identity, all messages, " +
-                        "contacts, and keys from this device. This cannot be undone."
-                )
-            },
+            title = { Text(stringResource(R.string.settings_wipe_title)) },
+            text = { Text(stringResource(R.string.settings_wipe_text)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.confirmWipe() }) {
-                    Text("Wipe", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.settings_wipe_confirm), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::cancelWipe) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.common_cancel))
                 }
             },
         )
@@ -406,11 +410,11 @@ fun SettingsContent(
             snackbarHost = { AppSnackbarHost(snackbarHostState) },
             topBar = {
                 CollapsingTitleTopBar(
-                    title = "Settings",
+                    title = stringResource(R.string.common_settings),
                     scrollBehavior = scrollBehavior,
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.common_back))
                         }
                     },
                 )
@@ -424,7 +428,7 @@ fun SettingsContent(
                     .padding(horizontal = 16.dp),
             ) {
                 // Identity section
-                SectionLabel("Identity", Modifier.padding(start = 4.dp, top = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_identity), Modifier.padding(start = 4.dp, top = 4.dp))
                 IdentityCard(
                     shareCode = shareCode,
                     liveQr = liveQr,
@@ -436,26 +440,26 @@ fun SettingsContent(
                 SettingsGroup {
                     SettingsRow(
                         icon = Icons.Rounded.Badge,
-                        title = "Your name",
-                        subtitle = myName ?: "Not set \u2014 new contacts see your ID",
+                        title = stringResource(R.string.settings_your_name),
+                        subtitle = myName ?: stringResource(R.string.settings_name_not_set),
                         onClick = onEditName,
                     )
                     RowDivider()
                     SettingsRow(
                         icon = Icons.Rounded.PersonAdd,
-                        title = "Invite someone",
-                        subtitle = "A one-time code to join your relay, valid for 7 days",
+                        title = stringResource(R.string.settings_invite_title),
+                        subtitle = stringResource(R.string.settings_invite_subtitle),
                         onClick = onInvite,
                     )
                 }
 
                 // Notification privacy
-                SectionLabel("Lock screen notifications", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_lock_screen), Modifier.padding(start = 4.dp))
                 val previewLabels = mapOf(
-                    LockScreenPreviewMode.SHOW_ALL to "Show sender and message",
-                    LockScreenPreviewMode.SENDER_ONLY to "Show sender only",
-                    LockScreenPreviewMode.HIDE_BODY to "Hide message body",
-                    LockScreenPreviewMode.HIDE_ALL to "No lock screen preview",
+                    LockScreenPreviewMode.SHOW_ALL to stringResource(R.string.settings_preview_show_all),
+                    LockScreenPreviewMode.SENDER_ONLY to stringResource(R.string.settings_preview_sender_only),
+                    LockScreenPreviewMode.HIDE_BODY to stringResource(R.string.settings_preview_hide_body),
+                    LockScreenPreviewMode.HIDE_ALL to stringResource(R.string.settings_preview_hide_all),
                 )
                 SettingsGroup(Modifier.selectableGroup()) {
                     LockScreenPreviewMode.entries.forEachIndexed { index, mode ->
@@ -469,18 +473,19 @@ fun SettingsContent(
                 }
 
                 // Background connection
-                SectionLabel("Connection", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_connection), Modifier.padding(start = 4.dp))
                 SettingsGroup {
                     SettingsSwitchRow(
                         icon = Icons.Rounded.WifiTethering,
-                        title = "Background connection",
-                        subtitle = "Get messages and calls while the app is closed. Shows a permanent " +
-                            "notification and uses more battery." +
+                        title = stringResource(R.string.settings_background_connection),
+                        subtitle = listOfNotNull(
+                            stringResource(R.string.settings_background_connection_subtitle),
                             when {
-                                noRelayPush -> " Recommended: your relay can't wake the app with push."
-                                backgroundConnectionRecommended -> " Recommended on this phone: it has no Google push."
-                                else -> ""
+                                noRelayPush -> stringResource(R.string.settings_background_recommended_no_relay_push)
+                                backgroundConnectionRecommended -> stringResource(R.string.settings_background_recommended_no_google_push)
+                                else -> null
                             },
+                        ).joinToString(" "),
                         checked = settings.backgroundConnection,
                         onCheckedChange = onBackgroundConnectionChange,
                     )
@@ -488,8 +493,8 @@ fun SettingsContent(
                         RowDivider()
                         SettingsRow(
                             icon = Icons.Rounded.BatteryAlert,
-                            title = "Allow background activity",
-                            subtitle = "Until you do, Android can delay messages and calls",
+                            title = stringResource(R.string.settings_allow_background),
+                            subtitle = stringResource(R.string.settings_allow_background_subtitle),
                             onClick = onAllowBackgroundActivity,
                             tint = MaterialTheme.colorScheme.error,
                         )
@@ -498,94 +503,93 @@ fun SettingsContent(
                         RowDivider()
                         SettingsInfoRow(
                             icon = Icons.Rounded.Dns,
-                            title = "Relay",
-                            subtitle = "$relayHost \u00b7 to use another relay, wipe this app's data and set it up again",
+                            title = stringResource(R.string.settings_relay),
+                            subtitle = stringResource(R.string.settings_relay_subtitle, relayHost),
                         )
                     }
                 }
 
-                SectionLabel("Calls", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_calls), Modifier.padding(start = 4.dp))
                 SettingsGroup {
                     SettingsSwitchRow(
                         icon = Icons.Rounded.GraphicEq,
-                        title = "High-quality calls",
-                        subtitle = "Fuller sound in calls with someone who has this on too; the call screen " +
-                            "then shows HD. Uses about a quarter more data.",
+                        title = stringResource(R.string.settings_hq_calls),
+                        subtitle = stringResource(R.string.settings_hq_calls_subtitle),
                         checked = settings.highQualityCalls,
                         onCheckedChange = onHighQualityCallsChange,
                     )
                     RowDivider()
                     SettingsSwitchRow(
                         icon = Icons.Rounded.Hearing,
-                        title = "Level quiet voices",
-                        subtitle = "Lifts a quiet voice in a call to a normal level. Without it, Louder on " +
-                            "the call screen lifts one person's voice, and is remembered for them.",
+                        title = stringResource(R.string.settings_level_voices),
+                        subtitle = stringResource(R.string.settings_level_voices_subtitle),
                         checked = settings.levelVoices,
                         onCheckedChange = onLevelVoicesChange,
                     )
                     RowDivider()
                     SettingsSwitchRow(
                         icon = Icons.Rounded.Tune,
-                        title = "WebRTC voice processing",
-                        subtitle = "Your microphone goes through WebRTC's echo cancellation, noise suppression " +
-                            "and volume instead of the phone's own. Try it if people hear an echo or you sound " +
-                            "too quiet. From the next call.",
+                        title = stringResource(R.string.settings_webrtc_voice),
+                        subtitle = stringResource(R.string.settings_webrtc_voice_subtitle),
                         checked = settings.webRtcVoiceProcessing,
                         onCheckedChange = onWebRtcVoiceProcessingChange,
                     )
                 }
 
                 // Privacy
-                SectionLabel("Privacy", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_privacy), Modifier.padding(start = 4.dp))
                 SettingsGroup {
                     SettingsSwitchRow(
                         icon = Icons.Rounded.DoneAll,
-                        title = "Read receipts",
-                        subtitle = "Let others know when you've read their messages. " +
-                            "Works both ways: with this off you won't see when they read yours.",
+                        title = stringResource(R.string.settings_read_receipts),
+                        subtitle = stringResource(R.string.settings_read_receipts_subtitle),
                         checked = settings.readReceipts,
                         onCheckedChange = onReadReceiptsChange,
                     )
                     RowDivider()
                     SettingsSwitchRow(
                         icon = Icons.Rounded.Screenshot,
-                        title = "Screen security",
-                        subtitle = "Block screenshots and app switcher preview",
+                        title = stringResource(R.string.settings_screen_security),
+                        subtitle = stringResource(R.string.settings_screen_security_subtitle),
                         checked = settings.screenSecurity,
                         onCheckedChange = onScreenSecurityChange,
                     )
                     RowDivider()
                     SettingsSwitchRow(
                         icon = Icons.Rounded.SwapCalls,
-                        title = "Direct calls",
-                        subtitle = "When a contact also has this on, call audio and files go straight between " +
-                            "your phones instead of through the relay: better sound, less relay data, but each of " +
-                            "you can see the other's IP addresses (internet, home network and mobile). Calls and " +
-                            "files with people who aren't your contacts always use the relay.",
+                        title = stringResource(R.string.settings_direct_calls),
+                        subtitle = stringResource(R.string.settings_direct_calls_subtitle),
                         checked = settings.directCalls,
                         onCheckedChange = onDirectCallsChange,
                     )
                 }
 
-                SectionLabel("Display", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_display), Modifier.padding(start = 4.dp))
                 SettingsGroup {
+                    // Android 13+ keeps a language per app; before that, or on a phone without
+                    // Android's page for it, the phone's language applies and there's no row.
+                    val context = LocalContext.current
+                    val languagePage = remember(context) { languageSettingsIntent(context) }
+                    if (languagePage != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        LanguageRow(languagePage)
+                        RowDivider()
+                    }
                     SettingsSwitchRow(
                         icon = Icons.Rounded.Animation,
-                        title = "Reduce animations",
-                        subtitle = "No send animation; backgrounds and the call screen stay still. " +
-                            "Also on while Android's “Remove animations” is.",
+                        title = stringResource(R.string.settings_reduce_animations),
+                        subtitle = stringResource(R.string.settings_reduce_animations_subtitle),
                         checked = settings.reduceAnimations,
                         onCheckedChange = onReduceAnimationsChange,
                     )
                 }
 
                 // Message history retention
-                SectionLabel("Message history", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_history), Modifier.padding(start = 4.dp))
                 SettingsGroup(Modifier.selectableGroup()) {
                     RETENTION_OPTIONS.forEachIndexed { index, days ->
                         if (index > 0) RowDivider(inset = 56.dp)
                         SettingsRadioRow(
-                            title = if (days == 0) "Keep forever" else "Keep for ${retentionLabel(days)}",
+                            title = keepLabel(days),
                             selected = settings.localDataRetentionDays == days,
                             onClick = { onRetentionChange(days) },
                         )
@@ -593,20 +597,20 @@ fun SettingsContent(
                 }
 
                 // Disappearing messages
-                SectionLabel("Disappearing messages", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_disappearing), Modifier.padding(start = 4.dp))
                 DisappearingChips(
                     selected = settings.disappearingMessagesDefault,
                     onSelect = onDisappearingChange,
                 )
 
                 // Blocked users
-                SectionLabel("Blocked users", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_blocked), Modifier.padding(start = 4.dp))
                 SettingsGroup {
                     if (blockedUsers.isEmpty()) {
                         SettingsInfoRow(
                             icon = Icons.Rounded.Block,
-                            title = "No one is blocked",
-                            subtitle = "Block from a chat's menu or a message request",
+                            title = stringResource(R.string.settings_none_blocked),
+                            subtitle = stringResource(R.string.settings_none_blocked_subtitle),
                         )
                     }
                     blockedUsers.forEachIndexed { index, user ->
@@ -617,7 +621,7 @@ fun SettingsContent(
 
                 // Rare and disruptive for every contact, so kept away from the everyday rows
                 // above: it sat right under "Your name", one mistap away.
-                SectionLabel("Keys", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_keys), Modifier.padding(start = 4.dp))
                 SettingsGroup {
                     if (isRotatingKeys) {
                         Row(
@@ -628,27 +632,27 @@ fun SettingsContent(
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(16.dp))
-                            Text("Rotating keys...", style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.settings_rotating_keys), style = MaterialTheme.typography.bodyLarge)
                         }
                     } else {
                         SettingsRow(
                             icon = Icons.Rounded.Autorenew,
-                            title = "Rotate identity keys",
-                            subtitle = "New keys and a new share code; every contact has to accept them",
+                            title = stringResource(R.string.settings_rotate_keys),
+                            subtitle = stringResource(R.string.settings_rotate_keys_subtitle),
                             onClick = onRotateKeys,
                         )
                     }
                 }
 
                 // Danger zone
-                SectionLabel("Data", Modifier.padding(start = 4.dp))
+                SectionLabel(stringResource(R.string.settings_section_data), Modifier.padding(start = 4.dp))
                 SettingsGroup(borderColor = MaterialTheme.colorScheme.error.copy(alpha = 0.3f)) {
                     SettingsRow(
                         icon = Icons.Rounded.DeleteForever,
                         tint = MaterialTheme.colorScheme.error,
-                        title = "Wipe all local data",
+                        title = stringResource(R.string.settings_wipe),
                         titleColor = MaterialTheme.colorScheme.error,
-                        subtitle = "Permanently delete everything on this device",
+                        subtitle = stringResource(R.string.settings_wipe_subtitle),
                         onClick = onWipe,
                     )
                 }
@@ -700,21 +704,20 @@ private fun IdentityCard(
             }
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "Your share code",
+                text = stringResource(R.string.settings_your_share_code),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = shareCode ?: "Loading...",
+                text = shareCode ?: stringResource(R.string.settings_loading),
                 style = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
                 textAlign = TextAlign.Center,
             )
             if (liveQr != null) {
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = "The QR code changes every second: scanned in person, it adds and verifies you. " +
-                        "The share code, or a picture of the QR code, only adds you.",
+                    text = stringResource(R.string.settings_live_qr_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -746,13 +749,13 @@ internal fun EditMyNameDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.Badge, contentDescription = null) },
-        title = { Text("Your name") },
+        title = { Text(stringResource(R.string.settings_your_name)) },
         text = {
             Column {
                 AuroraTextField(
                     value = name,
                     onValueChange = { if (it.codePointCount(0, it.length) <= DisplayNames.MAX_LENGTH) name = it },
-                    placeholder = "Your name",
+                    placeholder = stringResource(R.string.settings_your_name),
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.Words,
@@ -763,15 +766,14 @@ internal fun EditMyNameDialog(
                 )
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "Sent end-to-end encrypted to people you add, and to people whose " +
-                        "request you accept. The relay never sees it.",
+                    text = stringResource(R.string.settings_name_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onSave(name) }) { Text("Save") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        confirmButton = { TextButton(onClick = { onSave(name) }) { Text(stringResource(R.string.common_save)) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) } },
     )
 }
 
@@ -919,15 +921,63 @@ private fun BlockedUserRow(user: BlockedUser, onUnblock: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         Spacer(Modifier.width(12.dp))
-        SoftButton(text = "Unblock", onClick = onUnblock, compact = true)
+        SoftButton(text = stringResource(R.string.settings_unblock), onClick = onUnblock, compact = true)
     }
 }
 
 private val RETENTION_OPTIONS = listOf(0, 365, 90, 30)
 
-private fun retentionLabel(days: Int): String = when (days) {
-    365 -> "1 year"
-    else -> "$days days"
+/** A history option: kept forever, for a year, or for some days. */
+@Composable
+private fun keepLabel(days: Int): String = when (days) {
+    0 -> stringResource(R.string.settings_keep_forever)
+    365 -> stringResource(R.string.settings_keep_year)
+    else -> pluralStringResource(R.plurals.settings_keep_days, days, days)
+}
+
+/**
+ * The app's own language (Android 13+), shown by name; a tap opens Android's per-app language
+ * page, which lists the languages Sotto has (the build generates that list).
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+@Composable
+private fun LanguageRow(open: Intent) {
+    val context = LocalContext.current
+    // Null while the app follows the phone's language.
+    fun appLanguage(): String? = context.getSystemService(LocaleManager::class.java)
+        ?.applicationLocales
+        ?.takeUnless { it.isEmpty }
+        ?.get(0)
+        ?.let { locale -> locale.getDisplayName(locale).replaceFirstChar { it.titlecase(locale) } }
+    var language by remember { mutableStateOf(appLanguage()) }
+    // Re-read when coming back from Android's page (choosing the phone's language again may
+    // not restart the screen).
+    LifecycleResumeEffect(Unit) {
+        language = appLanguage()
+        onPauseOrDispose { }
+    }
+    SettingsRow(
+        icon = Icons.Rounded.Language,
+        title = stringResource(R.string.settings_language),
+        subtitle = language ?: stringResource(R.string.settings_language_phone),
+        onClick = {
+            try {
+                context.startActivity(open)
+            } catch (_: ActivityNotFoundException) {
+                // Gone since the screen checked: nothing to open.
+            }
+        },
+    )
+}
+
+/** Android's per-app language page for Sotto (Android 13+), or null where the phone has none. */
+private fun languageSettingsIntent(context: Context): Intent? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+    val intent = Intent(
+        android.provider.Settings.ACTION_APP_LOCALE_SETTINGS,
+        Uri.fromParts("package", context.packageName, null),
+    )
+    return intent.takeIf { it.resolveActivity(context.packageManager) != null }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -937,12 +987,12 @@ private fun DisappearingChips(
     onSelect: (DisappearingDuration) -> Unit,
 ) {
     val labels = mapOf(
-        DisappearingDuration.OFF to "Off",
-        DisappearingDuration.MINUTES_5 to "5 minutes",
-        DisappearingDuration.HOURS_1 to "1 hour",
-        DisappearingDuration.HOURS_24 to "24 hours",
-        DisappearingDuration.DAYS_7 to "7 days",
-        DisappearingDuration.DAYS_30 to "30 days",
+        DisappearingDuration.OFF to stringResource(R.string.common_off),
+        DisappearingDuration.MINUTES_5 to pluralStringResource(R.plurals.settings_minutes, 5, 5),
+        DisappearingDuration.HOURS_1 to pluralStringResource(R.plurals.settings_hours, 1, 1),
+        DisappearingDuration.HOURS_24 to pluralStringResource(R.plurals.settings_hours, 24, 24),
+        DisappearingDuration.DAYS_7 to pluralStringResource(R.plurals.settings_days, 7, 7),
+        DisappearingDuration.DAYS_30 to pluralStringResource(R.plurals.settings_days, 30, 30),
     )
     GlassCard(modifier = Modifier.fillMaxWidth(), contentPadding = PaddingValues(14.dp)) {
         FlowRow(
@@ -1006,14 +1056,14 @@ private fun Footer() {
             )
             Spacer(Modifier.width(6.dp))
             Text(
-                "End-to-end encrypted",
+                stringResource(R.string.settings_footer_encrypted),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(Modifier.height(4.dp))
         Text(
-            "Sotto ${BuildConfig.VERSION_NAME}",
+            stringResource(R.string.settings_footer_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
         )

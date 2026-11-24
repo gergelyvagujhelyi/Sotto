@@ -1,38 +1,44 @@
 package com.sotto.app.data.repository
 
+import android.content.Context
 import android.util.Base64
+import com.sotto.app.R
 import com.sotto.app.crypto.ContactKeyVerifier
 import com.sotto.app.crypto.KeyCheck
 import com.sotto.app.crypto.KeyManager
-import com.sotto.app.crypto.VerifiedKeys
 import com.sotto.app.crypto.PqcProvider
 import com.sotto.app.crypto.SessionResetSender
+import com.sotto.app.crypto.VerifiedKeys
 import com.sotto.app.crypto.buildMessageSigPayload
 import com.sotto.app.data.local.dao.ContactDao
 import com.sotto.app.data.local.dao.ConversationDao
 import com.sotto.app.data.local.dao.MessageDao
 import com.sotto.app.data.local.entity.MessageEntity
+import com.sotto.app.data.media.MediaStore
 import com.sotto.app.data.remote.ApiService
 import com.sotto.app.data.remote.dto.AckRequest
 import com.sotto.app.data.remote.dto.SendMessageRequest
-import com.sotto.app.data.media.MediaStore
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MediaPayload
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageMedia
 import com.sotto.app.domain.model.MessageState
-import com.sotto.app.domain.model.UnknownPayload
-import com.sotto.app.domain.model.previewText
 import com.sotto.app.domain.model.ProfilePayload
 import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.ReplyRef
+import com.sotto.app.domain.model.UnknownPayload
+import com.sotto.app.domain.model.previewUiText
+import com.sotto.app.domain.model.quoteText
 import com.sotto.app.domain.repository.CryptoEngine
 import com.sotto.app.domain.repository.DuplicateMessageException
 import com.sotto.app.domain.repository.EncryptedEnvelope
 import com.sotto.app.domain.repository.MessageRepository
 import com.sotto.app.domain.repository.PeerKeys
 import com.sotto.app.notification.ChatNotificationManager
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.resolve
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -63,6 +69,8 @@ class MessageRepositoryImpl @Inject constructor(
     private val mediaStore: MediaStore,
     private val fileDrop: com.sotto.app.data.media.FileDrop,
     private val transfers: com.sotto.app.worker.FileTransfers,
+    /** For the words this repository stores or notifies with (previews, notes), in the user's language. */
+    @ApplicationContext private val context: Context,
 ) : MessageRepository {
 
     override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
@@ -365,7 +373,7 @@ class MessageRepositoryImpl @Inject constructor(
                 )
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
-            updateConversationPreview(ready.conversationId, ready.recipientId, ready.preview(), response.timestamp)
+            updateConversationPreview(ready.conversationId, ready.recipientId, ready.preview(context), response.timestamp)
         }
     }
 
@@ -670,7 +678,7 @@ class MessageRepositoryImpl @Inject constructor(
             isOutgoing = true,
             // Only a message of this chat; never a reply to a reply's quote of something else.
             replyToId = replyTo?.takeIf { it.conversationId == conversationId }?.id,
-            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(it.preview) },
+            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(quoteText(it.media?.kind, it.plaintext, it.media?.name.orEmpty())) },
             replyToOwn = replyTo?.takeIf { it.conversationId == conversationId }?.isOutgoing == true,
             mediaKind = media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
             mediaMime = media?.mime ?: file?.mime,
@@ -728,7 +736,7 @@ class MessageRepositoryImpl @Inject constructor(
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
 
-            updateConversationPreview(conversationId, recipientId, entity.preview(), response.timestamp)
+            updateConversationPreview(conversationId, recipientId, entity.preview(context), response.timestamp)
 
             return entity.toDomain(senderId).copy(
                 state = MessageState.SENT,
@@ -860,7 +868,7 @@ class MessageRepositoryImpl @Inject constructor(
             )
             messageDao.updateStateAndTimestamp(messageId, MessageState.SENT.name, response.timestamp)
             // The message now sorts as the newest one (relay timestamp): show it in the list.
-            updateConversationPreview(entity.conversationId, entity.recipientId, entity.preview(), response.timestamp)
+            updateConversationPreview(entity.conversationId, entity.recipientId, entity.preview(context), response.timestamp)
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             throw e
@@ -1242,12 +1250,12 @@ class MessageRepositoryImpl @Inject constructor(
         val media = sentMedia.takeIf { refused == null }
         val file = sentFile.takeIf { refused == null }
         val messageText = when {
-            refused != null -> requestMediaNote(refused, sentMedia?.caption ?: sentFile?.caption.orEmpty())
+            refused != null -> requestMediaNote(refused, sentMedia?.caption ?: sentFile?.caption.orEmpty()).resolve(context)
             media != null -> media.caption
             file != null -> file.caption
             reply != null -> reply.text
             // A newer Sotto's payload, or a malformed one: a note, never the raw payload.
-            UnknownPayload.isUnknown(plaintextStr) -> UnknownPayload.NOTE
+            UnknownPayload.isUnknown(plaintextStr) -> context.getString(UnknownPayload.NOTE)
             else -> plaintextStr
         }
         val replyToId = reply?.let {
@@ -1301,7 +1309,7 @@ class MessageRepositoryImpl @Inject constructor(
                 }
             }
         }
-        val shownText = entity.preview()
+        val shownText = entity.preview(context)
 
         val isActive = conversationId == activeConversationId
         updateConversationPreview(
@@ -1338,12 +1346,13 @@ class MessageRepositoryImpl @Inject constructor(
 
         val conversationId = getOrCreateConversationId(senderId)
         val isActive = conversationId == activeConversationId
-        updateConversationPreview(conversationId, senderId, WANTS_TO_CONNECT, timestamp, incrementUnread = !isActive)
+        val wantsToConnect = context.getString(R.string.chat_preview_wants_to_connect)
+        updateConversationPreview(conversationId, senderId, wantsToConnect, timestamp, incrementUnread = !isActive)
         if (!isActive) {
             notificationManager.showMessageNotification(
                 senderId = senderId,
                 senderName = contactDao.getByUserId(senderId)?.displayName ?: senderId.take(8),
-                messageBody = WANTS_TO_CONNECT,
+                messageBody = wantsToConnect,
                 conversationId = conversationId,
             )
         }
@@ -1373,7 +1382,7 @@ class MessageRepositoryImpl @Inject constructor(
         notificationManager.showMessageNotification(
             senderId = senderId,
             senderName = contactDao.getByUserId(senderId)?.displayName ?: senderId.take(8),
-            messageBody = reactionNotificationText(emoji, target.preview()),
+            messageBody = reactionNotificationText(emoji, target.preview(context)).resolve(context),
             conversationId = conversation.id,
             isReaction = true,
         )
@@ -1702,8 +1711,6 @@ class MessageRepositoryImpl @Inject constructor(
         const val MAX_FILE_BYTES = 98L * 1024 * 1024
         /** How many of our own newest messages a received reply's original is looked for in. */
         private const val OWN_REPLY_SEARCH_LIMIT = 5_000
-        /** Preview and notification text when someone adds the user and sends only their name. */
-        private const val WANTS_TO_CONNECT = "Wants to connect"
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val MAX_PAGES_PER_FETCH = 10
         /** After this many failed decrypt attempts, acknowledge the message to
@@ -1734,20 +1741,25 @@ class MessageRepositoryImpl @Inject constructor(
 }
 
 /** What a message request shows instead of the voice message, photo or file it tried to send. */
-internal fun requestMediaNote(kind: MediaKind, caption: String): String {
-    val what = when (kind) {
-        MediaKind.VOICE -> "🎤 A voice message"
-        MediaKind.PHOTO -> "📷 A photo"
-        MediaKind.FILE -> "📎 A file"
-    }
-    val note = "$what was sent before you accepted this request, so it wasn't received. Ask them to send it again."
-    return if (caption.isBlank()) note else "$note\n\n${caption.trim()}"
+internal fun requestMediaNote(kind: MediaKind, caption: String): UiText {
+    val note = UiText.res(
+        when (kind) {
+            MediaKind.VOICE -> R.string.chat_request_media_voice
+            MediaKind.PHOTO -> R.string.chat_request_media_photo
+            MediaKind.FILE -> R.string.chat_request_media_file
+        },
+    )
+    return if (caption.isBlank()) note else UiText.res(R.string.chat_request_media_with_caption, note, caption.trim())
 }
 
 /** What a reaction's notification says, e.g. `Reacted ❤️ to "See you at 6"`. */
-internal fun reactionNotificationText(emoji: String, original: String): String {
+internal fun reactionNotificationText(emoji: String, original: String): UiText {
     val quote = original.trim().replace(Regex("\\s+"), " ").let { if (it.length > 60) it.take(59).trimEnd() + "…" else it }
-    return if (quote.isEmpty()) "Reacted $emoji to your message" else "Reacted $emoji to \"$quote\""
+    return if (quote.isEmpty()) {
+        UiText.res(R.string.chat_reaction_notification, emoji)
+    } else {
+        UiText.res(R.string.chat_reaction_notification_quote, emoji, quote)
+    }
 }
 
 private fun MessageEntity.toDomain(localUserId: String): Message {
@@ -1780,4 +1792,5 @@ internal fun MessageEntity.media(): MessageMedia? {
 }
 
 /** What the chat list or a notification says for this row. */
-internal fun MessageEntity.preview(): String = previewText(MediaKind.fromWire(mediaKind), plaintext, mediaName.orEmpty())
+internal fun MessageEntity.preview(context: Context): String =
+    previewUiText(MediaKind.fromWire(mediaKind), plaintext, mediaName.orEmpty()).resolve(context)

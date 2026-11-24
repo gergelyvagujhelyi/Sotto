@@ -6,6 +6,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 Nothing yet.
 
+## 0.7.25 — 2026-11-24
+
+- **Sotto speaks Hungarian** — Every screen, notification and message the app shows now comes in English and Hungarian (informal, *te*). Sotto follows the phone's language; on Android 13 and later it can also have its own, from the new Language row in Settings > Display or Android's per-app language setting. Dates follow the language too ("Ma", "Tegnap", "nov. 3., hétfő"). Chat-list previews and call entries saved before a language switch keep the language they were saved in, and so do two rare notes stored as the message itself: "sent before you accepted this request" and "needs a newer Sotto". Reply quotes of a photo, voice message or file still travel with the English label every Sotto has sent, and each phone shows it in its own language, so a quote never gives away the sender's language.
+- **Relay: quieter log** — The relay no longer logs each request it makes itself (pushes, release checks), only warnings and errors from them.
+
 ## 0.7.24 — 2026-11-24
 
 - **The update notice shows on every screen** — When your relay runs a newer Sotto, a bar at the top of every screen says so, not only a card in the chat list. Once the app update is out it's violet ("Sotto 0.7.24 is ready · Update") and a tap opens SourceDrop to install it; while it's still on its way it's a calm grey ("Sotto 0.7.24 is on its way · Why?") and a tap explains that some things may not work until then. With a call going on, it sits under the call bar.

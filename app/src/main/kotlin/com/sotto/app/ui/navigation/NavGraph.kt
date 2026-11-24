@@ -18,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NamedNavArgument
 import androidx.navigation.NavBackStackEntry
@@ -27,6 +28,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.sotto.app.R
 import com.sotto.app.connection.RelayConfig
 import com.sotto.app.domain.model.InviteLink
 import com.sotto.app.ui.call.CallScreen
@@ -37,8 +39,8 @@ import com.sotto.app.ui.contacts.AddContactScreen
 import com.sotto.app.ui.contacts.PREFILLED_SHARE_CODE_KEY
 import com.sotto.app.ui.contacts.SCANNED_INVITE_KEY
 import com.sotto.app.ui.contacts.SCANNED_SHARE_CODE_KEY
-import com.sotto.app.ui.contacts.ScanQrScreen
 import com.sotto.app.ui.contacts.SCANNED_VERIFY_CODE_KEY
+import com.sotto.app.ui.contacts.ScanQrScreen
 import com.sotto.app.ui.contacts.VerifyInPersonScreen
 import com.sotto.app.ui.conversations.ConversationsScreen
 import com.sotto.app.ui.onboarding.OnboardingScreen
@@ -230,9 +232,9 @@ fun ChatNavGraph(
                     navController.popBackStack()
                 },
                 accept = { text -> com.sotto.app.crypto.InPersonCode.parse(text)?.encode() },
-                title = "Scan their code",
-                hint = "Point the camera at the code on their Verify in person screen.",
-                rejectMessage = "That isn't a Verify in person code. On their phone: open your chat, then ⋮ → Verify in person.",
+                title = stringResource(R.string.contacts_scan_their_code),
+                hint = stringResource(R.string.contacts_scan_verify_hint),
+                rejectMessage = stringResource(R.string.contacts_scan_verify_reject),
             )
         }
 
@@ -326,9 +328,9 @@ fun ChatNavGraph(
                     navController.popBackStack()
                 },
                 accept = { text -> InviteLink.find(text, RelayConfig.cleartextHosts)?.toLink() },
-                title = "Scan an invite",
-                hint = "Point the camera at the invite QR on the other person's phone (their Settings, Invite someone).",
-                rejectMessage = "That QR code isn't a Sotto invite.",
+                title = stringResource(R.string.components_scan_invite_title),
+                hint = stringResource(R.string.components_scan_invite_hint),
+                rejectMessage = stringResource(R.string.components_not_an_invite),
             )
         }
 

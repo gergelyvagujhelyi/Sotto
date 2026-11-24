@@ -10,6 +10,7 @@ class VerifyEmojiTest {
         assertEquals(64, VerifyEmoji.ALL.size)
         assertEquals(64, VerifyEmoji.ALL.map { it.symbol }.toSet().size)
         assertEquals(64, VerifyEmoji.ALL.map { it.name.lowercase() }.toSet().size)
+        assertEquals(64, VerifyEmoji.ALL.map { it.label }.toSet().size)
     }
 
     @Test

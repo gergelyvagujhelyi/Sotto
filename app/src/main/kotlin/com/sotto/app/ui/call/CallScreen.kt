@@ -1,7 +1,5 @@
 package com.sotto.app.ui.call
 
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.layout.SubcomposeLayout
 import android.Manifest
 import android.app.KeyguardManager
 import android.content.pm.PackageManager
@@ -33,9 +31,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -91,7 +89,9 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -99,10 +99,12 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sotto.app.R
 import com.sotto.app.call.hasRouteChoice
 import com.sotto.app.domain.model.AudioRoute
 import com.sotto.app.domain.model.AudioRouteKind
@@ -116,6 +118,8 @@ import com.sotto.app.ui.components.AuroraStyle
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.InfoPill
 import com.sotto.app.ui.components.glass
+import com.sotto.app.ui.text.asString
+import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.theme.Aurora
 import com.sotto.app.ui.theme.CallGreen
 import com.sotto.app.ui.theme.CallRed
@@ -154,7 +158,7 @@ fun CallScreen(
 
     LaunchedEffect(callError) {
         callError?.let {
-            snackbarHostState.showSnackbar(it)
+            snackbarHostState.showSnackbar(it.resolve(context))
             viewModel.clearCallError()
         }
     }
@@ -278,7 +282,7 @@ fun CallContent(
     onClose: () -> Unit = {},
 ) = ForcedDarkTheme {
     val status = callState?.status
-    val name = callState?.peerDisplayName ?: "Unknown"
+    val name = callState?.peerDisplayName ?: stringResource(R.string.call_unknown_caller)
     val colors = MaterialTheme.colorScheme
 
     AuroraBackground(
@@ -308,7 +312,7 @@ fun CallContent(
                     )
                     if (onMinimize != null) {
                         IconButton(onClick = onMinimize, modifier = Modifier.align(Alignment.CenterStart)) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back to the app; the call goes on")
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.call_back_to_app))
                         }
                     }
                 }
@@ -404,7 +408,7 @@ private fun CallDetails(callState: CallState?, name: String, compact: Boolean, o
         )
         if (callState?.isNewContact == true) {
             Spacer(Modifier.height(10.dp))
-            InfoPill(text = "Unknown contact", icon = Icons.Rounded.PersonSearch, tint = colors.error)
+            InfoPill(text = stringResource(R.string.call_unknown_contact), icon = Icons.Rounded.PersonSearch, tint = colors.error)
         }
         Spacer(Modifier.height(10.dp))
         if (status == CallStatus.CONNECTED) {
@@ -430,22 +434,23 @@ private fun CallDetails(callState: CallState?, name: String, compact: Boolean, o
         if (peerUnreachable) {
             Spacer(Modifier.height(14.dp))
             ReconnectingIndicator(
-                title = "Can't reach ${callState?.peerDisplayName ?: "the other phone"}",
-                detail = "Nothing is coming from their phone. The call ends after a minute if it doesn't come back.",
+                title = callState?.peerDisplayName?.let { stringResource(R.string.call_cant_reach, it) }
+                    ?: stringResource(R.string.call_cant_reach_other_phone),
+                detail = stringResource(R.string.call_peer_unreachable_detail),
             )
         } else if (reconnecting) {
             Spacer(Modifier.height(14.dp))
             ReconnectingIndicator()
         } else if (status == CallStatus.CONNECTED && justReconnected) {
             Spacer(Modifier.height(14.dp))
-            InfoPill(text = "Reconnected", icon = Icons.Rounded.CheckCircle, tint = Aurora.colors.success)
+            InfoPill(text = stringResource(R.string.call_reconnected), icon = Icons.Rounded.CheckCircle, tint = Aurora.colors.success)
         } else if (status == CallStatus.CONNECTED && callState?.path != null) {
             Spacer(Modifier.height(14.dp))
             val hd = if (callState.highQuality) " \u00b7 HD" else ""
             if (callState.path == CallPath.DIRECT) {
-                InfoPill(text = "Direct$hd", icon = Icons.Rounded.SwapCalls)
+                InfoPill(text = stringResource(R.string.call_path_direct) + hd, icon = Icons.Rounded.SwapCalls)
             } else {
-                InfoPill(text = "Via relay$hd", icon = Icons.Rounded.Dns, tint = colors.onSurfaceVariant)
+                InfoPill(text = stringResource(R.string.call_path_relayed) + hd, icon = Icons.Rounded.Dns, tint = colors.onSurfaceVariant)
             }
         }
 
@@ -456,13 +461,13 @@ private fun CallDetails(callState: CallState?, name: String, compact: Boolean, o
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
                     .background(colors.primary.copy(alpha = 0.18f))
-                    .clickable(onClickLabel = "Verify $name by phone", onClick = onVerify)
+                    .clickable(onClickLabel = stringResource(R.string.call_verify_by_phone_name, name), onClick = onVerify)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(Icons.Rounded.VerifiedUser, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Verify by phone", style = MaterialTheme.typography.labelLarge, color = colors.primary)
+                Text(stringResource(R.string.call_verify_by_phone), style = MaterialTheme.typography.labelLarge, color = colors.primary)
             }
         }
 
@@ -470,7 +475,7 @@ private fun CallDetails(callState: CallState?, name: String, compact: Boolean, o
         if (callState?.relayUnavailable == true && status != CallStatus.NO_RELAY) {
             Spacer(Modifier.height(14.dp))
             InfoPill(
-                text = "Relay unavailable — call may not connect",
+                text = stringResource(R.string.call_relay_unavailable_warning),
                 icon = Icons.Rounded.WarningAmber,
                 tint = Aurora.colors.warning,
                 maxLines = 3,
@@ -502,8 +507,10 @@ private fun CallControls(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                RoundCallButton(Icons.Rounded.CallEnd, "Decline", CallRed, onDecline, label = "Decline")
-                RoundCallButton(Icons.Rounded.Call, "Accept", CallGreen, onAccept, label = "Accept", beckon = true)
+                val decline = stringResource(R.string.call_decline)
+                val accept = stringResource(R.string.call_accept)
+                RoundCallButton(Icons.Rounded.CallEnd, decline, CallRed, onDecline, label = decline)
+                RoundCallButton(Icons.Rounded.Call, accept, CallGreen, onAccept, label = accept, beckon = true)
             }
         }
         state != null && state.status == CallStatus.CONNECTED -> {
@@ -522,16 +529,16 @@ private fun CallControls(
                 ) {
                     CallToggleButton(
                         icon = if (state.isMuted) Icons.Rounded.MicOff else Icons.Rounded.Mic,
-                        contentDescription = "Mute",
-                        label = if (state.isMuted) "Muted" else "Mute",
+                        contentDescription = stringResource(R.string.call_mute),
+                        label = stringResource(if (state.isMuted) R.string.call_muted else R.string.call_mute),
                         checked = state.isMuted,
                         onToggle = onToggleMute,
                     )
                     // Lifts the other person's voice more; remembered for them (ADR-23).
                     CallToggleButton(
                         icon = Icons.Rounded.RecordVoiceOver,
-                        contentDescription = "Louder",
-                        label = "Louder",
+                        contentDescription = stringResource(R.string.call_louder),
+                        label = stringResource(R.string.call_louder),
                         checked = state.louder,
                         onToggle = onToggleLouder,
                     )
@@ -543,23 +550,32 @@ private fun CallControls(
                     )
                 }
                 Spacer(Modifier.height(20.dp))
-                RoundCallButton(Icons.Rounded.CallEnd, "End call", CallRed, onHangup, label = "End", size = 64.dp)
+                RoundCallButton(
+                    Icons.Rounded.CallEnd,
+                    stringResource(R.string.call_end_call),
+                    CallRed,
+                    onHangup,
+                    label = stringResource(R.string.call_end),
+                    size = 64.dp,
+                )
             }
         }
         // Over: the screen closes by itself in a moment; "Close" closes it now. ("Cancel"
         // here did nothing: there's no call left to cancel.)
         state != null && state.status.isOver -> {
+            val close = stringResource(R.string.common_close)
             RoundCallButton(
                 Icons.Rounded.Close,
-                "Close",
+                close,
                 listOf(Color(0xFF4A4A5A), Color(0xFF2E2E3A)),
                 onClose,
-                label = "Close",
+                label = close,
             )
         }
         else -> {
             // Calling out, not answered yet: cancel the call.
-            RoundCallButton(Icons.Rounded.CallEnd, "Cancel", CallRed, onHangup, label = "Cancel")
+            val cancel = stringResource(R.string.common_cancel)
+            RoundCallButton(Icons.Rounded.CallEnd, cancel, CallRed, onHangup, label = cancel)
         }
     }
 }
@@ -638,8 +654,8 @@ private fun AudioRouteButton(
     if (!hasRouteChoice(routes)) {
         CallToggleButton(
             icon = Icons.AutoMirrored.Rounded.VolumeUp,
-            contentDescription = "Speaker",
-            label = "Speaker",
+            contentDescription = stringResource(R.string.call_speaker),
+            label = stringResource(R.string.call_speaker),
             checked = current?.kind == AudioRouteKind.SPEAKER,
             onToggle = onToggleSpeaker,
         )
@@ -649,24 +665,27 @@ private fun AudioRouteButton(
     val kind = current?.kind ?: AudioRouteKind.EARPIECE
     CallToggleButton(
         icon = routeIcon(kind),
-        contentDescription = "Audio on ${current?.name ?: "Phone"}. Choose where the call plays",
-        label = current?.name ?: "Audio",
+        contentDescription = stringResource(
+            R.string.call_audio_route_description,
+            current?.name?.asString() ?: stringResource(R.string.call_route_phone),
+        ),
+        label = current?.name?.asString() ?: stringResource(R.string.call_audio),
         checked = kind != AudioRouteKind.EARPIECE,
         onToggle = { choosing = true },
     )
     if (choosing) {
         ModalBottomSheet(onDismissRequest = { choosing = false }) {
             Text(
-                "Play the call on",
+                stringResource(R.string.call_play_on),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
             )
             routes.forEach { route ->
                 ListItem(
-                    headlineContent = { Text(route.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    headlineContent = { Text(route.name.asString(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     leadingContent = { Icon(routeIcon(route.kind), contentDescription = null) },
                     trailingContent = {
-                        if (route.key == current?.key) Icon(Icons.Rounded.Check, contentDescription = "In use")
+                        if (route.key == current?.key) Icon(Icons.Rounded.Check, contentDescription = stringResource(R.string.call_route_in_use))
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable {
@@ -844,8 +863,8 @@ private fun rememberJustReconnected(reconnecting: Boolean): Boolean {
  */
 @Composable
 private fun ReconnectingIndicator(
-    title: String = "Reconnecting…",
-    detail: String = "No connection right now",
+    title: String = stringResource(R.string.call_reconnecting),
+    detail: String = stringResource(R.string.call_no_connection_now),
 ) {
     val warning = Aurora.colors.warning
     val transition = rememberInfiniteTransition(label = "reconnecting")
@@ -893,23 +912,28 @@ private fun ReconnectingIndicator(
     }
 }
 
+@Composable
 private fun statusText(
     status: CallStatus?,
     direction: CallDirection?,
     peerName: String? = null,
     wasConnected: Boolean = false,
 ): String = when (status) {
-    CallStatus.RINGING -> if (direction == CallDirection.INCOMING) "Incoming call..." else "Ringing..."
-    CallStatus.CONNECTING -> if (direction == CallDirection.OUTGOING && peerName != null) "Connecting to $peerName..." else "Connecting..."
-    CallStatus.CONNECTED -> "Connected"
-    CallStatus.ENDED -> "Call ended"
-    CallStatus.FAILED -> if (wasConnected) "Connection lost" else "Call failed"
-    CallStatus.NO_RELAY -> "Call failed — relay unavailable"
-    CallStatus.NO_NETWORK -> "No internet connection"
-    CallStatus.REJECTED -> "Call declined"
-    CallStatus.BUSY -> "Busy"
-    CallStatus.UNAVAILABLE -> "Contact unavailable"
-    CallStatus.PEER_GONE -> if (peerName != null) "$peerName's phone stopped responding" else "The other phone stopped responding"
+    CallStatus.RINGING -> stringResource(if (direction == CallDirection.INCOMING) R.string.call_status_incoming else R.string.call_ringing)
+    CallStatus.CONNECTING ->
+        if (direction == CallDirection.OUTGOING && peerName != null) stringResource(R.string.call_connecting_to, peerName)
+        else stringResource(R.string.call_connecting)
+    CallStatus.CONNECTED -> stringResource(R.string.call_connected)
+    CallStatus.ENDED -> stringResource(R.string.call_ended)
+    CallStatus.FAILED -> stringResource(if (wasConnected) R.string.call_connection_lost else R.string.call_failed)
+    CallStatus.NO_RELAY -> stringResource(R.string.call_failed_no_relay)
+    CallStatus.NO_NETWORK -> stringResource(R.string.call_no_internet)
+    CallStatus.REJECTED -> stringResource(R.string.call_declined)
+    CallStatus.BUSY -> stringResource(R.string.call_busy)
+    CallStatus.UNAVAILABLE -> stringResource(R.string.call_contact_unavailable)
+    CallStatus.PEER_GONE ->
+        if (peerName != null) stringResource(R.string.call_peer_gone, peerName)
+        else stringResource(R.string.call_peer_gone_other_phone)
     else -> ""
 }
 
@@ -945,12 +969,12 @@ private fun CallVerifyDialog(
         title = {
             Text(
                 when (step) {
-                    com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> "$name wants to verify by phone"
-                    com.sotto.app.domain.model.CallVerifyState.Step.CODE -> "Read these to $name"
-                    com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> "$name is verified by phone"
-                    com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> "The codes don't match"
-                    com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE -> "Can't verify by phone now"
-                    else -> "Verify by phone"
+                    com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> stringResource(R.string.call_verify_asked_title, name)
+                    com.sotto.app.domain.model.CallVerifyState.Step.CODE -> stringResource(R.string.call_verify_code_title, name)
+                    com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> stringResource(R.string.call_verify_matched_title, name)
+                    com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> stringResource(R.string.call_verify_different_title)
+                    com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE -> stringResource(R.string.call_verify_unavailable_title)
+                    else -> stringResource(R.string.call_verify_by_phone)
                 },
                 textAlign = TextAlign.Center,
             )
@@ -972,7 +996,7 @@ private fun CallVerifyDialog(
                                     Text(emoji.symbol, style = MaterialTheme.typography.headlineLarge)
                                     Spacer(Modifier.height(2.dp))
                                     Text(
-                                        emoji.name,
+                                        stringResource(emoji.label),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = colors.onSurfaceVariant,
                                         textAlign = TextAlign.Center,
@@ -986,21 +1010,13 @@ private fun CallVerifyDialog(
                 }
                 Text(
                     when (step) {
-                        com.sotto.app.domain.model.CallVerifyState.Step.WAITING ->
-                            "Waiting for $name to tap Verify by phone too. If nothing happens, their Sotto may be too old."
-                        com.sotto.app.domain.model.CallVerifyState.Step.ASKED ->
-                            "You'll both see the same seven pictures if nobody is listening in on this call. Read them to each other to check."
-                        com.sotto.app.domain.model.CallVerifyState.Step.EXCHANGING -> "Working out the code…"
-                        com.sotto.app.domain.model.CallVerifyState.Step.CODE ->
-                            "Are they the same, in the same order, on $name's phone? Only say yes if you're sure it's $name's voice."
-                        com.sotto.app.domain.model.CallVerifyState.Step.MATCHED ->
-                            "The chat says \"Verified by phone only\": a call is weaker proof than meeting. " +
-                                "When you meet, verify in person too."
-                        com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT ->
-                            "Someone may be in the middle of this call, such as the relay. Don't trust this chat " +
-                                "until you've met $name and verified in person."
-                        com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE ->
-                            "$name needs to be a saved contact whose keys this phone has checked. Try again later."
+                        com.sotto.app.domain.model.CallVerifyState.Step.WAITING -> stringResource(R.string.call_verify_waiting_text, name)
+                        com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> stringResource(R.string.call_verify_asked_text)
+                        com.sotto.app.domain.model.CallVerifyState.Step.EXCHANGING -> stringResource(R.string.call_verify_exchanging_text)
+                        com.sotto.app.domain.model.CallVerifyState.Step.CODE -> stringResource(R.string.call_verify_code_text, name)
+                        com.sotto.app.domain.model.CallVerifyState.Step.MATCHED -> stringResource(R.string.call_verify_matched_text)
+                        com.sotto.app.domain.model.CallVerifyState.Step.DIFFERENT -> stringResource(R.string.call_verify_different_text, name)
+                        com.sotto.app.domain.model.CallVerifyState.Step.UNAVAILABLE -> stringResource(R.string.call_verify_unavailable_text, name)
                     },
                     textAlign = TextAlign.Center,
                 )
@@ -1009,21 +1025,21 @@ private fun CallVerifyDialog(
         confirmButton = {
             when (step) {
                 com.sotto.app.domain.model.CallVerifyState.Step.ASKED ->
-                    androidx.compose.material3.TextButton(onClick = onStart) { Text("Verify") }
+                    androidx.compose.material3.TextButton(onClick = onStart) { Text(stringResource(R.string.call_verify)) }
                 com.sotto.app.domain.model.CallVerifyState.Step.CODE ->
-                    androidx.compose.material3.TextButton(onClick = { onAnswer(true) }) { Text("It matches") }
+                    androidx.compose.material3.TextButton(onClick = { onAnswer(true) }) { Text(stringResource(R.string.call_verify_matches)) }
                 com.sotto.app.domain.model.CallVerifyState.Step.WAITING,
                 com.sotto.app.domain.model.CallVerifyState.Step.EXCHANGING ->
-                    androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Close") }
-                else -> androidx.compose.material3.TextButton(onClick = onDismiss) { Text("OK") }
+                    androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_close)) }
+                else -> androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) }
             }
         },
         dismissButton = when (step) {
             com.sotto.app.domain.model.CallVerifyState.Step.ASKED -> {
-                { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Not now") } }
+                { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.call_not_now)) } }
             }
             com.sotto.app.domain.model.CallVerifyState.Step.CODE -> {
-                { androidx.compose.material3.TextButton(onClick = { onAnswer(false) }) { Text("It's different") } }
+                { androidx.compose.material3.TextButton(onClick = { onAnswer(false) }) { Text(stringResource(R.string.call_verify_differs)) } }
             }
             else -> null
         },

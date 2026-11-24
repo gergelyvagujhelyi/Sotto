@@ -36,9 +36,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.ui.theme.Aurora
 
 /**
@@ -172,10 +174,10 @@ fun MessageRequestActions(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GradientButton(text = "Accept", onClick = onAccept, compact = true, modifier = Modifier.weight(1.2f))
-        SoftButton(text = "Reject", onClick = onReject, compact = true, modifier = Modifier.weight(1f))
+        GradientButton(text = stringResource(R.string.components_request_accept), onClick = onAccept, compact = true, modifier = Modifier.weight(1.2f))
+        SoftButton(text = stringResource(R.string.components_request_reject), onClick = onReject, compact = true, modifier = Modifier.weight(1f))
         SoftButton(
-            text = "Block",
+            text = stringResource(R.string.components_request_block),
             onClick = onBlock,
             tone = SoftButtonTone.Danger,
             compact = true,

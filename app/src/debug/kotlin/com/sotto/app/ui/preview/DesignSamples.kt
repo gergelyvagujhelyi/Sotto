@@ -31,6 +31,7 @@ import com.sotto.app.ui.onboarding.OnboardingState
 import com.sotto.app.ui.settings.EditMyNameDialog
 import com.sotto.app.ui.settings.InviteSheet
 import com.sotto.app.ui.settings.SettingsContent
+import com.sotto.app.ui.text.UiText
 import com.sotto.app.ui.theme.SottoTheme
 
 /** Every screen of the app filled with [SampleData], by name. Used by the previews below. */
@@ -157,7 +158,7 @@ internal fun DesignSample(name: String) {
         "add-contact", "add-contact-error", "add-contact-qr" -> AddContactContent(
             shareCodeInput = if (name == "add-contact-error") "not-a-code" else "",
             state = if (name == "add-contact-error") {
-                AddContactState.Error("No user found for that share code.")
+                AddContactState.Error(UiText.Plain("No user found for that share code."))
             } else {
                 AddContactState.Idle
             },

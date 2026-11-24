@@ -26,10 +26,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sotto.app.BuildConfig
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.theme.AuroraVioletDeep
 import com.sotto.app.update.AppUpdate
 import com.sotto.app.update.SourceDrop
@@ -58,7 +62,7 @@ fun AppUpdateBar(update: AppUpdate, underStatusBar: Boolean, modifier: Modifier 
         modifier = modifier
             .fillMaxWidth()
             .background(if (ready) ReadyColor else OnItsWayColor)
-            .clickable(onClickLabel = if (ready) "Update with SourceDrop" else "Why") {
+            .clickable(onClickLabel = stringResource(if (ready) R.string.update_action_label else R.string.update_why_label)) {
                 when (update) {
                     is AppUpdate.Ready -> SourceDrop.open(context, update.version)
                     else -> explaining = true
@@ -76,7 +80,7 @@ fun AppUpdateBar(update: AppUpdate, underStatusBar: Boolean, modifier: Modifier 
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = appUpdateBarText(update),
+            text = appUpdateBarText(update)?.asString().orEmpty(),
             color = Color.White,
             style = MaterialTheme.typography.labelLarge,
             maxLines = 1,
@@ -85,7 +89,7 @@ fun AppUpdateBar(update: AppUpdate, underStatusBar: Boolean, modifier: Modifier 
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = if (ready) "Update" else "Why?",
+            text = stringResource(if (ready) R.string.update_action else R.string.update_why),
             color = Color.White,
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Bold,
@@ -94,22 +98,16 @@ fun AppUpdateBar(update: AppUpdate, underStatusBar: Boolean, modifier: Modifier 
     if (explaining && update is AppUpdate.OnItsWay) {
         AlertDialog(
             onDismissRequest = { explaining = false },
-            title = { Text("An update is on its way") },
-            text = {
-                Text(
-                    "Your relay now runs Sotto ${update.version}, newer than this app " +
-                        "(${BuildConfig.VERSION_NAME}). Until the app update is out, some things may " +
-                        "not work. You'll get a notification when it's ready."
-                )
-            },
-            confirmButton = { TextButton(onClick = { explaining = false }) { Text("OK") } },
+            title = { Text(stringResource(R.string.update_on_its_way_title)) },
+            text = { Text(stringResource(R.string.update_on_its_way_text, update.version, BuildConfig.VERSION_NAME)) },
+            confirmButton = { TextButton(onClick = { explaining = false }) { Text(stringResource(R.string.common_ok)) } },
         )
     }
 }
 
-/** The bar's one line. */
-internal fun appUpdateBarText(update: AppUpdate): String = when (update) {
-    is AppUpdate.Ready -> "Sotto ${update.version} is ready"
-    is AppUpdate.OnItsWay -> "Sotto ${update.version} is on its way"
-    AppUpdate.None -> ""
+/** The bar's one line; null when there is no bar. */
+internal fun appUpdateBarText(update: AppUpdate): UiText? = when (update) {
+    is AppUpdate.Ready -> UiText.res(R.string.update_ready, update.version)
+    is AppUpdate.OnItsWay -> UiText.res(R.string.update_on_its_way, update.version)
+    AppUpdate.None -> null
 }

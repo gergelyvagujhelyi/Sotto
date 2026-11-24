@@ -1,6 +1,8 @@
 package com.sotto.app.notification
 
+import com.sotto.app.R
 import com.sotto.app.domain.model.LockScreenPreviewMode
+import com.sotto.app.ui.text.UiText
 
 /** A received message a chat's notification lists. */
 internal data class NotifiedMessage(val text: String, val timestamp: Long)
@@ -9,7 +11,7 @@ internal data class NotifiedMessage(val text: String, val timestamp: Long)
 internal data class MessageNotificationContent(
     val title: String,
     /** The collapsed line: the newest message, or how many there are when text is hidden. */
-    val text: String,
+    val text: UiText,
     /** Every listed message, oldest first, for the conversation style; empty when text is hidden. */
     val messages: List<NotifiedMessage>,
     /** How many unread messages the chat has. */
@@ -37,12 +39,11 @@ internal fun messageNotificationContent(
     if (latestIsReaction) {
         val listed = unread + latest
         val howMany = when (unreadCount) {
-            0 -> "New reaction"
-            1 -> "New message and a reaction"
-            else -> "$unreadCount new messages and a reaction"
+            0 -> UiText.res(R.string.notification_new_reaction)
+            else -> UiText.plural(R.plurals.notification_new_messages_and_reaction, unreadCount)
         }
         return when (mode) {
-            LockScreenPreviewMode.SHOW_ALL -> MessageNotificationContent(senderName, latest.text, listed, unreadCount)
+            LockScreenPreviewMode.SHOW_ALL -> MessageNotificationContent(senderName, UiText.Plain(latest.text), listed, unreadCount)
             LockScreenPreviewMode.SENDER_ONLY,
             LockScreenPreviewMode.HIDE_BODY -> MessageNotificationContent(senderName, howMany, emptyList(), unreadCount)
             LockScreenPreviewMode.HIDE_ALL -> MessageNotificationContent("Sotto", howMany, emptyList(), unreadCount)
@@ -50,9 +51,9 @@ internal fun messageNotificationContent(
     }
     val listed = unread.ifEmpty { listOf(latest) }
     val count = maxOf(unreadCount, listed.size)
-    val howMany = if (count == 1) "New message" else "$count new messages"
+    val howMany = UiText.plural(R.plurals.notification_new_messages, count)
     return when (mode) {
-        LockScreenPreviewMode.SHOW_ALL -> MessageNotificationContent(senderName, listed.last().text, listed, count)
+        LockScreenPreviewMode.SHOW_ALL -> MessageNotificationContent(senderName, UiText.Plain(listed.last().text), listed, count)
         LockScreenPreviewMode.SENDER_ONLY,
         LockScreenPreviewMode.HIDE_BODY -> MessageNotificationContent(senderName, howMany, emptyList(), count)
         LockScreenPreviewMode.HIDE_ALL -> MessageNotificationContent("Sotto", howMany, emptyList(), count)
@@ -60,4 +61,5 @@ internal fun messageNotificationContent(
 }
 
 /** A caller's missed-call notification: how many calls from them went unanswered since it was last seen. */
-internal fun missedCallsText(count: Int): String = if (count <= 1) "Missed call" else "$count missed calls"
+internal fun missedCallsText(count: Int): UiText =
+    UiText.plural(R.plurals.notification_missed_calls, count.coerceAtLeast(1))

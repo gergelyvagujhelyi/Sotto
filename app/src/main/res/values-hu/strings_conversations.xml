@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The list of chats and message requests. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="conversations_title">Beszélgetések</string>
+    <string name="conversations_new_chat">Új beszélgetés</string>
+    <string name="conversations_empty_title">Még nincs beszélgetésed</string>
+    <string name="conversations_empty_body">Koppints az Új beszélgetés gombra, és add meg valakinek a megosztási kódját, hogy privát, végponttól végpontig titkosított beszélgetést indíts.</string>
+    <string name="conversations_requests">Üzenetkérések</string>
+    <string name="conversations_chats">Beszélgetések</string>
+    <string name="conversations_request_subtitle">Üzenni szeretne neked</string>
+    <string name="conversations_encrypted">Titkosított</string>
+
+    <!-- Time of a chat's last message before today (java.time patterns, names in chat_date_locale). -->
+    <string name="conversations_date_this_year">MMM d.</string>
+    <string name="conversations_date_other_year">yyyy. MM. dd.</string>
+</resources>

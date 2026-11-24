@@ -65,19 +65,21 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.zxing.qrcode.QRCodeReader
+import com.sotto.app.R
 import com.sotto.app.ui.components.GlassIconButton
 import com.sotto.app.ui.components.GlowingOutline
 import com.sotto.app.ui.components.GradientButton
 import com.sotto.app.ui.components.InfoPill
 import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.theme.ForcedDarkTheme
-import com.google.zxing.qrcode.QRCodeReader
 import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 
@@ -90,8 +92,6 @@ const val PREFILLED_SHARE_CODE_KEY = "prefilled_share_code"
 /** Where the scanner hands back an invite it read (to setup's back-stack entry). */
 const val SCANNED_INVITE_KEY = "scanned_invite"
 
-private const val NOT_A_SHARE_CODE = "That QR code isn't a Sotto share code."
-
 /**
  * Reads someone's share-code QR with the camera. Frames are decoded on the phone (CameraX into
  * zxing) and never stored or sent, so this works without Google Play services.
@@ -102,9 +102,9 @@ fun ScanQrScreen(
     onScanned: (value: String) -> Unit,
     /** What a QR must hold: the value to hand back, or null when it isn't one. */
     accept: (String) -> String? = ::shareCodeFromQr,
-    title: String = "Scan a share code",
-    hint: String = "Point the camera at the QR code on the other person's phone.",
-    rejectMessage: String = NOT_A_SHARE_CODE,
+    title: String = stringResource(R.string.contacts_scan_share_code_title),
+    hint: String = stringResource(R.string.contacts_scan_share_code_hint),
+    rejectMessage: String = stringResource(R.string.contacts_not_a_share_code_qr),
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -184,8 +184,8 @@ fun ScanQrContent(
     onToggleTorch: () -> Unit,
     onRequestPermission: () -> Unit,
     onOpenSettings: () -> Unit,
-    title: String = "Scan a share code",
-    hint: String = "Point the camera at the QR code on the other person's phone.",
+    title: String = stringResource(R.string.contacts_scan_share_code_title),
+    hint: String = stringResource(R.string.contacts_scan_share_code_hint),
     camera: @Composable () -> Unit,
 ) = ForcedDarkTheme {
     Box(
@@ -214,14 +214,14 @@ fun ScanQrContent(
         ) {
             GlassIconButton(
                 icon = Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.common_back),
                 onClick = onBack,
             )
             Spacer(Modifier.weight(1f))
             if (hasPermission && torchAvailable) {
                 GlassIconButton(
                     icon = if (torchOn) Icons.Rounded.FlashOn else Icons.Rounded.FlashOff,
-                    contentDescription = if (torchOn) "Turn off the flashlight" else "Turn on the flashlight",
+                    contentDescription = stringResource(if (torchOn) R.string.contacts_flashlight_off else R.string.contacts_flashlight_on),
                     onClick = onToggleTorch,
                 )
             }
@@ -322,23 +322,23 @@ private fun CameraPermissionPrompt(
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = "Camera access needed",
+            text = stringResource(R.string.contacts_camera_needed),
             style = MaterialTheme.typography.titleLarge,
             color = Color.White,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Sotto uses the camera only to read QR codes. Nothing is recorded or sent.",
+            text = stringResource(R.string.contacts_camera_why),
             style = MaterialTheme.typography.bodyMedium,
             color = Color.White.copy(alpha = 0.72f),
             textAlign = TextAlign.Center,
         )
         if (denied) {
             Spacer(Modifier.height(24.dp))
-            GradientButton(text = "Allow camera", onClick = onRequestPermission, modifier = Modifier.fillMaxWidth())
+            GradientButton(text = stringResource(R.string.contacts_allow_camera), onClick = onRequestPermission, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
-            SoftButton(text = "Open settings", onClick = onOpenSettings, modifier = Modifier.fillMaxWidth())
+            SoftButton(text = stringResource(R.string.contacts_open_settings), onClick = onOpenSettings, modifier = Modifier.fillMaxWidth())
         }
     }
 }

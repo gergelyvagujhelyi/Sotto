@@ -7,6 +7,8 @@ import androidx.compose.material.icons.automirrored.rounded.CallReceived
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import com.sotto.app.domain.model.MessageState
 
 @Composable
@@ -31,18 +33,22 @@ fun CallEventItem(
     }
 
     val label = when {
-        isMissed -> "Missed voice call"
-        isOutgoingMissed -> "Unanswered call"
-        isFailed -> "Call failed"
-        wasConnected -> "Voice call"
-        isOutgoing -> "Outgoing call"
-        else -> "Incoming call"
-    }
+        isMissed -> R.string.chat_call_missed
+        isOutgoingMissed -> R.string.chat_call_unanswered
+        isFailed -> R.string.chat_call_failed
+        wasConnected -> R.string.chat_call_voice
+        isOutgoing -> R.string.chat_call_outgoing
+        else -> R.string.chat_call_incoming
+    }.let { stringResource(it) }
 
     val durationText = if (wasConnected) {
         val minutes = durationSeconds / 60
         val seconds = durationSeconds % 60
-        if (minutes > 0) "${minutes}m ${seconds}s" else "${seconds}s"
+        if (minutes > 0) {
+            stringResource(R.string.chat_call_duration_minutes, minutes.toInt(), seconds.toInt())
+        } else {
+            stringResource(R.string.chat_call_duration_seconds, seconds.toInt())
+        }
     } else {
         null
     }

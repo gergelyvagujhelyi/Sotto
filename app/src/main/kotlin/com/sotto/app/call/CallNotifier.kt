@@ -33,28 +33,29 @@ class CallNotifier @Inject constructor(
         NotificationManagerCompat.from(context).cancel(ONGOING_ID)
     }
 
-    private fun createChannels() {
+    /** Makes the channels, or renames them into the current language (MainActivity, after a language switch). */
+    fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
         // High importance (heads-up) but silent: the app rings and vibrates itself
         // (IncomingRinger), which doesn't depend on how Android treats the notification. A
         // channel's sound can't be changed once it exists, hence a new id.
         val incoming = NotificationChannel(
             CHANNEL_INCOMING,
-            "Incoming calls",
+            context.getString(R.string.call_channel_incoming),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Shows incoming voice calls; the app rings and vibrates for them"
+            description = context.getString(R.string.call_channel_incoming_description)
             setSound(null, null)
             enableVibration(false)
         }
         val ongoing = NotificationChannel(
             CHANNEL_ONGOING,
-            "Ongoing calls",
+            context.getString(R.string.call_channel_ongoing),
             // DEFAULT (silent): LOW tucks it into the collapsed silent section,
             // hiding the only way back to the call / hang up from outside the app.
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "Shown while a call is in progress"
+            description = context.getString(R.string.call_channel_ongoing_description)
             setSound(null, null)
         }
         manager.deleteNotificationChannel("ongoing_calls") // pre-release LOW-importance channel
@@ -87,13 +88,13 @@ class CallNotifier @Inject constructor(
         // Caller name stays off the lock screen (only "Incoming call" is public).
         val publicVersion = NotificationCompat.Builder(context, CHANNEL_INCOMING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Incoming call")
+            .setContentTitle(context.getString(R.string.call_incoming))
             .build()
 
         val notification = NotificationCompat.Builder(context, CHANNEL_INCOMING)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(state.peerDisplayName)
-            .setContentText("Incoming encrypted call")
+            .setContentText(context.getString(R.string.call_incoming_encrypted))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -102,8 +103,8 @@ class CallNotifier @Inject constructor(
             .setAutoCancel(false)
             .setContentIntent(open)
             .addPerson(person(state))
-            .addAction(0, "Decline", decline)
-            .addAction(0, "Answer", answer)
+            .addAction(0, context.getString(R.string.call_decline), decline)
+            .addAction(0, context.getString(R.string.call_answer), answer)
             .build()
         return notification
     }
@@ -119,16 +120,16 @@ class CallNotifier @Inject constructor(
         val hangUp = receiverIntent(CallActionReceiver.ACTION_HANG_UP, callId, REQUEST_HANG_UP)
         val text = when (state?.status) {
             CallStatus.CONNECTED -> when {
-                state.peerUnreachable -> "Can't reach ${state.peerDisplayName}"
-                state.reconnecting -> "Reconnecting…"
-                else -> "Encrypted call"
+                state.peerUnreachable -> context.getString(R.string.call_cant_reach, state.peerDisplayName)
+                state.reconnecting -> context.getString(R.string.call_reconnecting)
+                else -> context.getString(R.string.call_encrypted)
             }
-            CallStatus.RINGING -> "Ringing…"
-            else -> "Connecting…"
+            CallStatus.RINGING -> context.getString(R.string.call_ringing)
+            else -> context.getString(R.string.call_connecting)
         }
         val builder = NotificationCompat.Builder(context, CHANNEL_ONGOING)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(state?.peerDisplayName ?: "Call")
+            .setContentTitle(state?.peerDisplayName ?: context.getString(R.string.call_generic))
             .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -152,7 +153,7 @@ class CallNotifier @Inject constructor(
 
     private fun person(state: CallState?): Person =
         Person.Builder()
-            .setName(state?.peerDisplayName ?: "Call")
+            .setName(state?.peerDisplayName ?: context.getString(R.string.call_generic))
             .setImportant(true)
             .build()
 

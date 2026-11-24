@@ -26,15 +26,25 @@ class AppUpdateNotifier @Inject constructor(
     /** The version last announced, so each one is announced once. */
     fun lastAnnouncedVersion(): String? = prefs.getString(KEY_ANNOUNCED, null)
 
+    /**
+     * Makes the channel, or renames it into the current language: when announcing, and from
+     * MainActivity after a language switch (once it exists; Android lists a channel as soon as it's made).
+     */
+    fun createChannel(onlyIfExists: Boolean = false) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        if (onlyIfExists && manager.getNotificationChannel(CHANNEL) == null) return
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL, context.getString(R.string.update_channel_name), NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = context.getString(R.string.update_channel_description)
+            }
+        )
+    }
+
     /** Posts the notification; true if it could (notifications allowed). */
     fun announce(update: AppUpdate.Ready): Boolean {
         if (!canNotify()) return false
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL, "App updates", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "When a new version of Sotto is out"
-            }
-        )
+        createChannel()
         val open = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,
@@ -43,8 +53,8 @@ class AppUpdateNotifier @Inject constructor(
         )
         val notification = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Sotto ${update.version} is ready")
-            .setContentText("Your relay already runs it. Tap to update with SourceDrop.")
+            .setContentTitle(context.getString(R.string.update_ready, update.version))
+            .setContentText(context.getString(R.string.update_notification_text))
             .setContentIntent(open)
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)

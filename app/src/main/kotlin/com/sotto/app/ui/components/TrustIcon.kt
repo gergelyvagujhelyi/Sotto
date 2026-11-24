@@ -17,8 +17,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.domain.model.ContactTrust
 import com.sotto.app.ui.theme.Aurora
 
@@ -30,6 +32,16 @@ fun trustColor(trust: ContactTrust): Color = when (trust) {
     ContactTrust.NONE -> Aurora.colors.warning
 }
 
+/** How far a contact is verified, in words: "Verified in person", "Verified by phone only", "Not verified". */
+@Composable
+fun trustLabel(trust: ContactTrust): String = stringResource(
+    when (trust) {
+        ContactTrust.IN_PERSON -> R.string.components_trust_in_person
+        ContactTrust.BY_PHONE -> R.string.components_trust_by_phone
+        ContactTrust.NONE -> R.string.components_trust_none
+    },
+)
+
 /**
  * How far a contact is verified, as one mark used everywhere (chat list, chat header, contacts,
  * the verify screen): a shield with a check in person; the same shield in purple with a small
@@ -39,11 +51,7 @@ fun trustColor(trust: ContactTrust): Color = when (trust) {
 @Composable
 fun TrustIcon(trust: ContactTrust, size: Dp, modifier: Modifier = Modifier) {
     val tint = trustColor(trust)
-    val said = when (trust) {
-        ContactTrust.IN_PERSON -> "Verified in person"
-        ContactTrust.BY_PHONE -> "Verified by phone only"
-        ContactTrust.NONE -> "Not verified"
-    }
+    val said = trustLabel(trust)
     Box(modifier.size(size)) {
         Icon(
             if (trust == ContactTrust.NONE) Icons.Rounded.GppMaybe else Icons.Rounded.VerifiedUser,

@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Identity -->
+    <string name="settings_section_identity">Identitás</string>
+    <string name="settings_your_share_code">A megosztási kódod</string>
+    <string name="settings_loading">Betöltés…</string>
+    <string name="settings_live_qr_hint">A QR-kód másodpercenként változik: ha személyesen olvassák be, hozzáadnak és ellenőriznek is. A megosztási kóddal vagy a QR-kódról készült képpel csak hozzáadnak.</string>
+    <string name="settings_your_name">A neved</string>
+    <string name="settings_name_not_set">Nincs megadva – az új ismerőseid az azonosítódat látják</string>
+    <string name="settings_name_hint">Végponttól végpontig titkosítva kapják meg, akiket hozzáadsz, és akiknek elfogadod a kérését. A szerver sosem látja.</string>
+
+    <!-- Invite -->
+    <string name="settings_invite_title">Ismerős meghívása</string>
+    <string name="settings_invite_subtitle">Egyszer használható kód a szervered eléréséhez, 7 napig érvényes</string>
+    <string name="settings_invite_sheet_text">Beolvassák a kamerájukkal, vagy elküldöd nekik a linket. Egyszer működik, és felvesz téged az ismerőseik közé. Érvényes eddig: %1$s.</string>
+    <string name="settings_invite_copy_link">Link másolása</string>
+    <string name="settings_invite_send_chooser">Meghívó küldése</string>
+    <string name="settings_invite_share_text">Csatlakozz hozzám a Sottón, egy végponttól végpontig titkosított üzenetküldőn: %1$s\n\nA meghívó egyszer használható, és eddig érvényes: %2$s.</string>
+    <string name="settings_invite_date_pattern">MMM d.</string>
+    <string name="settings_invite_error">Nem sikerült meghívót létrehozni. Ellenőrizd a kapcsolatot, és próbáld újra.</string>
+    <string name="settings_invite_limit_open">5 meghívód van, amelyet még senki sem használt fel. Várj, amíg valaki csatlakozik, vagy amíg lejárnak.</string>
+    <string name="settings_invite_limit_daily">Ma már 10 meghívót hoztál létre. Próbáld újra holnap.</string>
+    <string name="settings_invite_rate_limited">Túl sok egyszerre. Próbáld újra egy perc múlva.</string>
+    <string name="settings_invite_failed">Nem sikerült meghívót létrehozni. Próbáld újra.</string>
+    <string name="settings_invite_own">Ez a saját meghívód. Küldd el annak, akit meghívsz.</string>
+
+    <!-- Lock screen notifications -->
+    <string name="settings_section_lock_screen">Értesítések a lezárási képernyőn</string>
+    <string name="settings_preview_show_all">Feladó és üzenet megjelenítése</string>
+    <string name="settings_preview_sender_only">Csak a feladó megjelenítése</string>
+    <string name="settings_preview_hide_body">Üzenet szövegének elrejtése</string>
+    <string name="settings_preview_hide_all">Nincs előnézet a lezárási képernyőn</string>
+
+    <!-- Connection -->
+    <string name="settings_section_connection">Kapcsolat</string>
+    <string name="settings_background_connection">Háttérkapcsolat</string>
+    <string name="settings_background_connection_subtitle">Üzenetek és hívások akkor is, ha az alkalmazás be van zárva. Állandó értesítést mutat, és több akkut fogyaszt.</string>
+    <string name="settings_background_recommended_no_relay_push">Ajánlott: a szervered nem tudja push értesítéssel felébreszteni az alkalmazást.</string>
+    <string name="settings_background_recommended_no_google_push">Ajánlott ezen a telefonon: nincs rajta Google push.</string>
+    <string name="settings_allow_background">Háttértevékenység engedélyezése</string>
+    <string name="settings_allow_background_subtitle">Addig az Android késleltetheti az üzeneteket és a hívásokat</string>
+    <string name="settings_relay">Szerver</string>
+    <string name="settings_relay_subtitle">%1$s · másik szerverhez töröld az alkalmazás adatait, és állítsd be újra</string>
+
+    <!-- Calls -->
+    <string name="settings_section_calls">Hívások</string>
+    <string name="settings_hq_calls">Jó minőségű hívások</string>
+    <string name="settings_hq_calls_subtitle">Teltebb hang, ha a másik félnél is be van kapcsolva; ilyenkor a hívásképernyőn HD látszik. Nagyjából negyedével több adatot használ.</string>
+    <string name="settings_level_voices">Halk hangok kiegyenlítése</string>
+    <string name="settings_level_voices_subtitle">Hívásban normál szintre emeli a halk hangot. Enélkül a hívásképernyő „Hangosabb” gombja egy-egy ember hangját emeli meg, és ezt meg is jegyzi.</string>
+    <string name="settings_webrtc_voice">WebRTC hangfeldolgozás</string>
+    <string name="settings_webrtc_voice_subtitle">A mikrofonod hangja a telefon saját feldolgozása helyett a WebRTC visszhangszűrésén, zajcsökkentésén és hangerő-szabályozásán megy át. Próbáld ki, ha mások visszhangot hallanak, vagy túl halk vagy. A következő hívástól.</string>
+
+    <!-- Privacy -->
+    <string name="settings_section_privacy">Adatvédelem</string>
+    <string name="settings_read_receipts">Olvasási visszaigazolás</string>
+    <string name="settings_read_receipts_subtitle">Mások láthatják, mikor olvastad el az üzeneteiket. Kölcsönös: ha kikapcsolod, te sem látod, mikor olvassák a tieidet.</string>
+    <string name="settings_screen_security">Képernyővédelem</string>
+    <string name="settings_screen_security_subtitle">Tiltja a képernyőképeket és az alkalmazásváltó előnézetét</string>
+    <string name="settings_direct_calls">Közvetlen hívások</string>
+    <string name="settings_direct_calls_subtitle">Ha az ismerősödnél is be van kapcsolva, a hívások hangja és a fájlok a szerver helyett közvetlenül a telefonjaitok között mennek: jobb hang, kevesebb szerverforgalom, de láthatjátok egymás IP-címeit (internet, otthoni hálózat és mobil). Akik nem az ismerőseid, azokkal a hívások és a fájlok mindig a szerveren át mennek.</string>
+
+    <!-- Display -->
+    <string name="settings_section_display">Megjelenítés</string>
+    <string name="settings_language">Nyelv</string>
+    <string name="settings_language_phone">A telefon nyelve</string>
+    <string name="settings_reduce_animations">Kevesebb animáció</string>
+    <string name="settings_reduce_animations_subtitle">Nincs küldési animáció, a hátterek és a hívásképernyő nem mozognak. Az Android „Animációk eltávolítása” beállítása is bekapcsolja.</string>
+
+    <!-- Message history -->
+    <string name="settings_section_history">Üzenetelőzmények</string>
+    <string name="settings_keep_forever">Megőrzés örökre</string>
+    <string name="settings_keep_year">Megőrzés 1 évig</string>
+    <plurals name="settings_keep_days">
+        <item quantity="one">Megőrzés %d napig</item>
+        <item quantity="other">Megőrzés %d napig</item>
+    </plurals>
+    <string name="settings_retention_title_year">Megőrzöd az üzeneteket 1 évig?</string>
+    <plurals name="settings_retention_title_days">
+        <item quantity="one">Megőrzöd az üzeneteket %d napig?</item>
+        <item quantity="other">Megőrzöd az üzeneteket %d napig?</item>
+    </plurals>
+    <string name="settings_retention_text_year">Minden 1 évnél régebbi üzenet most törlődik erről az eszközről, a többi pedig akkor, amikor eléri ezt a kort. Ez nem vonható vissza.</string>
+    <plurals name="settings_retention_text_days">
+        <item quantity="one">Minden %d napnál régebbi üzenet most törlődik erről az eszközről, a többi pedig akkor, amikor eléri ezt a kort. Ez nem vonható vissza.</item>
+        <item quantity="other">Minden %d napnál régebbi üzenet most törlődik erről az eszközről, a többi pedig akkor, amikor eléri ezt a kort. Ez nem vonható vissza.</item>
+    </plurals>
+    <string name="settings_retention_confirm">Régebbi üzenetek törlése</string>
+
+    <!-- Disappearing messages -->
+    <string name="settings_section_disappearing">Eltűnő üzenetek</string>
+    <plurals name="settings_minutes">
+        <item quantity="one">%d perc</item>
+        <item quantity="other">%d perc</item>
+    </plurals>
+    <plurals name="settings_hours">
+        <item quantity="one">%d óra</item>
+        <item quantity="other">%d óra</item>
+    </plurals>
+    <plurals name="settings_days">
+        <item quantity="one">%d nap</item>
+        <item quantity="other">%d nap</item>
+    </plurals>
+
+    <!-- Blocked users -->
+    <string name="settings_section_blocked">Letiltott felhasználók</string>
+    <string name="settings_none_blocked">Senki sincs letiltva</string>
+    <string name="settings_none_blocked_subtitle">Egy beszélgetés menüjéből vagy egy üzenetkérésből tilthatsz le valakit</string>
+    <string name="settings_unblock">Feloldás</string>
+
+    <!-- Keys -->
+    <string name="settings_section_keys">Kulcsok</string>
+    <string name="settings_rotating_keys">Kulcsok cseréje…</string>
+    <string name="settings_rotate_keys">Identitáskulcsok cseréje</string>
+    <string name="settings_rotate_keys_subtitle">Új kulcsok és új megosztási kód; minden ismerősödnek el kell fogadnia őket</string>
+    <string name="settings_rotate_title">Lecseréled az identitáskulcsokat?</string>
+    <string name="settings_rotate_text">Új aláíró- és titkosítókulcsok, valamint új megosztási kód készül. Minden ismerősöd látja, hogy megváltoztak a kulcsaid, és el kell fogadnia őket, mielőtt folytatódnának a beszélgetések. Csak akkor kell, ha úgy gondolod, hogy a kulcsaid illetéktelen kezekbe kerülhettek.</string>
+    <string name="settings_rotate_confirm">Csere</string>
+    <string name="settings_rotate_failed_title">Nem sikerült a kulcscsere</string>
+    <string name="settings_rotate_failed_network">Hálózati hiba – ellenőrizd a kapcsolatot, és próbáld újra.</string>
+    <string name="settings_rotate_failed_local">Nem sikerült a kulcscsere – helyi kulcshiba.</string>
+    <string name="settings_rotate_failed">Nem sikerült a kulcscsere. Próbáld újra.</string>
+
+    <!-- Data -->
+    <string name="settings_section_data">Adatok</string>
+    <string name="settings_wipe">Minden helyi adat törlése</string>
+    <string name="settings_wipe_subtitle">Mindent végleg töröl erről az eszközről</string>
+    <string name="settings_wipe_title">Törlöd az összes helyi adatot?</string>
+    <string name="settings_wipe_text">Ez végleg törli erről az eszközről az identitásodat, az összes üzenetet, ismerőst és kulcsot. Ez nem vonható vissza.</string>
+    <string name="settings_wipe_confirm">Törlés</string>
+    <string name="settings_wipe_unreachable_title">A szerver nem érhető el</string>
+    <string name="settings_wipe_unreachable_text">Nem értük el a szervert, hogy töröljük a fiókodat. Az ismerőseid továbbra is próbálhatnak üzenetet küldeni neked.\n\nEllenőrizd az internetkapcsolatot, és koppints az „Újra” gombra, vagy a „Törlés így is” gombbal folytasd a szerver értesítése nélkül.</string>
+    <string name="settings_wipe_retry">Újra</string>
+    <string name="settings_wipe_anyway">Törlés így is</string>
+
+    <!-- Footer -->
+    <string name="settings_footer_encrypted">Végponttól végpontig titkosított</string>
+</resources>

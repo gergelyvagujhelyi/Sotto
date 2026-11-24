@@ -123,8 +123,8 @@ android {
         manifestPlaceholders["inviteHost"] = ownerRelayHost.ifEmpty { "relay.invalid" }
         minSdk = 26
         targetSdk = 35
-        versionCode = 66
-        versionName = "0.7.24"
+        versionCode = 67
+        versionName = "0.7.25"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -172,6 +172,15 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+
+    androidResources {
+        // The per-app language list (Android 13+ Settings > Apps > Sotto > Language), built
+        // from res/values (English, see res/resources.properties) and each values-<lang>.
+        generateLocaleConfig = true
+        // Only the languages Sotto has: libraries bring their own translations (dialog buttons,
+        // accessibility labels), which would show a third language beside Sotto's English.
+        localeFilters += listOf("en", "hu")
     }
 
     buildFeatures {

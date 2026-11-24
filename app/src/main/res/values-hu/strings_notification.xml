@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notifications: message and missed-call notifications, their channels, the background connection. -->
+<resources>
+    <string name="notification_channel_messages">Üzenetek</string>
+    <string name="notification_channel_messages_description">Értesítések új üzenetekről</string>
+    <string name="notification_channel_missed_calls">Nem fogadott hívások</string>
+    <string name="notification_channel_missed_calls_description">Értesítések nem fogadott hívásokról</string>
+    <string name="notification_channel_background">Háttérkapcsolat</string>
+    <string name="notification_channel_background_description">Akkor látható, amikor a Sotto kapcsolódva marad az üzenetek és hívások miatt</string>
+
+    <!-- The user, in a chat notification's conversation -->
+    <string name="notification_you">Te</string>
+    <string name="notification_new_messages_summary">Új üzenetek</string>
+    <string name="notification_new_reaction">Új reakció</string>
+    <plurals name="notification_new_messages">
+        <item quantity="one">Új üzenet</item>
+        <item quantity="other">%d új üzenet</item>
+    </plurals>
+    <plurals name="notification_new_messages_and_reaction">
+        <item quantity="one">Új üzenet és egy reakció</item>
+        <item quantity="other">%d új üzenet és egy reakció</item>
+    </plurals>
+    <plurals name="notification_missed_calls">
+        <item quantity="one">Nem fogadott hívás</item>
+        <item quantity="other">%d nem fogadott hívás</item>
+    </plurals>
+
+    <string name="notification_background_connected">Kapcsolódva az üzenetek és hívások fogadásához</string>
+    <string name="notification_checking_messages">Új üzenetek keresése</string>
+</resources>
