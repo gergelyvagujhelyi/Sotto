@@ -15,7 +15,7 @@
 
     <!-- Invite scanner -->
     <string name="components_scan_invite_title">Meghívó beolvasása</string>
-    <string name="components_scan_invite_hint">Irányítsd a kamerát a másik telefonon lévő meghívó QR-kódjára (nála: Beállítások, Meghívás).</string>
+    <string name="components_scan_invite_hint">Irányítsd a kamerát a másik telefonon lévő meghívó QR-kódjára (nála: Beállítások, Ismerős meghívása).</string>
     <string name="components_not_an_invite">Ez a QR-kód nem Sotto-meghívó.</string>
 
     <!-- Main activity -->

@@ -35,7 +35,6 @@ import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.InviteLink
 import com.sotto.app.domain.model.MemberInviteAction
-import com.sotto.app.domain.model.OWN_INVITE_MESSAGE
 import com.sotto.app.domain.model.actionForMember
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.repository.SettingsRepository
@@ -283,7 +282,7 @@ class MainActivity : ComponentActivity() {
                 navController.currentBackStackEntry?.savedStateHandle?.set(PREFILLED_SHARE_CODE_KEY, action.shareCode)
                 return
             }
-            MemberInviteAction.OwnInvite -> OWN_INVITE_MESSAGE
+            MemberInviteAction.OwnInvite -> getString(R.string.settings_invite_own)
             is MemberInviteAction.AlreadyMember -> getString(R.string.components_invite_already_member, action.relayName)
             is MemberInviteAction.OtherRelay -> getString(R.string.components_invite_other_relay, action.relayName)
         }

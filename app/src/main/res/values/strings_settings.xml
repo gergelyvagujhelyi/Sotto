@@ -24,7 +24,7 @@
     <string name="settings_invite_limit_daily">You\'ve created 10 invites today. Try again tomorrow.</string>
     <string name="settings_invite_rate_limited">Too many at once. Try again in a minute.</string>
     <string name="settings_invite_failed">Couldn\'t create an invite. Try again.</string>
-    <!-- Toast when a member opens their own invite link (MainActivity, OWN_INVITE_MESSAGE). -->
+    <!-- Toast when a member opens their own invite link (MainActivity). -->
     <string name="settings_invite_own">This is your own invite. Send it to the person you\'re inviting.</string>
 
     <!-- Lock screen notifications -->

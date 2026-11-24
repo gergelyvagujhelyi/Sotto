@@ -139,6 +139,3 @@ fun InviteLink.actionForMember(myRelay: String?, myShareCode: String?): MemberIn
     if (inviter == myShareCode) return MemberInviteAction.OwnInvite
     return MemberInviteAction.AddInviter(inviter)
 }
-
-/** Shown when the member opens their own invite link. Translated as R.string.settings_invite_own, for MainActivity to use. */
-const val OWN_INVITE_MESSAGE = "This is your own invite. Send it to the person you're inviting."
