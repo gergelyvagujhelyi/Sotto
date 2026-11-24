@@ -45,5 +45,7 @@ class AppUpdates @Inject constructor(
         const val RELAY_VERSION_HEADER = "Sotto-Relay-Version"
         /** "true" once the app of that version is out. */
         const val APP_READY_HEADER = "Sotto-App-Ready"
+        /** This app's version, on every request to the relay (0.7.24+). */
+        const val APP_VERSION_HEADER = "Sotto-App-Version"
     }
 }

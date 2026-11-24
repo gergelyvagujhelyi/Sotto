@@ -1,7 +1,5 @@
 package com.sotto.app.ui.conversations
 
-import com.sotto.app.update.AppUpdate
-import com.sotto.app.update.AppUpdates
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sotto.app.domain.model.Conversation
@@ -28,12 +26,9 @@ class ConversationsViewModel @Inject constructor(
     private val identityRepository: IdentityRepository,
     private val messageRepository: MessageRepository,
     private val sendMyName: SendMyNameUseCase,
-    appUpdates: AppUpdates,
     private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
 ) : ViewModel() {
 
-    /** Whether the relay runs a newer Sotto, and whether that one is out yet. */
-    val appUpdate: StateFlow<AppUpdate> = appUpdates.state
 
     val conversations: StateFlow<List<Conversation>> =
         conversationRepository.getConversations()

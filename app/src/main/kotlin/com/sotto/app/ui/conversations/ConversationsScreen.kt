@@ -1,12 +1,5 @@
 package com.sotto.app.ui.conversations
 
-import androidx.compose.material.icons.automirrored.rounded.OpenInNew
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.SystemUpdate
-import com.sotto.app.BuildConfig
-import com.sotto.app.ui.components.GradientButton
-import com.sotto.app.update.AppUpdate
-import com.sotto.app.update.SourceDrop
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -77,7 +70,6 @@ fun ConversationsScreen(
 ) {
     val conversations by viewModel.conversations.collectAsState()
     val messageRequests by viewModel.messageRequests.collectAsState()
-    val appUpdate by viewModel.appUpdate.collectAsState()
     val trust by viewModel.trust.collectAsState()
     val pollLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(pollLifecycleOwner) {
@@ -95,7 +87,6 @@ fun ConversationsScreen(
         onAcceptRequest = viewModel::acceptMessageRequest,
         onRejectRequest = viewModel::rejectMessageRequest,
         onBlockRequest = { request -> viewModel.blockRequest(request.contactId, request.contactDisplayName) },
-        appUpdate = appUpdate,
         trust = trust,
     )
 }
@@ -111,7 +102,6 @@ fun ConversationsContent(
     onAcceptRequest: (conversationId: String) -> Unit,
     onRejectRequest: (conversationId: String) -> Unit,
     onBlockRequest: (request: Conversation) -> Unit,
-    appUpdate: AppUpdate = AppUpdate.None,
     /** Each contact's verification, by user id; a chat whose contact isn't listed shows the lock. */
     trust: Map<String, com.sotto.app.domain.model.ContactTrust> = emptyMap(),
 ) {
@@ -148,7 +138,6 @@ fun ConversationsContent(
         ) { padding ->
             if (isEmpty) {
                 Column(Modifier.padding(padding)) {
-                    AppUpdateCard(appUpdate, Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
                     EmptyState(
                         icon = Icons.AutoMirrored.Rounded.Chat,
                         title = "No conversations yet",
@@ -171,16 +160,6 @@ fun ConversationsContent(
                     // Keys are namespaced: conversation ids come from the relay, so a raw
                     // id must never be able to equal another row's key (duplicate keys
                     // crash the list).
-                    if (appUpdate != AppUpdate.None) {
-                        item(key = "h:update") {
-                            AppUpdateCard(
-                                appUpdate,
-                                Modifier
-                                    .animateItem()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                            )
-                        }
-                    }
                     if (messageRequests.isNotEmpty()) {
                         item(key = "h:requests") {
                             SectionLabel(
@@ -228,57 +207,6 @@ fun ConversationsContent(
                     }
                 }
             }
-        }
-    }
-}
-
-/**
- * The relay runs a newer Sotto: while its APK isn't out, a heads-up that things may not
- * work; once it is, a link to SourceDrop, which installs it. Nothing when the app is up to date.
- */
-@Composable
-private fun AppUpdateCard(update: AppUpdate, modifier: Modifier = Modifier) {
-    if (update == AppUpdate.None) return
-    val context = LocalContext.current
-    GlassCard(modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (update is AppUpdate.Ready) Icons.Rounded.SystemUpdate else Icons.Rounded.Schedule,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = when (update) {
-                    is AppUpdate.Ready -> "Sotto ${update.version} is ready"
-                    is AppUpdate.OnItsWay -> "An update is on its way"
-                    AppUpdate.None -> ""
-                },
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = when (update) {
-                is AppUpdate.Ready ->
-                    "Your relay already runs it. Update the app with SourceDrop so everything keeps working."
-                is AppUpdate.OnItsWay ->
-                    "Your relay now runs Sotto ${update.version}, newer than this app " +
-                        "(${BuildConfig.VERSION_NAME}). Until the app update is out, some things may " +
-                        "not work. You'll get a notification when it's ready."
-                AppUpdate.None -> ""
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (update is AppUpdate.Ready) {
-            Spacer(Modifier.height(14.dp))
-            GradientButton(
-                text = "Open SourceDrop",
-                icon = Icons.AutoMirrored.Rounded.OpenInNew,
-                compact = true,
-                onClick = { SourceDrop.open(context, update.version) },
-            )
         }
     }
 }

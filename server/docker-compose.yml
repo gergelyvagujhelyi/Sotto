@@ -61,6 +61,12 @@ services:
   server:
     build: .
     restart: unless-stopped
+    # The relay's log is kept small: errors and a few events (app versions, purges).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       DATABASE_URL: postgresql+asyncpg://chatcontroll:${POSTGRES_PASSWORD}@db/chatcontroll
       CORS_ORIGINS: ${CORS_ORIGINS:-}
