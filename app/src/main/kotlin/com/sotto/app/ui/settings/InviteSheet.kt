@@ -33,20 +33,23 @@ import com.sotto.app.R
 import com.sotto.app.ui.components.GradientButton
 import com.sotto.app.ui.components.QrCodeImage
 import com.sotto.app.ui.components.SoftButton
+import com.sotto.app.ui.components.appLanguage
 import com.sotto.app.ui.text.UiText
 import com.sotto.app.ui.text.resolve
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** An invite ready to hand over: its one link (also in the QR) and until when it works. */
 data class InviteShare(val link: String, val expiresAt: String) {
     /**
-     * "26 Nov" ([pattern], the language's way of writing a day: settings_invite_date_pattern),
-     * in the phone's time zone; the raw value if it can't be read.
+     * "26 Nov" ([pattern], the language's way of writing a day: settings_invite_date_pattern,
+     * with month names in [locale], the app's language), in the phone's time zone; the raw
+     * value if it can't be read.
      */
-    fun expiresLabel(pattern: String): String = runCatching {
-        DateTimeFormatter.ofPattern(pattern).withZone(ZoneId.systemDefault()).format(Instant.parse(expiresAt))
+    fun expiresLabel(pattern: String, locale: Locale): String = runCatching {
+        DateTimeFormatter.ofPattern(pattern, locale).withZone(ZoneId.systemDefault()).format(Instant.parse(expiresAt))
     }.getOrDefault(expiresAt)
 
     /**
@@ -63,7 +66,7 @@ data class InviteShare(val link: String, val expiresAt: String) {
 fun InviteSheet(invite: InviteShare, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    val expires = invite.expiresLabel(stringResource(R.string.settings_invite_date_pattern))
+    val expires = invite.expiresLabel(stringResource(R.string.settings_invite_date_pattern), appLanguage(LocalContext.current))
     // Fully open: half-open, the code and the buttons sat below the screen's edge.
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(

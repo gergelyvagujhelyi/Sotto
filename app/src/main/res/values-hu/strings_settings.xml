@@ -6,7 +6,7 @@
     <string name="settings_loading">Betöltés…</string>
     <string name="settings_live_qr_hint">A QR-kód másodpercenként változik: ha személyesen olvassák be, hozzáadnak és ellenőriznek is. A megosztási kóddal vagy a QR-kódról készült képpel csak hozzáadnak.</string>
     <string name="settings_your_name">A neved</string>
-    <string name="settings_name_not_set">Nincs megadva — az új ismerőseid az azonosítódat látják</string>
+    <string name="settings_name_not_set">Nincs megadva – az új ismerőseid az azonosítódat látják</string>
     <string name="settings_name_hint">Végponttól végpontig titkosítva kapják meg, akiket hozzáadsz, és akiknek elfogadod a kérését. A szerver sosem látja.</string>
 
     <!-- Invite -->
@@ -117,8 +117,8 @@
     <string name="settings_rotate_text">Új aláíró- és titkosítókulcsok, valamint új megosztási kód készül. Minden ismerősöd látja, hogy megváltoztak a kulcsaid, és el kell fogadnia őket, mielőtt folytatódnának a beszélgetések. Csak akkor kell, ha úgy gondolod, hogy a kulcsaid illetéktelen kezekbe kerülhettek.</string>
     <string name="settings_rotate_confirm">Csere</string>
     <string name="settings_rotate_failed_title">Nem sikerült a kulcscsere</string>
-    <string name="settings_rotate_failed_network">Hálózati hiba — ellenőrizd a kapcsolatot, és próbáld újra.</string>
-    <string name="settings_rotate_failed_local">Nem sikerült a kulcscsere — helyi kulcshiba.</string>
+    <string name="settings_rotate_failed_network">Hálózati hiba – ellenőrizd a kapcsolatot, és próbáld újra.</string>
+    <string name="settings_rotate_failed_local">Nem sikerült a kulcscsere – helyi kulcshiba.</string>
     <string name="settings_rotate_failed">Nem sikerült a kulcscsere. Próbáld újra.</string>
 
     <!-- Data -->

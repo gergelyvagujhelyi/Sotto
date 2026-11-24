@@ -1,7 +1,5 @@
 package com.sotto.app.ui.call
 
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.layout.SubcomposeLayout
 import android.Manifest
 import android.app.KeyguardManager
 import android.content.pm.PackageManager
@@ -33,9 +31,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -91,6 +89,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -100,6 +99,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -118,13 +118,13 @@ import com.sotto.app.ui.components.AuroraStyle
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.InfoPill
 import com.sotto.app.ui.components.glass
+import com.sotto.app.ui.text.asString
+import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.theme.Aurora
 import com.sotto.app.ui.theme.CallGreen
 import com.sotto.app.ui.theme.CallRed
 import com.sotto.app.ui.theme.ForcedDarkTheme
 import com.sotto.app.ui.theme.LocalReduceMotion
-import com.sotto.app.ui.text.asString
-import com.sotto.app.ui.text.resolve
 import kotlinx.coroutines.delay
 
 @Composable

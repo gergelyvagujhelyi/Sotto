@@ -1,5 +1,8 @@
 package com.sotto.app.domain.model
 
+import androidx.annotation.StringRes
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -9,16 +12,23 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.util.Base64
-import androidx.annotation.StringRes
-import com.sotto.app.R
-import com.sotto.app.ui.text.UiText
 
 /** What kind of media a message carries. [wire] is its name inside [MediaPayload]; [label] what a preview calls it. */
-enum class MediaKind(val wire: String, @StringRes val label: Int) {
-    VOICE("voice", R.string.chat_media_voice),
-    PHOTO("photo", R.string.chat_media_photo),
+enum class MediaKind(
+    val wire: String,
+    @StringRes val label: Int,
+    /**
+     * The label in a reply's quote, which travels to the other phone: always these English
+     * words, the ones every Sotto has sent, so a quote never gives away this phone's language
+     * and older apps show what they always did. Each phone shows it in its own language
+     * ([quoteUiText]).
+     */
+    val quoteLabel: String,
+) {
+    VOICE("voice", R.string.chat_media_voice, "🎤 Voice message"),
+    PHOTO("photo", R.string.chat_media_photo, "📷 Photo"),
     /** Any file, sent through the relay's object store rather than inline (FilePayload). */
-    FILE("file", R.string.chat_media_file);
+    FILE("file", R.string.chat_media_file, "📎 File");
 
     companion object {
         fun fromWire(name: String?): MediaKind? = entries.firstOrNull { it.wire == name }
@@ -89,10 +99,30 @@ fun previewUiText(media: MediaKind?, caption: String, fileName: String = ""): Ui
 }
 
 /**
- * [previewUiText] in English, for a caller without a Context. Only the notification's list of
- * earlier unread messages (ChatNotificationManager) still uses it; it should resolve
- * [previewUiText] with its Context instead.
+ * The start of a message as a reply quote for the other phone: like [previewUiText], but a
+ * media label is [MediaKind.quoteLabel], the same in every language.
  */
+fun quoteText(media: MediaKind?, caption: String, fileName: String = ""): String {
+    val label = when {
+        media == null -> return caption
+        media == MediaKind.FILE && fileName.isNotBlank() -> "📎 $fileName"
+        else -> media.quoteLabel
+    }
+    return if (caption.isBlank()) label else "$label: ${caption.trim()}"
+}
+
+/** A reply's quote as this phone shows it: a media label at its start in this phone's language. */
+fun quoteUiText(quote: String): UiText {
+    for (kind in MediaKind.entries) {
+        if (quote == kind.quoteLabel) return UiText.res(kind.label)
+        val prefix = kind.quoteLabel + ": "
+        if (quote.startsWith(prefix)) {
+            return UiText.res(R.string.chat_media_with_caption, UiText.res(kind.label), quote.removePrefix(prefix))
+        }
+    }
+    return UiText.Plain(quote)
+}
+
 /**
  * The plaintext of a message carrying a voice message or photo inline (ADR-29): the
  * media, base64, with its caption and, when it answers another message, the reply's

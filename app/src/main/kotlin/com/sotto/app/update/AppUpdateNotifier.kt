@@ -26,15 +26,25 @@ class AppUpdateNotifier @Inject constructor(
     /** The version last announced, so each one is announced once. */
     fun lastAnnouncedVersion(): String? = prefs.getString(KEY_ANNOUNCED, null)
 
-    /** Posts the notification; true if it could (notifications allowed). */
-    fun announce(update: AppUpdate.Ready): Boolean {
-        if (!canNotify()) return false
+    /**
+     * Makes the channel, or renames it into the current language: when announcing, and from
+     * MainActivity after a language switch (once it exists; Android lists a channel as soon as it's made).
+     */
+    fun createChannel(onlyIfExists: Boolean = false) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        if (onlyIfExists && manager.getNotificationChannel(CHANNEL) == null) return
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL, context.getString(R.string.update_channel_name), NotificationManager.IMPORTANCE_DEFAULT).apply {
                 description = context.getString(R.string.update_channel_description)
             }
         )
+    }
+
+    /** Posts the notification; true if it could (notifications allowed). */
+    fun announce(update: AppUpdate.Ready): Boolean {
+        if (!canNotify()) return false
+        val manager = context.getSystemService(NotificationManager::class.java)
+        createChannel()
         val open = PendingIntent.getActivity(
             context,
             NOTIFICATION_ID,

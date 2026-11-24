@@ -1,7 +1,5 @@
 package com.sotto.app.ui.components
 
-import androidx.compose.ui.res.stringResource
-import com.sotto.app.R
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.CallMade
 import androidx.compose.material.icons.automirrored.rounded.CallMissed
@@ -9,6 +7,8 @@ import androidx.compose.material.icons.automirrored.rounded.CallReceived
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import com.sotto.app.domain.model.MessageState
 
 @Composable

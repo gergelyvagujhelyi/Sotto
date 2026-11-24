@@ -32,11 +32,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sotto.app.BuildConfig
 import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.theme.AuroraVioletDeep
 import com.sotto.app.update.AppUpdate
 import com.sotto.app.update.SourceDrop
-import com.sotto.app.ui.text.UiText
-import com.sotto.app.ui.text.asString
 
 /** The update is out: Sotto's violet. */
 private val ReadyColor = AuroraVioletDeep

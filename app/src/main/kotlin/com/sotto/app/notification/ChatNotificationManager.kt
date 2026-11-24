@@ -13,8 +13,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.content.ContextCompat
-import com.sotto.app.R
 import com.sotto.app.MainActivity
+import com.sotto.app.R
 import com.sotto.app.data.local.dao.MessageDao
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
@@ -35,7 +35,8 @@ class ChatNotificationManager @Inject constructor(
         createNotificationChannels()
     }
 
-    private fun createNotificationChannels() {
+    /** Makes the channels, or renames them into the current language (MainActivity, after a language switch). */
+    fun createNotificationChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
 
         // Delete legacy channel whose VISIBILITY_SECRET default caps per-notification visibility

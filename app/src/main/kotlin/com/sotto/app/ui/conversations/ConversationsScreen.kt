@@ -1,7 +1,5 @@
 package com.sotto.app.ui.conversations
 
-import androidx.compose.ui.res.stringResource
-import com.sotto.app.R
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -40,12 +38,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.sotto.app.R
 import com.sotto.app.domain.model.Conversation
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle

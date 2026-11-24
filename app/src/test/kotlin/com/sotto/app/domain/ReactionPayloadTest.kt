@@ -1,13 +1,13 @@
 package com.sotto.app.domain
 
-import com.sotto.app.data.repository.reactionNotificationText
 import com.sotto.app.R
-import com.sotto.app.ui.text.UiText
+import com.sotto.app.data.repository.reactionNotificationText
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ProfilePayload
 import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.domain.model.ReplyPayload
+import com.sotto.app.ui.text.UiText
 import kotlinx.datetime.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 
 /**
@@ -25,7 +26,9 @@ sealed interface UiText {
 }
 
 fun UiText.resolve(context: Context): String = when (this) {
-    is UiText.Res -> context.getString(id, *args.map { it.resolveArg(context) }.toTypedArray())
+    // Without arguments the text isn't a format: a literal % in it must not be read as one.
+    is UiText.Res -> if (args.isEmpty()) context.getString(id)
+        else context.getString(id, *args.map { it.resolveArg(context) }.toTypedArray())
     is UiText.Plural -> context.resources.getQuantityString(id, count, *args.map { it.resolveArg(context) }.toTypedArray())
     is UiText.Plain -> text
 }
@@ -33,5 +36,9 @@ fun UiText.resolve(context: Context): String = when (this) {
 /** An argument may itself be a [UiText]: "%1$s ago" with a translated unit. */
 private fun Any.resolveArg(context: Context): Any = if (this is UiText) resolve(context) else this
 
+/** Read again when the configuration (the language) changes, like stringResource. */
 @Composable
-fun UiText.asString(): String = resolve(LocalContext.current)
+fun UiText.asString(): String {
+    LocalConfiguration.current
+    return resolve(LocalContext.current)
+}

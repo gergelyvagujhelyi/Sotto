@@ -4,7 +4,7 @@
     <!-- Identity -->
     <string name="settings_section_identity">Identity</string>
     <string name="settings_your_share_code">Your share code</string>
-    <string name="settings_loading">Loading...</string>
+    <string name="settings_loading">Loading…</string>
     <string name="settings_live_qr_hint">The QR code changes every second: scanned in person, it adds and verifies you. The share code, or a picture of the QR code, only adds you.</string>
     <string name="settings_your_name">Your name</string>
     <string name="settings_name_not_set">Not set — new contacts see your ID</string>
@@ -113,7 +113,7 @@
 
     <!-- Keys -->
     <string name="settings_section_keys">Keys</string>
-    <string name="settings_rotating_keys">Rotating keys...</string>
+    <string name="settings_rotating_keys">Rotating keys…</string>
     <string name="settings_rotate_keys">Rotate identity keys</string>
     <string name="settings_rotate_keys_subtitle">New keys and a new share code; every contact has to accept them</string>
     <string name="settings_rotate_title">Rotate identity keys?</string>

@@ -72,6 +72,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.zxing.qrcode.QRCodeReader
 import com.sotto.app.R
 import com.sotto.app.ui.components.GlassIconButton
 import com.sotto.app.ui.components.GlowingOutline
@@ -79,7 +80,6 @@ import com.sotto.app.ui.components.GradientButton
 import com.sotto.app.ui.components.InfoPill
 import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.theme.ForcedDarkTheme
-import com.google.zxing.qrcode.QRCodeReader
 import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 

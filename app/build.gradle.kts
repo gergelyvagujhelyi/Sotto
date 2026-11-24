@@ -178,6 +178,9 @@ android {
         // The per-app language list (Android 13+ Settings > Apps > Sotto > Language), built
         // from res/values (English, see res/resources.properties) and each values-<lang>.
         generateLocaleConfig = true
+        // Only the languages Sotto has: libraries bring their own translations (dialog buttons,
+        // accessibility labels), which would show a third language beside Sotto's English.
+        localeFilters += listOf("en", "hu")
     }
 
     buildFeatures {

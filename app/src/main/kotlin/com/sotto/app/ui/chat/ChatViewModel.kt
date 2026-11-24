@@ -1,19 +1,19 @@
 package com.sotto.app.ui.chat
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sotto.app.R
 import com.sotto.app.domain.model.Contact
 import com.sotto.app.domain.model.Conversation
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.repository.ConversationRepository
 import com.sotto.app.domain.repository.IdentityRepository
+import com.sotto.app.domain.repository.MessageRepository
 import com.sotto.app.domain.usecase.SendMessageUseCase
 import com.sotto.app.domain.usecase.SendMyNameUseCase
-import com.sotto.app.domain.repository.MessageRepository
-import com.sotto.app.R
 import com.sotto.app.ui.text.UiText
-import android.util.Log
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted

@@ -2,26 +2,26 @@ package com.sotto.app.ui.components
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import com.sotto.app.R
-import java.time.format.DateTimeFormatter
-import java.util.Locale
-import kotlinx.datetime.toJavaLocalDate
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.sotto.app.R
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toJavaLocalDate
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * Today's date, kept current: refreshed whenever the screen resumes and every
@@ -61,17 +61,22 @@ class DateFormats(
     listThisYear: String,
     listOtherYear: String,
 ) {
-    internal val weekday: DateTimeFormatter = DateTimeFormatter.ofPattern(weekday, locale)
-    internal val dayThisYear: DateTimeFormatter = DateTimeFormatter.ofPattern(dayThisYear, locale)
-    internal val dayOtherYear: DateTimeFormatter = DateTimeFormatter.ofPattern(dayOtherYear, locale)
-    internal val listThisYear: DateTimeFormatter = DateTimeFormatter.ofPattern(listThisYear, locale)
-    internal val listOtherYear: DateTimeFormatter = DateTimeFormatter.ofPattern(listOtherYear, locale)
+    internal val weekday = formatter(weekday, "EEEE", locale)
+    internal val dayThisYear = formatter(dayThisYear, "EEE, d MMM", locale)
+    internal val dayOtherYear = formatter(dayOtherYear, "d MMM yyyy", locale)
+    internal val listThisYear = formatter(listThisYear, "dd MMM", locale)
+    internal val listOtherYear = formatter(listOtherYear, "dd/MM/yyyy", locale)
 
     companion object {
+        /** A translation's broken pattern falls back to the English one instead of crashing the chat screens. */
+        private fun formatter(pattern: String, english: String, locale: Locale): DateTimeFormatter =
+            runCatching { DateTimeFormatter.ofPattern(pattern, locale) }
+                .getOrElse { DateTimeFormatter.ofPattern(english, Locale.ENGLISH) }
+
         fun from(context: Context): DateFormats = DateFormats(
             today = context.getString(R.string.chat_date_today),
             yesterday = context.getString(R.string.chat_date_yesterday),
-            locale = Locale.forLanguageTag(context.getString(R.string.chat_date_locale)),
+            locale = appLanguage(context),
             weekday = context.getString(R.string.chat_date_weekday),
             dayThisYear = context.getString(R.string.chat_date_this_year),
             dayOtherYear = context.getString(R.string.chat_date_other_year),
@@ -80,6 +85,12 @@ class DateFormats(
         )
     }
 }
+
+/**
+ * The language of the translation shown ([R.string.chat_date_locale]), for month and day names.
+ * Not the phone's: on a phone in a language Sotto doesn't have, its text is English and so are its dates.
+ */
+fun appLanguage(context: Context): Locale = Locale.forLanguageTag(context.getString(R.string.chat_date_locale))
 
 /** [DateFormats] in the app's language, made again when the language changes. */
 @Composable

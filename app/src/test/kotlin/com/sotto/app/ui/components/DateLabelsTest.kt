@@ -1,5 +1,8 @@
 package com.sotto.app.ui.components
 
+import com.sotto.app.testing.English
+import com.sotto.app.testing.Hungarian
+import com.sotto.app.testing.StringsXml
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
@@ -8,18 +11,29 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.util.Locale
 
-/** The patterns are copies of those in values/ and values-hu/ strings_chat.xml and strings_conversations.xml. */
+/** With the patterns the strings files really have, so a broken translation fails here. */
 class DateLabelsTest {
-    private val english = DateFormats(
-        today = "Today", yesterday = "Yesterday", locale = Locale.forLanguageTag("en"),
-        weekday = "EEEE", dayThisYear = "EEE, d MMM", dayOtherYear = "d MMM yyyy",
-        listThisYear = "dd MMM", listOtherYear = "dd/MM/yyyy",
+    private val english = formats(English)
+    private val hungarian = formats(Hungarian)
+
+    private fun formats(strings: StringsXml) = DateFormats(
+        today = strings["chat_date_today"], yesterday = strings["chat_date_yesterday"],
+        locale = Locale.forLanguageTag(strings["chat_date_locale"]),
+        weekday = strings["chat_date_weekday"], dayThisYear = strings["chat_date_this_year"],
+        dayOtherYear = strings["chat_date_other_year"], listThisYear = strings["conversations_date_this_year"],
+        listOtherYear = strings["conversations_date_other_year"],
     )
-    private val hungarian = DateFormats(
-        today = "Ma", yesterday = "Tegnap", locale = Locale.forLanguageTag("hu"),
-        weekday = "EEEE", dayThisYear = "MMM d., EEEE", dayOtherYear = "yyyy. MMM d.",
-        listThisYear = "MMM d.", listOtherYear = "yyyy. MM. dd.",
-    )
+
+    @Test
+    fun `a broken pattern falls back to English instead of crashing`() {
+        val broken = DateFormats(
+            today = "Ma", yesterday = "Tegnap", locale = Locale.forLanguageTag("hu"),
+            weekday = "EEEE", dayThisYear = "{{nope", dayOtherYear = "yyyy. MMM d.",
+            listThisYear = "MMM d.", listOtherYear = "yyyy. MM. dd.",
+        )
+        assertEquals("Mon, 3 Nov", dayLabel(LocalDate(2025, 11, 3), today, broken))
+    }
+
     private val today = LocalDate(2025, 11, 10) // a Monday
 
     @Test

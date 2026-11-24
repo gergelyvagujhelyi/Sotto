@@ -1,8 +1,5 @@
 package com.sotto.app.ui.chat
 
-import androidx.compose.ui.res.stringResource
-import com.sotto.app.R
-import com.sotto.app.ui.text.asString
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
@@ -46,6 +43,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -54,12 +52,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.ReplyPayload
+import com.sotto.app.domain.model.quoteUiText
 import com.sotto.app.ui.components.BubbleQuote
+import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.theme.Aurora
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /** How far a bubble is dragged before letting go replies to it. */
 private val ReplyThreshold = 64.dp
@@ -168,7 +169,7 @@ internal fun Modifier.replyHighlight(active: Boolean): Modifier {
 @Composable
 internal fun Message.bubbleQuote(contactName: String): BubbleQuote? {
     val you = stringResource(R.string.chat_you)
-    return replyTo?.let { BubbleQuote(author = if (it.toOwn) you else contactName, text = it.quote, toOwn = it.toOwn) }
+    return replyTo?.let { BubbleQuote(author = if (it.toOwn) you else contactName, text = quoteUiText(it.quote).asString(), toOwn = it.toOwn) }
 }
 
 /**

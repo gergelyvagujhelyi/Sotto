@@ -66,7 +66,7 @@
     <string name="onboarding_notifications_lock_body">Notifications show the sender and the message. You can hide either in Settings.</string>
 
     <!-- Creating the identity -->
-    <string name="onboarding_generating">Generating your identity...</string>
+    <string name="onboarding_generating">Generating your identity…</string>
     <string name="onboarding_generating_subtitle">Creating your keys on this device</string>
     <string name="onboarding_error_title">Something went wrong</string>
     <string name="onboarding_retry">Retry</string>

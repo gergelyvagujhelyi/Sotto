@@ -1,9 +1,9 @@
 package com.sotto.app.ui.call
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import android.net.Uri
 import com.sotto.app.call.CallManager
 import com.sotto.app.domain.model.CallState
 import com.sotto.app.ui.text.UiText

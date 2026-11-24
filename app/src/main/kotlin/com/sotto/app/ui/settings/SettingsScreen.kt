@@ -1,13 +1,16 @@
 package com.sotto.app.ui.settings
 
-import android.content.ActivityNotFoundException
 import android.app.LocaleManager
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,47 +37,27 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.material.icons.rounded.Animation
-import androidx.compose.material.icons.rounded.Badge
-import androidx.compose.material.icons.rounded.BatteryAlert
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Dns
-import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Hearing
-import androidx.compose.material.icons.rounded.Language
-import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material.icons.rounded.PersonAdd
-import androidx.compose.material.icons.rounded.SwapCalls
-import androidx.compose.material.icons.rounded.WifiTethering
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.annotation.RequiresApi
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.core.net.toUri
-import androidx.lifecycle.compose.LifecycleResumeEffect
-import com.sotto.app.domain.model.DisplayNames
-import com.sotto.app.ui.components.AuroraTextField
-import com.sotto.app.ui.components.CollapsingTitleTopBar
-import com.sotto.app.ui.components.ShareCodeActions
-import androidx.compose.material.icons.rounded.Block
-import androidx.compose.material.icons.rounded.History
-import androidx.compose.ui.text.style.TextOverflow
-import com.sotto.app.domain.model.BlockedUser
-import com.sotto.app.ui.components.GradientAvatar
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
+import androidx.compose.material.icons.rounded.Animation
 import androidx.compose.material.icons.rounded.Autorenew
+import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.BatteryAlert
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Hearing
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.SwapCalls
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -90,11 +74,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -102,28 +87,44 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.gms.common.ConnectionResult
+import com.google.android.gms.common.GoogleApiAvailabilityLight
 import com.sotto.app.BuildConfig
 import com.sotto.app.R
-import com.sotto.app.ui.text.asString
-import com.sotto.app.ui.text.resolve
+import com.sotto.app.domain.model.BlockedUser
 import com.sotto.app.domain.model.DisappearingDuration
+import com.sotto.app.domain.model.DisplayNames
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.ui.components.AppSnackbarHost
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle
+import com.sotto.app.ui.components.AuroraTextField
+import com.sotto.app.ui.components.CollapsingTitleTopBar
 import com.sotto.app.ui.components.GlassCard
+import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.QrCodeImage
 import com.sotto.app.ui.components.SectionLabel
+import com.sotto.app.ui.components.ShareCodeActions
 import com.sotto.app.ui.components.SoftButton
+import com.sotto.app.ui.text.asString
+import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.theme.Aurora
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailabilityLight
 
 @Composable
 fun SettingsScreen(
@@ -565,9 +566,12 @@ fun SettingsContent(
 
                 SectionLabel(stringResource(R.string.settings_section_display), Modifier.padding(start = 4.dp))
                 SettingsGroup {
-                    // Android 13+ keeps a language per app; before that the phone's language applies.
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        LanguageRow()
+                    // Android 13+ keeps a language per app; before that, or on a phone without
+                    // Android's page for it, the phone's language applies and there's no row.
+                    val context = LocalContext.current
+                    val languagePage = remember(context) { languageSettingsIntent(context) }
+                    if (languagePage != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        LanguageRow(languagePage)
                         RowDivider()
                     }
                     SettingsSwitchRow(
@@ -937,7 +941,7 @@ private fun keepLabel(days: Int): String = when (days) {
  */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
-private fun LanguageRow() {
+private fun LanguageRow(open: Intent) {
     val context = LocalContext.current
     // Null while the app follows the phone's language.
     fun appLanguage(): String? = context.getSystemService(LocaleManager::class.java)
@@ -957,17 +961,23 @@ private fun LanguageRow() {
         title = stringResource(R.string.settings_language),
         subtitle = language ?: stringResource(R.string.settings_language_phone),
         onClick = {
-            val open = Intent(
-                android.provider.Settings.ACTION_APP_LOCALE_SETTINGS,
-                Uri.fromParts("package", context.packageName, null),
-            )
             try {
                 context.startActivity(open)
             } catch (_: ActivityNotFoundException) {
-                // A phone without the page: nothing to open.
+                // Gone since the screen checked: nothing to open.
             }
         },
     )
+}
+
+/** Android's per-app language page for Sotto (Android 13+), or null where the phone has none. */
+private fun languageSettingsIntent(context: Context): Intent? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
+    val intent = Intent(
+        android.provider.Settings.ACTION_APP_LOCALE_SETTINGS,
+        Uri.fromParts("package", context.packageName, null),
+    )
+    return intent.takeIf { it.resolveActivity(context.packageManager) != null }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -12,25 +12,25 @@ import android.util.Base64
 import android.util.Log
 import com.sotto.app.BuildConfig
 import com.sotto.app.R
+import com.sotto.app.connection.DefaultNetworkMonitor
 import com.sotto.app.crypto.KeyManager
 import com.sotto.app.crypto.PqcProvider
 import com.sotto.app.crypto.lengthPrefixed
-import com.sotto.app.connection.DefaultNetworkMonitor
+import com.sotto.app.data.local.dao.ConversationDao
+import com.sotto.app.data.local.dao.MessageDao
+import com.sotto.app.data.local.entity.ConversationEntity
+import com.sotto.app.data.local.entity.MessageEntity
 import com.sotto.app.data.remote.ApiHttpException
 import com.sotto.app.data.remote.ApiService
 import com.sotto.app.data.remote.WebSocketClient
 import com.sotto.app.data.remote.dto.CallSignalDto
 import com.sotto.app.data.remote.dto.CallSignalRequest
 import com.sotto.app.data.remote.dto.IceServerDto
-import com.sotto.app.data.local.dao.ConversationDao
-import com.sotto.app.data.local.dao.MessageDao
-import com.sotto.app.data.local.entity.ConversationEntity
-import com.sotto.app.data.local.entity.MessageEntity
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallPath
 import com.sotto.app.domain.model.CallState
-import com.sotto.app.domain.model.CallVerifyState
 import com.sotto.app.domain.model.CallStatus
+import com.sotto.app.domain.model.CallVerifyState
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.repository.CryptoEngine
 import com.sotto.app.domain.repository.SessionKeys
@@ -39,11 +39,6 @@ import com.sotto.app.notification.ChatNotificationManager
 import com.sotto.app.ui.text.UiText
 import com.sotto.app.ui.text.resolve
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.security.SecureRandom
-import java.util.concurrent.ConcurrentHashMap
-import javax.crypto.Cipher
-import javax.crypto.spec.GCMParameterSpec
-import javax.crypto.spec.SecretKeySpec
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,11 +59,16 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.webrtc.IceCandidate
 import org.webrtc.PeerConnection
+import java.security.SecureRandom
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.roundToInt
+import javax.crypto.Cipher
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.roundToInt
 
 @Singleton
 class CallManager @Inject constructor(

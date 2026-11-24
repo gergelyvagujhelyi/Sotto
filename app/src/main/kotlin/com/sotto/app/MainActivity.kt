@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
 import android.widget.Toast
-import androidx.compose.ui.res.stringResource
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -25,12 +24,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.sotto.app.di.DatabaseModule
 import com.sotto.app.call.CallManager
+import com.sotto.app.call.CallNotifier
+import com.sotto.app.di.DatabaseModule
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.InviteLink
@@ -44,6 +45,7 @@ import com.sotto.app.ui.contacts.PREFILLED_SHARE_CODE_KEY
 import com.sotto.app.ui.navigation.ChatNavGraph
 import com.sotto.app.ui.navigation.Routes
 import com.sotto.app.ui.theme.SottoTheme
+import com.sotto.app.update.AppUpdateNotifier
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -61,6 +63,9 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var pendingInvite: com.sotto.app.connection.PendingInvite
     @Inject lateinit var relayConfig: com.sotto.app.connection.RelayConfig
     @Inject lateinit var appUpdates: com.sotto.app.update.AppUpdates
+    @Inject lateinit var chatNotifications: ChatNotificationManager
+    @Inject lateinit var callNotifier: CallNotifier
+    @Inject lateinit var appUpdateNotifier: AppUpdateNotifier
 
     private val _deepLinkIntent = mutableStateOf<Intent?>(null)
 
@@ -96,6 +101,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // Notification channels keep the name they were made with. A language switch recreates
+        // this activity but not the process, so name them again in the language now shown.
+        chatNotifications.createNotificationChannels()
+        callNotifier.createChannels()
+        appUpdateNotifier.createChannel(onlyIfExists = true)
 
         val reduceAnimations = settingsRepository.getPrivacySettings().map { it.reduceAnimations }
         setContent {

@@ -1,41 +1,44 @@
 package com.sotto.app.data.repository
 
+import android.content.Context
 import android.util.Base64
+import com.sotto.app.R
 import com.sotto.app.crypto.ContactKeyVerifier
 import com.sotto.app.crypto.KeyCheck
 import com.sotto.app.crypto.KeyManager
-import com.sotto.app.crypto.VerifiedKeys
 import com.sotto.app.crypto.PqcProvider
 import com.sotto.app.crypto.SessionResetSender
+import com.sotto.app.crypto.VerifiedKeys
 import com.sotto.app.crypto.buildMessageSigPayload
 import com.sotto.app.data.local.dao.ContactDao
 import com.sotto.app.data.local.dao.ConversationDao
 import com.sotto.app.data.local.dao.MessageDao
 import com.sotto.app.data.local.entity.MessageEntity
+import com.sotto.app.data.media.MediaStore
 import com.sotto.app.data.remote.ApiService
 import com.sotto.app.data.remote.dto.AckRequest
 import com.sotto.app.data.remote.dto.SendMessageRequest
-import com.sotto.app.data.media.MediaStore
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MediaPayload
 import com.sotto.app.domain.model.Message
 import com.sotto.app.domain.model.MessageMedia
 import com.sotto.app.domain.model.MessageState
-import com.sotto.app.domain.model.UnknownPayload
-import com.sotto.app.domain.model.previewUiText
-import com.sotto.app.R
-import com.sotto.app.ui.text.UiText
-import com.sotto.app.ui.text.resolve
 import com.sotto.app.domain.model.ProfilePayload
 import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.ReplyRef
+import com.sotto.app.domain.model.UnknownPayload
+import com.sotto.app.domain.model.previewUiText
+import com.sotto.app.domain.model.quoteText
 import com.sotto.app.domain.repository.CryptoEngine
 import com.sotto.app.domain.repository.DuplicateMessageException
 import com.sotto.app.domain.repository.EncryptedEnvelope
 import com.sotto.app.domain.repository.MessageRepository
 import com.sotto.app.domain.repository.PeerKeys
 import com.sotto.app.notification.ChatNotificationManager
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.resolve
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -67,7 +70,7 @@ class MessageRepositoryImpl @Inject constructor(
     private val fileDrop: com.sotto.app.data.media.FileDrop,
     private val transfers: com.sotto.app.worker.FileTransfers,
     /** For the words this repository stores or notifies with (previews, notes), in the user's language. */
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
+    @ApplicationContext private val context: Context,
 ) : MessageRepository {
 
     override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
@@ -675,7 +678,7 @@ class MessageRepositoryImpl @Inject constructor(
             isOutgoing = true,
             // Only a message of this chat; never a reply to a reply's quote of something else.
             replyToId = replyTo?.takeIf { it.conversationId == conversationId }?.id,
-            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(it.preview.resolve(context)) },
+            replyQuote = replyTo?.takeIf { it.conversationId == conversationId }?.let { ReplyPayload.quoteOf(quoteText(it.media?.kind, it.plaintext, it.media?.name.orEmpty())) },
             replyToOwn = replyTo?.takeIf { it.conversationId == conversationId }?.isOutgoing == true,
             mediaKind = media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
             mediaMime = media?.mime ?: file?.mime,
@@ -1789,5 +1792,5 @@ internal fun MessageEntity.media(): MessageMedia? {
 }
 
 /** What the chat list or a notification says for this row. */
-internal fun MessageEntity.preview(context: android.content.Context): String =
+internal fun MessageEntity.preview(context: Context): String =
     previewUiText(MediaKind.fromWire(mediaKind), plaintext, mediaName.orEmpty()).resolve(context)

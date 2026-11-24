@@ -39,8 +39,8 @@ import com.sotto.app.ui.contacts.AddContactScreen
 import com.sotto.app.ui.contacts.PREFILLED_SHARE_CODE_KEY
 import com.sotto.app.ui.contacts.SCANNED_INVITE_KEY
 import com.sotto.app.ui.contacts.SCANNED_SHARE_CODE_KEY
-import com.sotto.app.ui.contacts.ScanQrScreen
 import com.sotto.app.ui.contacts.SCANNED_VERIFY_CODE_KEY
+import com.sotto.app.ui.contacts.ScanQrScreen
 import com.sotto.app.ui.contacts.VerifyInPersonScreen
 import com.sotto.app.ui.conversations.ConversationsScreen
 import com.sotto.app.ui.onboarding.OnboardingScreen

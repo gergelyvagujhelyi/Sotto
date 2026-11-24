@@ -1,10 +1,10 @@
 package com.sotto.app.data.media
 
+import com.sotto.app.R
 import com.sotto.app.domain.model.FilePayload
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MediaPayload
 import com.sotto.app.domain.model.previewUiText
-import com.sotto.app.R
 import com.sotto.app.ui.text.UiText
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

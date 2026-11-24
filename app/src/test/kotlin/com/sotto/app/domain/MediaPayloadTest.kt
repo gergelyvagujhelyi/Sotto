@@ -1,5 +1,6 @@
 package com.sotto.app.domain
 
+import com.sotto.app.R
 import com.sotto.app.data.media.MediaCrypto
 import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MediaPayload
@@ -7,7 +8,6 @@ import com.sotto.app.domain.model.MessageMedia
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.UnknownPayload
 import com.sotto.app.domain.model.previewUiText
-import com.sotto.app.R
 import com.sotto.app.ui.text.UiText
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

@@ -5,7 +5,7 @@
     <string name="onboarding_get_started">Kezdjük</string>
     <string name="onboarding_feature_no_phone_title">Se e-mail, se telefonszám.</string>
     <string name="onboarding_feature_no_phone_body">Az identitásod egy kriptográfiai kulcs, amely ezen az eszközön készül.</string>
-    <string name="onboarding_feature_pq_title">Posztkvantum titkosítás</string>
+    <string name="onboarding_feature_pq_title">Posztkvantumos titkosítás</string>
     <string name="onboarding_feature_pq_body">Hibrid ML-KEM-768 + X25519, végponttól végpontig.</string>
     <string name="onboarding_feature_no_tracking_title">Nincs követés</string>
     <string name="onboarding_feature_no_tracking_body">A szerver mindig csak titkosított borítékokat lát.</string>
@@ -18,13 +18,13 @@
     <string name="onboarding_privacy_encrypted_title">Titkosítva indul útnak</string>
     <string name="onboarding_privacy_encrypted_body">Az üzenetek titkosítva hagyják el a telefonodat.</string>
     <string name="onboarding_privacy_relay_title">Vak szerver</string>
-    <string name="onboarding_privacy_relay_body">A szerver csak titkosított borítékokat lát — az üzeneteidet nem tudja elolvasni.</string>
+    <string name="onboarding_privacy_relay_body">A szerver csak titkosított borítékokat lát – az üzeneteidet nem tudja elolvasni.</string>
     <string name="onboarding_privacy_warning">Fontos: ha biztonsági mentés nélkül elveszíted ezt az eszközt, az identitásod és az üzenetelőzményeid nem állíthatók vissza.</string>
 
     <!-- Key type -->
     <string name="onboarding_keys_title">Válassz kulcstípust</string>
     <string name="onboarding_keys_subtitle">Ez dönti el, milyen kriptográfiai algoritmusok védik az identitásodat.</string>
-    <string name="onboarding_keys_pq_title">Posztkvantum</string>
+    <string name="onboarding_keys_pq_title">Posztkvantumos</string>
     <string name="onboarding_keys_pq_description">Véd a jövő kvantumszámítógépei ellen. NIST-szabványos algoritmusokat használ, mellettük biztonsági hálóként a klasszikus titkosítás is ott van.</string>
     <string name="onboarding_keys_recommended">Ajánlott</string>
     <string name="onboarding_keys_standard_title">Normál</string>

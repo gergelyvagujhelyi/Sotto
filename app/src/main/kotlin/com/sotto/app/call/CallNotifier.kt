@@ -33,7 +33,8 @@ class CallNotifier @Inject constructor(
         NotificationManagerCompat.from(context).cancel(ONGOING_ID)
     }
 
-    private fun createChannels() {
+    /** Makes the channels, or renames them into the current language (MainActivity, after a language switch). */
+    fun createChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
         // High importance (heads-up) but silent: the app rings and vibrates itself
         // (IncomingRinger), which doesn't depend on how Android treats the notification. A
