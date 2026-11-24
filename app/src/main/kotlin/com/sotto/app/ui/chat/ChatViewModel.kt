@@ -34,6 +34,7 @@ class ChatViewModel @Inject constructor(
     private val receiptManager: com.sotto.app.data.repository.ReceiptManager,
     private val sendMyName: SendMyNameUseCase,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
 ) : ViewModel() {
 
     val conversationId: String = savedStateHandle["conversationId"] ?: ""
@@ -154,12 +155,13 @@ class ChatViewModel @Inject constructor(
     /**
      * Poll for new messages; the screen runs this only while it is resumed
      * (supplements WebSocket/FCM; a loop in viewModelScope kept polling in the
-     * background and under other screens).
+     * background and under other screens). Skipped while the socket is live, as
+     * in ConversationsViewModel.pollWhileVisible.
      */
     suspend fun pollWhileVisible() {
         while (true) {
             try {
-                messageRepository.fetchPendingFromServer()
+                if (!webSocketClient.isLive()) messageRepository.fetchPendingFromServer()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {

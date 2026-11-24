@@ -133,6 +133,12 @@ class WebSocketClient @Inject constructor(
     }
 
     /**
+     * Whether the socket is open and the relay spoke on it lately (a pong comes every 25 s). The
+     * relay then announces every new message on it, so a screen needn't poll for them.
+     */
+    fun isLive(): Boolean = socketIsLive(socketState, SystemClock.elapsedRealtime() - lastFrameAt)
+
+    /**
      * Connect, unless a connection is being made right now or is open and the relay has spoken on
      * it recently; then leave it be. For a push: a push that wakes a closed app comes just as the
      * app's start has begun connecting, and restarting that threw away a TLS handshake and a
@@ -325,6 +331,10 @@ internal const val CONNECT_GRACE_MS = 10_000L
  * is one on a network route that went away.
  */
 internal const val QUIET_MS = 35_000L
+
+/** Whether a screen may skip its poll: see [WebSocketClient.isLive]. */
+internal fun socketIsLive(state: SocketState, sinceFrameMs: Long): Boolean =
+    state == SocketState.OPEN && sinceFrameMs <= QUIET_MS
 
 /**
  * Whether [WebSocketClient.connectUnlessWorking] should replace the current connection: always

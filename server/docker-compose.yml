@@ -10,7 +10,10 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U chatcontroll"]
-      interval: 5s
+      # Every 30 s: each check starts a process in the container, part of the idle load the
+      # e2-micro shows as CPU use. Deploys don't wait on it (the database keeps
+      # running); after a reboot the relay may start up to 30 s later.
+      interval: 30s
       timeout: 3s
       retries: 5
 

@@ -60,6 +60,7 @@ class ChatDeleteTest {
             receiptManager = receipts,
             sendMyName = mockk(relaxed = true),
             appContext = mockk(relaxed = true),
+            webSocketClient = mockk(relaxed = true),
         )
     }
 
