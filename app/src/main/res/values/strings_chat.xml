@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The chat: messages, media, reactions, dialogs, and what it says when something fails. -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Chat screen: top bar and menu -->
+    <string name="chat_title_fallback">Chat</string>
+    <string name="chat_unknown_contact">Unknown</string>
+    <string name="chat_voice_call">Voice call</string>
+    <string name="chat_more_options">More options</string>
+    <string name="chat_not_verified">Not verified</string>
+    <string name="chat_verified_by_phone_only">Verified by phone only</string>
+    <string name="chat_verified_in_person">Verified in person</string>
+    <string name="chat_menu_verify">Verify…</string>
+    <string name="chat_menu_rename">Rename</string>
+    <string name="chat_block">Block</string>
+    <string name="chat_unblock">Unblock</string>
+    <string name="chat_menu_delete_chat">Delete chat</string>
+    <string name="chat_menu_remove_contact">Remove contact</string>
+
+    <!-- Verifying a contact. chat_this_contact stands in for a name not known yet. -->
+    <string name="chat_this_contact">this contact</string>
+    <string name="chat_verify_title">Verify %1$s</string>
+    <string name="chat_verify_title_unnamed">Verify this contact</string>
+    <string name="chat_verify_in_person">In person</string>
+    <string name="chat_verify_stronger">Stronger</string>
+    <string name="chat_verify_in_person_body">Meet, then tap your phones together or scan the code on their phone.</string>
+    <string name="chat_verify_by_phone">By phone</string>
+    <string name="chat_verify_weaker">Weaker</string>
+    <string name="chat_verify_done_weaker">Done · weaker</string>
+    <string name="chat_verify_by_phone_body">Call %1$s and read seven emoji to each other. It relies on knowing their voice.</string>
+    <string name="chat_verify_in_person_action">Verify in person</string>
+    <string name="chat_verify_by_phone_action">Verify by phone</string>
+    <string name="chat_not_verified_title">%1$s isn\'t verified</string>
+    <string name="chat_not_verified_title_unnamed">this contact isn\'t verified</string>
+    <string name="chat_not_verified_body">You haven\'t checked %1$s\'s keys, so you can\'t be sure this chat is really with them. Verify in person when you meet, or verify by phone in a call now (weaker: it relies on knowing their voice).\n\nThis warning shows once for %1$s.</string>
+    <string name="chat_send_anyway">Send anyway</string>
+
+    <!-- Dialogs -->
+    <string name="chat_block_title">Block %1$s?</string>
+    <string name="chat_block_title_unnamed">Block this contact?</string>
+    <string name="chat_block_body">You won\'t receive their messages or calls. They aren\'t told. You can unblock them later in Settings.</string>
+    <string name="chat_delete_title">Delete this chat?</string>
+    <string name="chat_delete_body">Its messages and calls are deleted from this phone. %1$s keeps their copy, and a new message from them starts a new chat.</string>
+    <string name="chat_they">They</string>
+    <string name="chat_rename_title">Rename contact</string>
+    <string name="chat_rename_placeholder">Name</string>
+    <string name="chat_rename_their_name">They call themselves “%1$s”. Only you see the name you set here.</string>
+    <string name="chat_rename_only_you">Only you see this name.</string>
+
+    <!-- Banners and the composer -->
+    <string name="chat_account_deleted">Account deleted</string>
+    <string name="chat_reestablishing" tools:ignore="TypographyEllipsis">Re-establishing secure session...</string>
+    <string name="chat_keys_rotated">Peer rotated keys</string>
+    <string name="chat_keys_rotated_body">Tap to resume sending.</string>
+    <string name="chat_blocked_title">You blocked this contact</string>
+    <string name="chat_blocked_body">Their messages and calls are not delivered.</string>
+    <string name="chat_request_title">Message request</string>
+    <string name="chat_request_body">This is a message request. Accept to reply.</string>
+    <string name="chat_composer_hint">Message</string>
+    <string name="chat_composer_blocked">Contact blocked</string>
+    <string name="chat_composer_peer_deleted">User deleted their account</string>
+    <string name="chat_composer_keys_rotated">Tap banner to resume sending</string>
+    <string name="chat_send">Send</string>
+    <string name="chat_encryption_notice">Messages and calls are end-to-end encrypted. No one outside this chat, not even the relay server, can read them.</string>
+    <string name="chat_hold_to_record">Hold to record, let go to send.</string>
+    <string name="chat_microphone_busy">The microphone is busy.</string>
+    <string name="chat_mic_description">Hold to record a voice message</string>
+    <string name="chat_recording_delete">Delete recording</string>
+    <string name="chat_recording_slide_to_cancel">‹ Slide to cancel</string>
+    <string name="chat_recording_slide_to_lock">Slide up to lock</string>
+
+    <!-- Messages -->
+    <string name="chat_message_rejected">⛔ Message rejected (unsigned or unverifiable)</string>
+    <string name="chat_message_undecryptable">⚠ Could not decrypt this message</string>
+    <string name="chat_not_delivered">Not delivered · Tap to retry</string>
+    <string name="chat_unknown_payload">This message needs a newer Sotto. Update Sotto to see it.</string>
+    <string name="chat_no_app_for_link">No app can open this link</string>
+    <string name="chat_you">You</string>
+    <string name="chat_them">Them</string>
+    <string name="chat_reply">Reply</string>
+    <string name="chat_reply_cancel">Cancel reply</string>
+    <string name="chat_quote_go_to">Go to message</string>
+    <string name="chat_quote_fallback">Message</string>
+    <string name="chat_quote_not_here">That message isn\'t on this phone any more.</string>
+
+    <!-- Reactions -->
+    <string name="chat_react">React</string>
+    <string name="chat_more_reactions">More reactions</string>
+    <string name="chat_reaction_pick">React %1$s</string>
+    <string name="chat_reaction_yours">%1$s, your reaction. Tap to take it back</string>
+    <string name="chat_reaction_theirs_description">%1$s reacted %2$s</string>
+    <string name="chat_reaction_mine_description">You reacted %1$s</string>
+    <string name="chat_reaction_change">Change your reaction</string>
+    <string name="chat_reaction_notification">Reacted %1$s to your message</string>
+    <string name="chat_reaction_notification_quote">Reacted %1$s to \"%2$s\"</string>
+
+    <!-- Events in the chat -->
+    <string name="chat_event_keys_rotated_local">You rotated your keys</string>
+    <string name="chat_event_keys_rotated_remote">Peer rotated their keys</string>
+    <string name="chat_event_account_deleted">Peer deleted their account</string>
+    <string name="chat_event_keys_changed">Keys changed</string>
+    <string name="chat_call_missed">Missed voice call</string>
+    <string name="chat_call_unanswered">Unanswered call</string>
+    <string name="chat_call_failed">Call failed</string>
+    <string name="chat_call_voice">Voice call</string>
+    <string name="chat_call_outgoing">Outgoing call</string>
+    <string name="chat_call_incoming">Incoming call</string>
+    <string name="chat_call_duration_minutes">%1$dm %2$ds</string>
+    <string name="chat_call_duration_seconds">%1$ds</string>
+
+    <!-- Media: previews (chat list, notifications, quotes) and bubbles -->
+    <string name="chat_media_voice">🎤 Voice message</string>
+    <string name="chat_media_photo">📷 Photo</string>
+    <string name="chat_media_file">📎 File</string>
+    <string name="chat_media_file_named" translatable="false">📎 %1$s</string>
+    <string name="chat_media_with_caption" translatable="false">%1$s: %2$s</string>
+    <string name="chat_preview_wants_to_connect">Wants to connect</string>
+    <string name="chat_request_media_voice">🎤 A voice message was sent before you accepted this request, so it wasn\'t received. Ask them to send it again.</string>
+    <string name="chat_request_media_photo">📷 A photo was sent before you accepted this request, so it wasn\'t received. Ask them to send it again.</string>
+    <string name="chat_request_media_file">📎 A file was sent before you accepted this request, so it wasn\'t received. Ask them to send it again.</string>
+    <string name="chat_request_media_with_caption" translatable="false">%1$s\n\n%2$s</string>
+    <string name="chat_voice_message">Voice message</string>
+    <string name="chat_voice_play">Play</string>
+    <string name="chat_voice_pause">Pause</string>
+    <string name="chat_voice_play_description">Play voice message</string>
+    <string name="chat_voice_pause_description">Pause voice message</string>
+    <string name="chat_voice_cant_play">Can\'t play this voice message</string>
+    <string name="chat_photo">Photo</string>
+    <string name="chat_photo_hd_description">HD photo</string>
+    <string name="chat_photo_open">Open photo</string>
+    <string name="chat_photo_close">Close photo</string>
+    <string name="chat_hd_download">Download HD · %1$s</string>
+    <string name="chat_hd_downloading">Downloading HD…</string>
+    <string name="chat_hd_downloading_percent">Downloading HD %1$d%%</string>
+    <string name="chat_hd_gone">The HD copy is no longer available</string>
+    <string name="chat_photo_to_send">Photo to send</string>
+    <string name="chat_photo_caption_hint">Add a caption</string>
+    <string name="chat_photo_send">Send photo</string>
+    <string name="chat_photo_dont_send">Don\'t send</string>
+    <string name="chat_photo_send_hd">Send in HD</string>
+    <string name="chat_photo_send_standard">Send in standard quality</string>
+    <string name="chat_photo_hd_on">HD on</string>
+    <string name="chat_photo_hd_off">HD off</string>
+    <string name="chat_attach">Attach a photo or file</string>
+    <string name="chat_attach_photo">Photo</string>
+    <string name="chat_attach_file">File or video</string>
+    <string name="chat_file">File</string>
+    <string name="chat_file_sending_percent">Sending %1$d%%</string>
+    <string name="chat_file_downloading_percent">Downloading %1$d%%</string>
+    <string name="chat_file_waiting_upload">Waiting to upload…</string>
+    <string name="chat_file_not_uploaded">Not uploaded</string>
+    <string name="chat_file_waiting_download">Waiting to download…</string>
+    <string name="chat_file_sending_directly">Sending directly…</string>
+    <string name="chat_file_coming_directly">Coming directly…</string>
+    <string name="chat_file_tap_to_download">Tap to download</string>
+    <string name="chat_file_gone">No longer available</string>
+    <string name="chat_file_not_downloaded_yet">Not downloaded yet</string>
+    <string name="chat_file_delivered">Delivered</string>
+    <string name="chat_file_tap_to_open">Tap to open</string>
+    <string name="chat_open_with">Open with</string>
+    <string name="chat_file_saved">Saved.</string>
+    <string name="chat_transfer_channel">File transfers</string>
+    <string name="chat_transfer_channel_description">Files being sent or downloaded</string>
+    <string name="chat_transfer_sending">Sending a file</string>
+    <string name="chat_transfer_receiving">Receiving a file</string>
+
+    <!-- Why something could not be sent or opened (snackbar) -->
+    <string name="chat_error_conversation_gone">This conversation no longer exists.</string>
+    <string name="chat_error_blocked_send">You blocked this contact. Unblock them to send messages.</string>
+    <string name="chat_error_blocked_react">You blocked this contact. Unblock them to react.</string>
+    <string name="chat_error_peer_deleted">This user has deleted their account.</string>
+    <string name="chat_error_keys_rotated">Peer rotated keys. Tap the banner above to resume sending.</string>
+    <string name="chat_error_accept_before_reply">Accept this message request before replying.</string>
+    <string name="chat_error_accept_before_react">Accept this message request before reacting.</string>
+    <string name="chat_error_media_before_accept">You can send voice messages, photos and files once they\'ve accepted your request.</string>
+    <plurals name="chat_error_caption_too_long">
+        <item quantity="one">Caption is too long (max %1$d character).</item>
+        <item quantity="other">Caption is too long (max %1$d characters).</item>
+    </plurals>
+    <plurals name="chat_error_message_too_long">
+        <item quantity="one">Message is too long (max %1$d character).</item>
+        <item quantity="other">Message is too long (max %1$d characters).</item>
+    </plurals>
+    <string name="chat_error_send_message">Failed to send message</string>
+    <string name="chat_error_send_voice">Failed to send voice message</string>
+    <string name="chat_error_send_photo">Failed to send photo</string>
+    <string name="chat_error_send_file">Failed to send file</string>
+    <string name="chat_error_send_reaction">Couldn\'t send the reaction. Check your connection and try again.</string>
+    <string name="chat_error_retry">Retry failed</string>
+    <string name="chat_error_reestablish">Failed to re-establish session. Try again.</string>
+    <string name="chat_error_file_max_size">Files can be up to %1$d MB.</string>
+    <string name="chat_error_relay_no_files">This relay doesn\'t take files.</string>
+    <string name="chat_error_monthly_limit">You\'ve sent as much as this relay allows this month.</string>
+    <string name="chat_error_relay_storage_full">The relay\'s file storage is full for now.</string>
+    <string name="chat_error_file_too_large">That file is too large for this relay.</string>
+    <string name="chat_error_file_not_here">This file isn\'t on this phone.</string>
+    <string name="chat_error_download_failed">The file couldn\'t be downloaded. Try again.</string>
+    <string name="chat_error_file_not_saved">The file couldn\'t be saved.</string>
+    <string name="chat_error_photo_unreadable">That picture couldn\'t be opened.</string>
+    <string name="chat_error_hd_failed">The HD copy couldn\'t be made; the photo goes in normal quality.</string>
+    <string name="chat_error_no_app_for_file">No app on this phone can open this file.</string>
+
+    <!-- Day separators. The patterns are java.time DateTimeFormatter patterns; month and day names come from chat_date_locale (a BCP 47 tag), the language of this translation. -->
+    <string name="chat_date_today">Today</string>
+    <string name="chat_date_yesterday">Yesterday</string>
+    <string name="chat_date_locale">en</string>
+    <string name="chat_date_weekday">EEEE</string>
+    <string name="chat_date_this_year">EEE, d MMM</string>
+    <string name="chat_date_other_year">d MMM yyyy</string>
+</resources>

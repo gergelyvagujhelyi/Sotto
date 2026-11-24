@@ -9,13 +9,16 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.util.Base64
+import androidx.annotation.StringRes
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
 
-/** What kind of media a message carries. [wire] is its name inside [MediaPayload]. */
-enum class MediaKind(val wire: String, val label: String) {
-    VOICE("voice", "🎤 Voice message"),
-    PHOTO("photo", "📷 Photo"),
+/** What kind of media a message carries. [wire] is its name inside [MediaPayload]; [label] what a preview calls it. */
+enum class MediaKind(val wire: String, @StringRes val label: Int) {
+    VOICE("voice", R.string.chat_media_voice),
+    PHOTO("photo", R.string.chat_media_photo),
     /** Any file, sent through the relay's object store rather than inline (FilePayload). */
-    FILE("file", "📎 File");
+    FILE("file", R.string.chat_media_file);
 
     companion object {
         fun fromWire(name: String?): MediaKind? = entries.firstOrNull { it.wire == name }
@@ -76,13 +79,29 @@ enum class FileState(val wire: String) {
 }
 
 /** What a chat list, notification or reply quote says for a message: its text, or for media its kind and caption. */
-fun previewText(media: MediaKind?, caption: String, fileName: String = ""): String {
-    val label = if (media == MediaKind.FILE && fileName.isNotBlank()) "📎 $fileName" else media?.label
-    return when {
-        label == null -> caption
-        caption.isBlank() -> label
-        else -> "$label: ${caption.trim()}"
+fun previewUiText(media: MediaKind?, caption: String, fileName: String = ""): UiText {
+    val label = when {
+        media == null -> return UiText.Plain(caption)
+        media == MediaKind.FILE && fileName.isNotBlank() -> UiText.res(R.string.chat_media_file_named, fileName)
+        else -> UiText.res(media.label)
     }
+    return if (caption.isBlank()) label else UiText.res(R.string.chat_media_with_caption, label, caption.trim())
+}
+
+/**
+ * [previewUiText] in English, for a caller without a Context. Only the notification's list of
+ * earlier unread messages (ChatNotificationManager) still uses it; it should resolve
+ * [previewUiText] with its Context instead.
+ */
+@Deprecated("English only; resolve previewUiText with a Context", ReplaceWith("previewUiText(media, caption, fileName)"))
+fun previewText(media: MediaKind?, caption: String, fileName: String = ""): String {
+    val label = when (media) {
+        null -> return caption
+        MediaKind.FILE -> if (fileName.isNotBlank()) "📎 $fileName" else "📎 File"
+        MediaKind.VOICE -> "🎤 Voice message"
+        MediaKind.PHOTO -> "📷 Photo"
+    }
+    return if (caption.isBlank()) label else "$label: ${caption.trim()}"
 }
 
 /**
@@ -410,7 +429,8 @@ object FileUpdatePayload {
 object UnknownPayload {
     /** Every payload starts with this control character, which nobody can type. */
     private const val PREFIX = "\u0001"
-    const val NOTE = "This message needs a newer Sotto. Update Sotto to see it."
+    /** What the chat shows instead (R.string.chat_unknown_payload). */
+    @StringRes val NOTE: Int = R.string.chat_unknown_payload
 
     fun isUnknown(plaintext: String): Boolean = plaintext.startsWith(PREFIX)
 }

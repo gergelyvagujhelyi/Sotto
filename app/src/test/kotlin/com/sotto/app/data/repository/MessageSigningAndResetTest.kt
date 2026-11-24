@@ -99,6 +99,13 @@ class MessageSigningAndResetTest {
             mediaStore = mediaStore,
             fileDrop = mockk<com.sotto.app.data.media.FileDrop>(relaxed = true),
             transfers = transfers,
+            context = mockk<android.content.Context>(relaxed = true) {
+                // The note a message request gets instead of a photo: the note, then the caption.
+                every { getString(com.sotto.app.R.string.chat_request_media_photo, *anyVararg()) } returns "📷 A photo was sent before you accepted"
+                every { getString(com.sotto.app.R.string.chat_request_media_with_caption, *anyVararg()) } answers {
+                    args.drop(1).flatMap { if (it is Array<*>) it.toList() else listOf(it) }.joinToString("\n\n")
+                }
+            },
         )
     }
 

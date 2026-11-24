@@ -1,6 +1,8 @@
 package com.sotto.app.ui.chat
 
 import android.graphics.BitmapFactory
+import androidx.compose.ui.res.stringResource
+import com.sotto.app.R
 import android.util.LruCache
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
@@ -156,7 +158,7 @@ private fun Modifier.mediaClickable(
         enabled = enabled,
         onClickLabel = onClickLabel,
         role = role,
-        onLongClickLabel = if (gestures.onLongClick != null) "React" else null,
+        onLongClickLabel = if (gestures.onLongClick != null) stringResource(R.string.chat_react) else null,
         onLongClick = gestures.onLongClick,
         onDoubleClick = if (doubleTap) gestures.onDoubleClick else null,
         onClick = onClick,
@@ -207,17 +209,21 @@ private fun FileCard(message: Message, contentColor: Color) {
         else -> Icons.Rounded.Description
     }
     val status = when {
-        progress != null && message.isOutgoing -> "Sending ${(progress * 100).toInt()}%"
-        progress != null -> "Downloading ${(progress * 100).toInt()}%"
-        state == com.sotto.app.domain.model.FileState.UPLOADING -> if (message.state == com.sotto.app.domain.model.MessageState.FAILED) "Not uploaded" else "Waiting to upload…"
-        state == com.sotto.app.domain.model.FileState.DOWNLOADING -> "Waiting to download…"
-        state == com.sotto.app.domain.model.FileState.DIRECT -> if (message.isOutgoing) "Sending directly…" else "Coming directly…"
-        state == com.sotto.app.domain.model.FileState.REMOTE -> "Tap to download"
-        state == com.sotto.app.domain.model.FileState.GONE -> "No longer available"
-        state == com.sotto.app.domain.model.FileState.UNSENT -> "Not uploaded"
-        message.isOutgoing && state == com.sotto.app.domain.model.FileState.SENT -> "Not downloaded yet"
-        message.isOutgoing && state == com.sotto.app.domain.model.FileState.RECEIVED -> "Delivered"
-        else -> "Tap to open"
+        progress != null && message.isOutgoing -> stringResource(R.string.chat_file_sending_percent, (progress * 100).toInt())
+        progress != null -> stringResource(R.string.chat_file_downloading_percent, (progress * 100).toInt())
+        state == com.sotto.app.domain.model.FileState.UPLOADING -> stringResource(
+            if (message.state == com.sotto.app.domain.model.MessageState.FAILED) R.string.chat_file_not_uploaded else R.string.chat_file_waiting_upload,
+        )
+        state == com.sotto.app.domain.model.FileState.DOWNLOADING -> stringResource(R.string.chat_file_waiting_download)
+        state == com.sotto.app.domain.model.FileState.DIRECT -> stringResource(
+            if (message.isOutgoing) R.string.chat_file_sending_directly else R.string.chat_file_coming_directly,
+        )
+        state == com.sotto.app.domain.model.FileState.REMOTE -> stringResource(R.string.chat_file_tap_to_download)
+        state == com.sotto.app.domain.model.FileState.GONE -> stringResource(R.string.chat_file_gone)
+        state == com.sotto.app.domain.model.FileState.UNSENT -> stringResource(R.string.chat_file_not_uploaded)
+        message.isOutgoing && state == com.sotto.app.domain.model.FileState.SENT -> stringResource(R.string.chat_file_not_downloaded_yet)
+        message.isOutgoing && state == com.sotto.app.domain.model.FileState.RECEIVED -> stringResource(R.string.chat_file_delivered)
+        else -> stringResource(R.string.chat_file_tap_to_open)
     }
     // Our own file is on this phone from the start: it opens while it's still being sent.
     val tappable = message.isOutgoing || (
@@ -276,7 +282,7 @@ private fun FileCard(message: Message, contentColor: Color) {
             }
         }
         Text(
-            "${media.name.ifBlank { "File" }} · ${byteSize(media.size)} · $status",
+            "${media.name.ifBlank { stringResource(R.string.chat_file) }} · ${byteSize(media.size)} · $status",
             style = MaterialTheme.typography.labelSmall,
             color = contentColor.copy(alpha = 0.75f),
             maxLines = 1,
@@ -317,7 +323,7 @@ private fun FileCard(message: Message, contentColor: Color) {
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                media.name.ifBlank { "File" },
+                media.name.ifBlank { stringResource(R.string.chat_file) },
                 style = MaterialTheme.typography.bodyMedium,
                 color = contentColor,
                 maxLines = 2,
@@ -373,7 +379,7 @@ private fun VoiceMessage(message: Message, contentColor: Color) {
                 .clip(CircleShape)
                 .background(contentColor.copy(alpha = 0.14f))
                 // No double tap here: play starts at once.
-                .mediaClickable(role = Role.Button, onClickLabel = if (playing) "Pause" else "Play", doubleTap = false) {
+                .mediaClickable(role = Role.Button, onClickLabel = stringResource(if (playing) R.string.chat_voice_pause else R.string.chat_voice_play), doubleTap = false) {
                     if (loading) return@mediaClickable
                     scope.launch {
                         loading = true
@@ -399,7 +405,7 @@ private fun VoiceMessage(message: Message, contentColor: Color) {
                 loading -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = contentColor)
                 else -> Icon(
                     if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = if (playing) "Pause voice message" else "Play voice message",
+                    contentDescription = stringResource(if (playing) R.string.chat_voice_pause_description else R.string.chat_voice_play_description),
                     tint = contentColor,
                     modifier = Modifier.size(24.dp),
                 )
@@ -424,9 +430,9 @@ private fun VoiceMessage(message: Message, contentColor: Color) {
             Spacer(Modifier.height(5.dp))
             Text(
                 text = when {
-                    failed -> "Can't play this voice message"
+                    failed -> stringResource(R.string.chat_voice_cant_play)
                     current -> clock(player.positionMs) + (if (total > 0) " / " + clock(total) else "")
-                    else -> if (total > 0) clock(total) else "Voice message"
+                    else -> if (total > 0) clock(total) else stringResource(R.string.chat_voice_message)
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = contentColor.copy(alpha = 0.75f),
@@ -485,14 +491,16 @@ private fun PhotoThumb(message: Message) {
         4f / 3f
     }
     val photo by rememberPhoto(message.id, maxSide = 720)
+    val photoLabel = stringResource(R.string.chat_photo)
+    val hdLabel = stringResource(R.string.chat_photo_hd_description)
     Box(
         Modifier
             .widthIn(min = 180.dp, max = 280.dp)
             .aspectRatio(ratio)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            .mediaClickable(onClickLabel = "Open photo") { host.openPhoto(message.id) }
-            .semantics { contentDescription = "Photo" },
+            .mediaClickable(onClickLabel = stringResource(R.string.chat_photo_open)) { host.openPhoto(message.id) }
+            .semantics { contentDescription = photoLabel },
         contentAlignment = Alignment.Center,
     ) {
         val p = photo
@@ -517,7 +525,7 @@ private fun PhotoThumb(message: Message) {
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color.Black.copy(alpha = 0.55f))
                     .padding(horizontal = 6.dp, vertical = 2.dp)
-                    .semantics { contentDescription = "HD photo" },
+                    .semantics { contentDescription = hdLabel },
             )
         }
     }
@@ -559,7 +567,7 @@ fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
             if (p != null) {
                 Image(
                     p,
-                    contentDescription = "Photo",
+                    contentDescription = stringResource(R.string.chat_photo),
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
@@ -579,7 +587,7 @@ fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
                     .align(Alignment.TopStart)
                     .padding(8.dp),
             ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Close photo", tint = Color.White)
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.chat_photo_close), tint = Color.White)
             }
             if (message != null && media?.hd == true && !hdHere) {
                 val progress = host?.fileProgress?.value?.get(messageId + "-hd")
@@ -587,10 +595,10 @@ fun PhotoViewer(messageId: String, message: Message?, onDismiss: () -> Unit) {
                 val queued = media.fileState == com.sotto.app.domain.model.FileState.DOWNLOADING
                 Text(
                     text = when {
-                        progress != null -> "Downloading HD ${(progress * 100).toInt()}%"
-                        queued -> "Downloading HD…"
-                        gone -> "The HD copy is no longer available"
-                        else -> "Download HD · ${byteSize(media.size)}"
+                        progress != null -> stringResource(R.string.chat_hd_downloading_percent, (progress * 100).toInt())
+                        queued -> stringResource(R.string.chat_hd_downloading)
+                        gone -> stringResource(R.string.chat_hd_gone)
+                        else -> stringResource(R.string.chat_hd_download, byteSize(media.size))
                     },
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White,
@@ -615,13 +623,13 @@ internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onFile: () -> U
         IconButton(onClick = { open = true }, enabled = enabled, modifier = Modifier.size(48.dp)) {
             Icon(
                 Icons.Rounded.AttachFile,
-                contentDescription = "Attach a photo or file",
+                contentDescription = stringResource(R.string.chat_attach),
                 tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
             )
         }
         androidx.compose.material3.DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             androidx.compose.material3.DropdownMenuItem(
-                text = { Text("Photo") },
+                text = { Text(stringResource(R.string.chat_attach_photo)) },
                 leadingIcon = { Icon(Icons.Rounded.Image, contentDescription = null) },
                 onClick = {
                     open = false
@@ -629,7 +637,7 @@ internal fun AttachButton(enabled: Boolean, onPhoto: () -> Unit, onFile: () -> U
                 },
             )
             androidx.compose.material3.DropdownMenuItem(
-                text = { Text("File or video") },
+                text = { Text(stringResource(R.string.chat_attach_file)) },
                 leadingIcon = { Icon(Icons.Rounded.Description, contentDescription = null) },
                 onClick = {
                     open = false
@@ -664,6 +672,7 @@ internal fun MicButton(
     val lockAt = with(density) { LockSlide.toPx() }
     val holding = state == RecordState.HOLDING
     val grow by animateFloatAsState(if (holding) 1.35f else 1f, label = "micGrow")
+    val micLabel = stringResource(R.string.chat_mic_description)
     Box(
         modifier = Modifier
             .size(52.dp)
@@ -677,7 +686,7 @@ internal fun MicButton(
                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
                 ),
             )
-            .semantics { contentDescription = "Hold to record a voice message" }
+            .semantics { contentDescription = micLabel }
             .pointerInput(enabled) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
@@ -766,14 +775,14 @@ internal fun RecordingBar(
         if (state == RecordState.LOCKED) {
             // Send is the big button beside the bar.
             IconButton(onClick = onDelete) {
-                Icon(Icons.Rounded.Delete, contentDescription = "Delete recording", tint = colors.error)
+                Icon(Icons.Rounded.Delete, contentDescription = stringResource(R.string.chat_recording_delete), tint = colors.error)
             }
         } else {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.offset { IntOffset((slideX * 0.6f).roundToInt(), 0) },
             ) {
-                Text("‹ Slide to cancel", style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                Text(stringResource(R.string.chat_recording_slide_to_cancel), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                 Spacer(Modifier.width(12.dp))
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -781,7 +790,7 @@ internal fun RecordingBar(
                     modifier = Modifier.offset { IntOffset(0, (slideY * 0.4f).roundToInt()) },
                 ) {
                     Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
-                    Icon(Icons.Rounded.Lock, contentDescription = "Slide up to lock", tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Rounded.Lock, contentDescription = stringResource(R.string.chat_recording_slide_to_lock), tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -828,18 +837,19 @@ fun PhotoSendScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onDismiss) {
-                Icon(Icons.Rounded.Close, contentDescription = "Don't send", tint = Color.White)
+                Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.chat_photo_dont_send), tint = Color.White)
             }
             Spacer(Modifier.weight(1f))
             // The quality switch: HD sends the full-size copy too.
             val hdColors = if (hd) Color.White to Color.Black else Color.White.copy(alpha = 0.16f) to Color.White
+            val hdState = stringResource(if (hd) R.string.chat_photo_hd_on else R.string.chat_photo_hd_off)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedCornerShape(18.dp))
                     .background(hdColors.first)
-                    .clickable(role = Role.Switch, onClickLabel = if (hd) "Send in standard quality" else "Send in HD") { hd = !hd }
-                    .semantics { contentDescription = if (hd) "HD on" else "HD off" }
+                    .clickable(role = Role.Switch, onClickLabel = stringResource(if (hd) R.string.chat_photo_send_standard else R.string.chat_photo_send_hd)) { hd = !hd }
+                    .semantics { contentDescription = hdState }
                     .padding(horizontal = 10.dp, vertical = 6.dp),
             ) {
                 Icon(Icons.Rounded.Hd, contentDescription = null, tint = hdColors.second, modifier = Modifier.size(26.dp))
@@ -854,7 +864,7 @@ fun PhotoSendScreen(
         ) {
             val p = preview
             if (p != null) {
-                Image(p, contentDescription = "Photo to send", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                Image(p, contentDescription = stringResource(R.string.chat_photo_to_send), contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
             } else {
                 CircularProgressIndicator(color = Color.White)
             }
@@ -869,7 +879,7 @@ fun PhotoSendScreen(
             androidx.compose.material3.TextField(
                 value = caption,
                 onValueChange = { caption = it },
-                placeholder = { Text("Add a caption") },
+                placeholder = { Text(stringResource(R.string.chat_photo_caption_hint)) },
                 maxLines = 4,
                 shape = RoundedCornerShape(24.dp),
                 colors = androidx.compose.material3.TextFieldDefaults.colors(
@@ -884,10 +894,10 @@ fun PhotoSendScreen(
                     .size(52.dp)
                     .clip(CircleShape)
                     .background(Brush.linearGradient(Aurora.colors.brand))
-                    .clickable(role = Role.Button, onClickLabel = "Send photo") { onSend(caption.trim(), hd) },
+                    .clickable(role = Role.Button, onClickLabel = stringResource(R.string.chat_photo_send)) { onSend(caption.trim(), hd) },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Rounded.ArrowUpward, contentDescription = "Send photo", tint = Color.White)
+                Icon(Icons.Rounded.ArrowUpward, contentDescription = stringResource(R.string.chat_photo_send), tint = Color.White)
             }
         }
     }

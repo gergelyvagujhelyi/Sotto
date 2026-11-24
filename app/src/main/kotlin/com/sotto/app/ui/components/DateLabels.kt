@@ -1,6 +1,14 @@
 package com.sotto.app.ui.components
 
+import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import com.sotto.app.R
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+import kotlinx.datetime.toJavaLocalDate
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.lifecycle.Lifecycle
@@ -8,11 +16,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
-import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
-import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
@@ -39,28 +45,69 @@ fun rememberToday(): LocalDate {
 /** HH:mm, 24-hour. */
 internal fun LocalTime.clockTime(): String = "%02d:%02d".format(hour, minute)
 
-private fun Month.shortName() = name.take(3).lowercase().replaceFirstChar { it.uppercase() }
-private fun DayOfWeek.fullName() = name.lowercase().replaceFirstChar { it.uppercase() }
-private fun DayOfWeek.shortName() = fullName().take(3)
+/**
+ * How dates are written in the app's language: the words for today and yesterday, and
+ * java.time patterns whose month and day names come from [locale]. The patterns and the
+ * locale are strings of the translation (strings_chat.xml), so a phone in a language Sotto
+ * isn't translated to keeps the English dates along with the English text.
+ */
+class DateFormats(
+    val today: String,
+    val yesterday: String,
+    locale: Locale,
+    weekday: String,
+    dayThisYear: String,
+    dayOtherYear: String,
+    listThisYear: String,
+    listOtherYear: String,
+) {
+    internal val weekday: DateTimeFormatter = DateTimeFormatter.ofPattern(weekday, locale)
+    internal val dayThisYear: DateTimeFormatter = DateTimeFormatter.ofPattern(dayThisYear, locale)
+    internal val dayOtherYear: DateTimeFormatter = DateTimeFormatter.ofPattern(dayOtherYear, locale)
+    internal val listThisYear: DateTimeFormatter = DateTimeFormatter.ofPattern(listThisYear, locale)
+    internal val listOtherYear: DateTimeFormatter = DateTimeFormatter.ofPattern(listOtherYear, locale)
+
+    companion object {
+        fun from(context: Context): DateFormats = DateFormats(
+            today = context.getString(R.string.chat_date_today),
+            yesterday = context.getString(R.string.chat_date_yesterday),
+            locale = Locale.forLanguageTag(context.getString(R.string.chat_date_locale)),
+            weekday = context.getString(R.string.chat_date_weekday),
+            dayThisYear = context.getString(R.string.chat_date_this_year),
+            dayOtherYear = context.getString(R.string.chat_date_other_year),
+            listThisYear = context.getString(R.string.conversations_date_this_year),
+            listOtherYear = context.getString(R.string.conversations_date_other_year),
+        )
+    }
+}
+
+/** [DateFormats] in the app's language, made again when the language changes. */
+@Composable
+fun rememberDateFormats(): DateFormats {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    return remember(context, configuration) { DateFormats.from(context) }
+}
 
 /** Day separator in a conversation: "Today", "Yesterday", a weekday, then "Mon, 3 Nov" or "3 Nov 2025". */
-internal fun dayLabel(date: LocalDate, today: LocalDate): String {
+internal fun dayLabel(date: LocalDate, today: LocalDate, formats: DateFormats): String {
     val daysAgo = today.toEpochDays() - date.toEpochDays()
+    val day = date.toJavaLocalDate()
     return when {
-        daysAgo == 0 -> "Today"
-        daysAgo == 1 -> "Yesterday"
-        daysAgo in 2..6 -> date.dayOfWeek.fullName()
-        date.year == today.year -> "${date.dayOfWeek.shortName()}, ${date.dayOfMonth} ${date.month.shortName()}"
-        else -> "${date.dayOfMonth} ${date.month.shortName()} ${date.year}"
+        daysAgo == 0 -> formats.today
+        daysAgo == 1 -> formats.yesterday
+        daysAgo in 2..6 -> formats.weekday.format(day)
+        date.year == today.year -> formats.dayThisYear.format(day)
+        else -> formats.dayOtherYear.format(day)
     }
 }
 
 /** Time of a conversation's last message: HH:mm today, "03 Nov" this year, "03/11/2025" before. */
-internal fun listTimestamp(instant: Instant, today: LocalDate): String {
+internal fun listTimestamp(instant: Instant, today: LocalDate, formats: DateFormats): String {
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
     return when {
         local.date == today -> local.time.clockTime()
-        local.year == today.year -> "%02d %s".format(local.dayOfMonth, local.month.shortName())
-        else -> "%02d/%02d/%d".format(local.dayOfMonth, local.monthNumber, local.year)
+        local.year == today.year -> formats.listThisYear.format(local.date.toJavaLocalDate())
+        else -> formats.listOtherYear.format(local.date.toJavaLocalDate())
     }
 }

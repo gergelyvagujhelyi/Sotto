@@ -11,6 +11,8 @@ import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.usecase.SendMessageUseCase
 import com.sotto.app.domain.usecase.SendMyNameUseCase
 import com.sotto.app.domain.repository.MessageRepository
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
 import android.util.Log
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -146,8 +148,8 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private val _sendError = MutableStateFlow<String?>(null)
-    val sendError: StateFlow<String?> = _sendError.asStateFlow()
+    private val _sendError = MutableStateFlow<UiText?>(null)
+    val sendError: StateFlow<UiText?> = _sendError.asStateFlow()
 
     private val _isReEstablishing = MutableStateFlow(false)
     val isReEstablishing: StateFlow<Boolean> = _isReEstablishing.asStateFlow()
@@ -223,15 +225,15 @@ class ChatViewModel @Inject constructor(
      * (null passed every check), or be gone (a rejected request opened from a stale
      * notification) — sending would then re-add the stranger and message them.
      */
-    private suspend fun whyNotSendable(): String? {
+    private suspend fun whyNotSendable(): UiText? {
         val conv = conversationRepository.getConversation(conversationId).first()
         return when {
-            conv == null -> "This conversation no longer exists."
+            conv == null -> UiText.res(R.string.chat_error_conversation_gone)
             conversationRepository.observeBlocked(contactId).first() ->
-                "You blocked this contact. Unblock them to send messages."
-            conv.peerDeleted -> "This user has deleted their account."
-            conv.needsSessionReset -> "Peer rotated keys. Tap the banner above to resume sending."
-            !conv.isApproved -> "Accept this message request before replying."
+                UiText.res(R.string.chat_error_blocked_send)
+            conv.peerDeleted -> UiText.res(R.string.chat_error_peer_deleted)
+            conv.needsSessionReset -> UiText.res(R.string.chat_error_keys_rotated)
+            !conv.isApproved -> UiText.res(R.string.chat_error_accept_before_reply)
             else -> null
         }
     }
@@ -248,8 +250,8 @@ class ChatViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     // Read when a button is pressed, so it's kept up to date even while nothing shows it.
-    private fun mediaRefusal(): String? = if (canSendMedia.value) null else
-        "You can send voice messages, photos and files once they've accepted your request."
+    private fun mediaRefusal(): UiText? = if (canSendMedia.value) null else
+        UiText.res(R.string.chat_error_media_before_accept)
 
     /** File transfers under way, by message id (0..1), for the file bubbles. */
     val fileProgress: StateFlow<Map<String, Float>> = messageRepository.fileProgress
@@ -269,7 +271,7 @@ class ChatViewModel @Inject constructor(
                         ?: error("No output")
                 }.isSuccess
             }
-            _sendError.value = if (ok) "Saved." else "The file couldn't be saved."
+            _sendError.value = UiText.res(if (ok) R.string.chat_file_saved else R.string.chat_error_file_not_saved)
         }
     }
 
@@ -280,7 +282,7 @@ class ChatViewModel @Inject constructor(
         return false
     }
 
-    fun reportError(message: String) {
+    fun reportError(message: UiText) {
         _sendError.value = message
     }
 
@@ -293,7 +295,7 @@ class ChatViewModel @Inject constructor(
         val replyTo = replyingTo.value
         val caption = draft.trim()
         if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
-            _sendError.value = "Caption is too long (max ${SendMessageUseCase.MAX_MESSAGE_LENGTH} characters)."
+            _sendError.value = UiText.plural(R.plurals.chat_error_caption_too_long, SendMessageUseCase.MAX_MESSAGE_LENGTH)
             return
         }
         viewModelScope.launch {
@@ -308,21 +310,21 @@ class ChatViewModel @Inject constructor(
             try {
                 messageRepository.sendFile(conversationId, contactId, uri, caption, replyTo)
             } catch (e: com.sotto.app.data.media.FileTooLargeException) {
-                _sendError.value = "Files can be up to ${e.maxBytes / (1024 * 1024)} MB."
+                _sendError.value = UiText.res(R.string.chat_error_file_max_size, (e.maxBytes / (1024 * 1024)).toInt())
             } catch (e: com.sotto.app.data.remote.ApiHttpException) {
                 _sendError.value = when {
                     // An older relay has no such endpoint (404); one without storage says so (503).
-                    e.status == 404 || e.status == 503 -> "This relay doesn't take files."
+                    e.status == 404 || e.status == 503 -> UiText.res(R.string.chat_error_relay_no_files)
                     else -> when (e.message) {
-                    "attachment_monthly_limit" -> "You've sent as much as this relay allows this month."
-                    "attachment_store_full", "attachment_relay_monthly_limit" -> "The relay's file storage is full for now."
-                    "attachment_too_large" -> "That file is too large for this relay."
-                    else -> "Failed to send file"
+                    "attachment_monthly_limit" -> UiText.res(R.string.chat_error_monthly_limit)
+                    "attachment_store_full", "attachment_relay_monthly_limit" -> UiText.res(R.string.chat_error_relay_storage_full)
+                    "attachment_too_large" -> UiText.res(R.string.chat_error_file_too_large)
+                    else -> UiText.res(R.string.chat_error_send_file)
                     }
                 }
             } catch (e: Exception) {
                 Log.w("ChatViewModel", "Sending file failed: ${e.message}")
-                _sendError.value = "Failed to send file"
+                _sendError.value = UiText.res(R.string.chat_error_send_file)
             }
         }
     }
@@ -347,13 +349,13 @@ class ChatViewModel @Inject constructor(
                 }
                 val file = messageRepository.decryptFileForOpening(message.id)
                 if (file == null) {
-                    _sendError.value = "This file isn't on this phone."
+                    _sendError.value = UiText.res(R.string.chat_error_file_not_here)
                     return@launch
                 }
                 _openFile.tryEmit(OpenedFile(file, media.mime.ifBlank { "application/octet-stream" }))
             } catch (e: Exception) {
                 Log.w("ChatViewModel", "File failed: ${e.message}")
-                _sendError.value = "The file couldn't be downloaded. Try again."
+                _sendError.value = UiText.res(R.string.chat_error_download_failed)
             }
         }
     }
@@ -399,7 +401,7 @@ class ChatViewModel @Inject constructor(
         val replyTo = replyingTo.value
         val composer = draft.trim()
         if (caption.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
-            _sendError.value = "Caption is too long (max ${SendMessageUseCase.MAX_MESSAGE_LENGTH} characters)."
+            _sendError.value = UiText.plural(R.plurals.chat_error_caption_too_long, SendMessageUseCase.MAX_MESSAGE_LENGTH)
             return
         }
         viewModelScope.launch {
@@ -407,7 +409,7 @@ class ChatViewModel @Inject constructor(
                 runCatching { com.sotto.app.media.PhotoShrinker.shrink(appContext, uri) }.getOrNull()
             }
             if (photo == null) {
-                _sendError.value = "That picture couldn't be opened."
+                _sendError.value = UiText.res(R.string.chat_error_photo_unreadable)
                 return@launch
             }
             // HD: also a full-size copy, through the relay's store. Not for a picture that's
@@ -428,7 +430,7 @@ class ChatViewModel @Inject constructor(
             }
             if (hd && made == null) {
                 // Out of memory, say: the user asked for HD, so they hear it didn't happen.
-                _sendError.value = "The HD copy couldn't be made; the photo goes in normal quality."
+                _sendError.value = UiText.res(R.string.chat_error_hd_failed)
             }
             val full = made?.takeIf { maxOf(it.width, it.height) > maxOf(photo.width, photo.height) }
             val sent = sendMediaNow(
@@ -463,7 +465,9 @@ class ChatViewModel @Inject constructor(
         } catch (e: Exception) {
             Log.w("ChatViewModel", "Sending media failed: ${e.message}")
             // The message stays in the chat as "Not delivered · Tap to retry" if it got that far.
-            _sendError.value = "Failed to send ${if (media.kind == com.sotto.app.domain.model.MediaKind.VOICE) "voice message" else "photo"}"
+            _sendError.value = UiText.res(
+                if (media.kind == com.sotto.app.domain.model.MediaKind.VOICE) R.string.chat_error_send_voice else R.string.chat_error_send_photo,
+            )
             false
         }
     }
@@ -478,7 +482,7 @@ class ChatViewModel @Inject constructor(
         if (text.length > SendMessageUseCase.MAX_MESSAGE_LENGTH) {
             // Checked before clearing the composer: the use case rejects it before
             // anything is stored, so the text would otherwise just vanish.
-            _sendError.value = "Message is too long (max ${SendMessageUseCase.MAX_MESSAGE_LENGTH} characters)."
+            _sendError.value = UiText.plural(R.plurals.chat_error_message_too_long, SendMessageUseCase.MAX_MESSAGE_LENGTH)
             return
         }
 
@@ -497,7 +501,7 @@ class ChatViewModel @Inject constructor(
             _sendError.value = null
             sendMessage(conversationId, contactId, text, replyTo)
                 .onFailure { e ->
-                    _sendError.value = "Failed to send message"
+                    _sendError.value = UiText.res(R.string.chat_error_send_message)
                 }
         }
     }
@@ -512,12 +516,12 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val conv = conversationRepository.getConversation(conversationId).first()
             val blocked = when {
-                conv == null -> "This conversation no longer exists."
+                conv == null -> UiText.res(R.string.chat_error_conversation_gone)
                 conversationRepository.observeBlocked(contactId).first() ->
-                    "You blocked this contact. Unblock them to react."
-                conv.peerDeleted -> "This user has deleted their account."
-                conv.needsSessionReset -> "Peer rotated keys. Tap the banner above to resume sending."
-                !conv.isApproved -> "Accept this message request before reacting."
+                    UiText.res(R.string.chat_error_blocked_react)
+                conv.peerDeleted -> UiText.res(R.string.chat_error_peer_deleted)
+                conv.needsSessionReset -> UiText.res(R.string.chat_error_keys_rotated)
+                !conv.isApproved -> UiText.res(R.string.chat_error_accept_before_react)
                 else -> null
             }
             if (blocked != null) {
@@ -527,7 +531,7 @@ class ChatViewModel @Inject constructor(
             try {
                 messageRepository.sendReaction(message, contactId, next)
             } catch (e: Exception) {
-                _sendError.value = "Couldn't send the reaction. Check your connection and try again."
+                _sendError.value = UiText.res(R.string.chat_error_send_reaction)
             }
         }
     }
@@ -539,7 +543,7 @@ class ChatViewModel @Inject constructor(
             try {
                 messageRepository.reEstablishSession(contactId)
             } catch (e: Exception) {
-                _sendError.value = "Failed to re-establish session. Try again."
+                _sendError.value = UiText.res(R.string.chat_error_reestablish)
             } finally {
                 _isReEstablishing.value = false
             }
@@ -551,7 +555,7 @@ class ChatViewModel @Inject constructor(
             try {
                 messageRepository.retryFailed(messageId)
             } catch (e: Exception) {
-                _sendError.value = "Retry failed"
+                _sendError.value = UiText.res(R.string.chat_error_retry)
             }
         }
     }
