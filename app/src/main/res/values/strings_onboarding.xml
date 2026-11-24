@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Setup: welcome, invite and relay, privacy, key type, name, notifications. -->
+<resources>
+    <!-- Welcome -->
+    <string name="onboarding_welcome_subtitle">Private messaging with post-quantum security.</string>
+    <string name="onboarding_get_started">Get started</string>
+    <string name="onboarding_feature_no_phone_title">No email. No phone number.</string>
+    <string name="onboarding_feature_no_phone_body">Your identity is a cryptographic key generated on this device.</string>
+    <string name="onboarding_feature_pq_title">Post-quantum encryption</string>
+    <string name="onboarding_feature_pq_body">Hybrid ML-KEM-768 + X25519, end to end.</string>
+    <string name="onboarding_feature_no_tracking_title">No tracking</string>
+    <string name="onboarding_feature_no_tracking_body">The relay server only ever sees encrypted envelopes.</string>
+
+    <!-- Privacy -->
+    <string name="onboarding_privacy_title">Your privacy model</string>
+    <string name="onboarding_privacy_understand">I understand</string>
+    <string name="onboarding_privacy_device_title">On this device only</string>
+    <string name="onboarding_privacy_device_body">Your identity lives on this device only.</string>
+    <string name="onboarding_privacy_encrypted_title">Encrypted before it leaves</string>
+    <string name="onboarding_privacy_encrypted_body">Messages are encrypted before they leave your phone.</string>
+    <string name="onboarding_privacy_relay_title">A blind relay</string>
+    <string name="onboarding_privacy_relay_body">The relay server sees only encrypted envelopes — it cannot read your messages.</string>
+    <string name="onboarding_privacy_warning">Important: If you lose this device without a backup, your identity and message history cannot be recovered.</string>
+
+    <!-- Key type -->
+    <string name="onboarding_keys_title">Choose your key type</string>
+    <string name="onboarding_keys_subtitle">This determines the cryptographic algorithms used for your identity.</string>
+    <string name="onboarding_keys_pq_title">Post-Quantum</string>
+    <string name="onboarding_keys_pq_description">Protects against future quantum computers. Uses NIST-standardized algorithms alongside classical crypto as a safety net.</string>
+    <string name="onboarding_keys_recommended">Recommended</string>
+    <string name="onboarding_keys_standard_title">Standard</string>
+    <string name="onboarding_keys_standard_description">Battle-tested, fast, and trusted by millions.</string>
+    <string name="onboarding_keys_legacy">Legacy</string>
+
+    <!-- Invite and relay -->
+    <string name="onboarding_invite_title">Your invite</string>
+    <string name="onboarding_invite_subtitle">Sotto is by invitation. Tap the invite link someone sent you, paste it here, or scan their invite QR. Starting your own relay? Type its address.</string>
+    <string name="onboarding_checking">Checking…</string>
+    <string name="onboarding_invite_placeholder">Invite link</string>
+    <string name="onboarding_scan_invite">Scan an invite QR</string>
+    <string name="onboarding_join_title">Join this relay?</string>
+    <string name="onboarding_join_subtitle">Your account will live on %1$s. Its operator can see who talks to whom and when, never what you say. Only continue if you trust whoever sent you here.</string>
+    <string name="onboarding_join_invite_included">Your invite is included.</string>
+    <string name="onboarding_join_button">Join %1$s</string>
+    <string name="onboarding_other_relay">Use a different relay</string>
+    <string name="onboarding_not_an_invite">That isn\'t an invite link. Paste the whole link you were sent.</string>
+    <string name="onboarding_relay_unreachable">Couldn\'t reach %1$s. Check the address and your connection.</string>
+    <string name="onboarding_not_a_relay">%1$s isn\'t a Sotto relay.</string>
+    <string name="onboarding_host_invite_only">%1$s takes new people only with an invite link. Ask someone on it to send you one.</string>
+    <string name="onboarding_invite_required">This relay takes new people only with an invite link. Ask someone on it to send you one.</string>
+    <string name="onboarding_invite_invalid">That invite doesn\'t work on this relay. Ask for a new one.</string>
+    <string name="onboarding_invite_used">This invite was already used. Ask for a new one.</string>
+    <string name="onboarding_invite_expired">This invite has expired. Ask for a new one.</string>
+
+    <!-- Name -->
+    <string name="onboarding_name_title">Your name</string>
+    <string name="onboarding_name_subtitle">Optional. People you add see it, sent end-to-end encrypted; the relay never sees it. You can change it later in Settings.</string>
+    <string name="onboarding_name_placeholder">Your name</string>
+    <string name="onboarding_skip">Skip</string>
+
+    <!-- Notifications -->
+    <string name="onboarding_notifications_title">Notifications</string>
+    <string name="onboarding_notifications_subtitle">Allow notifications to receive messages when the app is in the background.</string>
+    <string name="onboarding_notifications_allow">Allow notifications</string>
+    <string name="onboarding_notifications_lock_title">On the lock screen</string>
+    <string name="onboarding_notifications_lock_body">Notifications show the sender and the message. You can hide either in Settings.</string>
+
+    <!-- Creating the identity -->
+    <string name="onboarding_generating">Generating your identity...</string>
+    <string name="onboarding_generating_subtitle">Creating your keys on this device</string>
+    <string name="onboarding_error_title">Something went wrong</string>
+    <string name="onboarding_retry">Retry</string>
+    <string name="onboarding_create_failed">Failed to create identity. Please try again.</string>
+</resources>

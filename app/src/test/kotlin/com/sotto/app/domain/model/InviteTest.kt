@@ -1,5 +1,7 @@
 package com.sotto.app.domain.model
 
+import com.sotto.app.R
+import com.sotto.app.ui.text.UiText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -124,11 +126,12 @@ class InviteTest {
 
     @Test
     fun `the relay's refusals become plain words`() {
-        assertEquals("This invite was already used. Ask for a new one.", inviteErrorMessage("invite_used"))
+        assertEquals(UiText.res(R.string.onboarding_invite_used), inviteErrorMessage("invite_used"))
         assertNotNull(inviteErrorMessage("invite_required"))
         assertNotNull(inviteErrorMessage("invite_invalid"))
         assertNotNull(inviteErrorMessage("invite_expired"))
         assertNull(inviteErrorMessage("Bootstrap failed: 500"))
-        assertEquals("You've created 10 invites today. Try again tomorrow.", inviteLimitMessage("invite_limit_daily"))
+        assertEquals(UiText.res(R.string.settings_invite_limit_daily), inviteLimitMessage("invite_limit_daily"))
+        assertEquals(UiText.res(R.string.settings_invite_failed), inviteLimitMessage("something else"))
     }
 }

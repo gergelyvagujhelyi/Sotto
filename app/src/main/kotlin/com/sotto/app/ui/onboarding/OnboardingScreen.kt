@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -93,6 +94,8 @@ import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.components.TagChip
 import com.sotto.app.ui.components.blockTouches
 import com.sotto.app.ui.components.isSettled
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.theme.Aurora
 
 @Composable
@@ -228,14 +231,14 @@ private fun WelcomeStep(onContinue: () -> Unit) {
                 textAlign = TextAlign.Center,
             )
         },
-        subtitle = "Private messaging with post-quantum security.",
-        primaryText = "Get started",
+        subtitle = stringResource(R.string.onboarding_welcome_subtitle),
+        primaryText = stringResource(R.string.onboarding_get_started),
         onPrimary = onContinue,
     ) {
         FeatureList(
-            Feature(Icons.Rounded.Fingerprint, "No email. No phone number.", "Your identity is a cryptographic key generated on this device."),
-            Feature(Icons.Rounded.Shield, "Post-quantum encryption", "Hybrid ML-KEM-768 + X25519, end to end."),
-            Feature(Icons.Rounded.VisibilityOff, "No tracking", "The relay server only ever sees encrypted envelopes."),
+            Feature(Icons.Rounded.Fingerprint, stringResource(R.string.onboarding_feature_no_phone_title), stringResource(R.string.onboarding_feature_no_phone_body)),
+            Feature(Icons.Rounded.Shield, stringResource(R.string.onboarding_feature_pq_title), stringResource(R.string.onboarding_feature_pq_body)),
+            Feature(Icons.Rounded.VisibilityOff, stringResource(R.string.onboarding_feature_no_tracking_title), stringResource(R.string.onboarding_feature_no_tracking_body)),
         )
     }
 }
@@ -245,21 +248,18 @@ private fun PrivacyStep(onContinue: () -> Unit) {
     OnboardingPage(
         step = 2,
         hero = { HeroOrb(Icons.Rounded.Lock) },
-        title = { PageTitle("Your privacy model") },
+        title = { PageTitle(stringResource(R.string.onboarding_privacy_title)) },
         subtitle = null,
-        primaryText = "I understand",
+        primaryText = stringResource(R.string.onboarding_privacy_understand),
         onPrimary = onContinue,
     ) {
         FeatureList(
-            Feature(Icons.Rounded.PhoneAndroid, "On this device only", "Your identity lives on this device only."),
-            Feature(Icons.Rounded.Lock, "Encrypted before it leaves", "Messages are encrypted before they leave your phone."),
-            Feature(Icons.Rounded.Dns, "A blind relay", "The relay server sees only encrypted envelopes — it cannot read your messages."),
+            Feature(Icons.Rounded.PhoneAndroid, stringResource(R.string.onboarding_privacy_device_title), stringResource(R.string.onboarding_privacy_device_body)),
+            Feature(Icons.Rounded.Lock, stringResource(R.string.onboarding_privacy_encrypted_title), stringResource(R.string.onboarding_privacy_encrypted_body)),
+            Feature(Icons.Rounded.Dns, stringResource(R.string.onboarding_privacy_relay_title), stringResource(R.string.onboarding_privacy_relay_body)),
         )
         Spacer(Modifier.height(12.dp))
-        WarningCard(
-            "Important: If you lose this device without a backup, your identity " +
-                "and message history cannot be recovered.",
-        )
+        WarningCard(stringResource(R.string.onboarding_privacy_warning))
     }
 }
 
@@ -271,9 +271,9 @@ private fun KeySelectionStep(onSelected: (KeyType) -> Unit) {
     OnboardingPage(
         step = 3,
         hero = { HeroOrb(Icons.Rounded.Key, size = 104.dp) },
-        title = { PageTitle("Choose your key type") },
-        subtitle = "This determines the cryptographic algorithms used for your identity.",
-        primaryText = "Continue",
+        title = { PageTitle(stringResource(R.string.onboarding_keys_title)) },
+        subtitle = stringResource(R.string.onboarding_keys_subtitle),
+        primaryText = stringResource(R.string.common_continue),
         onPrimary = { onSelected(selected) },
     ) {
         Column(
@@ -281,20 +281,19 @@ private fun KeySelectionStep(onSelected: (KeyType) -> Unit) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             KeyOptionCard(
-                title = "Post-Quantum",
+                title = stringResource(R.string.onboarding_keys_pq_title),
                 algorithms = "ML-KEM-768 + X25519",
-                description = "Protects against future quantum computers. Uses NIST-standardized " +
-                    "algorithms alongside classical crypto as a safety net.",
-                tag = "Recommended",
+                description = stringResource(R.string.onboarding_keys_pq_description),
+                tag = stringResource(R.string.onboarding_keys_recommended),
                 recommended = true,
                 isSelected = selected == KeyType.HYBRID_POST_QUANTUM,
                 onClick = { selected = KeyType.HYBRID_POST_QUANTUM },
             )
             KeyOptionCard(
-                title = "Standard",
+                title = stringResource(R.string.onboarding_keys_standard_title),
                 algorithms = "X25519 + Ed25519",
-                description = "Battle-tested, fast, and trusted by millions.",
-                tag = "Legacy",
+                description = stringResource(R.string.onboarding_keys_standard_description),
+                tag = stringResource(R.string.onboarding_keys_legacy),
                 recommended = false,
                 isSelected = selected == KeyType.CLASSICAL,
                 onClick = { selected = KeyType.CLASSICAL },
@@ -396,26 +395,25 @@ private fun RelayChoiceStep(
         OnboardingPage(
             step = 1,
             hero = { HeroOrb(Icons.Rounded.Dns) },
-            title = { PageTitle("Your invite") },
-            subtitle = "Sotto is by invitation. Tap the invite link someone sent you, paste it here, or " +
-                "scan their invite QR. Starting your own relay? Type its address.",
-            primaryText = if (state.checking) "Checking…" else "Continue",
+            title = { PageTitle(stringResource(R.string.onboarding_invite_title)) },
+            subtitle = stringResource(R.string.onboarding_invite_subtitle),
+            primaryText = stringResource(if (state.checking) R.string.onboarding_checking else R.string.common_continue),
             onPrimary = { if (!state.checking && text.isNotBlank()) onSubmit(text) },
         ) {
             AuroraTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = "Invite link",
+                placeholder = stringResource(R.string.onboarding_invite_placeholder),
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) onSubmit(text) }),
-                errorMessage = state.error,
+                errorMessage = state.error?.asString(),
                 modifier = Modifier.fillMaxWidth(),
             )
             state.error?.let { StepError(it) }
             Spacer(Modifier.height(16.dp))
             SoftButton(
-                text = "Scan an invite QR",
+                text = stringResource(R.string.onboarding_scan_invite),
                 icon = Icons.Rounded.QrCodeScanner,
                 onClick = onScanInvite,
                 modifier = Modifier.fillMaxWidth(),
@@ -426,13 +424,12 @@ private fun RelayChoiceStep(
         OnboardingPage(
             step = 1,
             hero = { HeroOrb(Icons.Rounded.Dns) },
-            title = { PageTitle("Join this relay?") },
-            subtitle = "Your account will live on $host. Its operator can see who talks to whom and when, " +
-                "never what you say. Only continue if you trust whoever sent you here." +
-                if (state.code.isNotBlank()) " Your invite is included." else "",
-            primaryText = "Join $host",
+            title = { PageTitle(stringResource(R.string.onboarding_join_title)) },
+            subtitle = stringResource(R.string.onboarding_join_subtitle, host) +
+                if (state.code.isNotBlank()) " " + stringResource(R.string.onboarding_join_invite_included) else "",
+            primaryText = stringResource(R.string.onboarding_join_button, host),
             onPrimary = onConfirm,
-            secondaryText = "Use a different relay",
+            secondaryText = stringResource(R.string.onboarding_other_relay),
             onSecondary = onChooseAnother,
         ) {
             state.error?.let { StepError(it) }
@@ -441,10 +438,10 @@ private fun RelayChoiceStep(
 }
 
 @Composable
-private fun StepError(message: String) {
+private fun StepError(message: UiText) {
     Spacer(Modifier.height(8.dp))
     Text(
-        text = message,
+        text = message.asString(),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.error,
         textAlign = TextAlign.Center,
@@ -458,18 +455,17 @@ private fun NameStep(onContinue: (String) -> Unit, onSkip: () -> Unit) {
     OnboardingPage(
         step = 4,
         hero = { HeroOrb(Icons.Rounded.Badge) },
-        title = { PageTitle("Your name") },
-        subtitle = "Optional. People you add see it, sent end-to-end encrypted; the relay never " +
-            "sees it. You can change it later in Settings.",
-        primaryText = "Continue",
+        title = { PageTitle(stringResource(R.string.onboarding_name_title)) },
+        subtitle = stringResource(R.string.onboarding_name_subtitle),
+        primaryText = stringResource(R.string.common_continue),
         onPrimary = { onContinue(name) },
-        secondaryText = "Skip",
+        secondaryText = stringResource(R.string.onboarding_skip),
         onSecondary = onSkip,
     ) {
         AuroraTextField(
             value = name,
             onValueChange = { if (it.codePointCount(0, it.length) <= DisplayNames.MAX_LENGTH) name = it },
-            placeholder = "Your name",
+            placeholder = stringResource(R.string.onboarding_name_placeholder),
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Words,
@@ -486,18 +482,18 @@ private fun NotificationStep(onAllow: () -> Unit, onSkip: () -> Unit) {
     OnboardingPage(
         step = 5,
         hero = { HeroOrb(Icons.Rounded.Notifications) },
-        title = { PageTitle("Notifications") },
-        subtitle = "Allow notifications to receive messages when the app is in the background.",
-        primaryText = "Allow notifications",
+        title = { PageTitle(stringResource(R.string.onboarding_notifications_title)) },
+        subtitle = stringResource(R.string.onboarding_notifications_subtitle),
+        primaryText = stringResource(R.string.onboarding_notifications_allow),
         onPrimary = onAllow,
-        secondaryText = "Skip",
+        secondaryText = stringResource(R.string.onboarding_skip),
         onSecondary = onSkip,
     ) {
         FeatureList(
             Feature(
                 Icons.Rounded.Visibility,
-                "On the lock screen",
-                "Notifications show the sender and the message. You can hide either in Settings.",
+                stringResource(R.string.onboarding_notifications_lock_title),
+                stringResource(R.string.onboarding_notifications_lock_body),
             ),
         )
     }
@@ -523,13 +519,13 @@ private fun GeneratingStep() {
         }
         Spacer(Modifier.height(48.dp))
         ShimmerText(
-            text = "Generating your identity...",
+            text = stringResource(R.string.onboarding_generating),
             style = MaterialTheme.typography.titleLarge,
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Creating your keys on this device",
+            text = stringResource(R.string.onboarding_generating_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -538,13 +534,13 @@ private fun GeneratingStep() {
 }
 
 @Composable
-private fun ErrorStep(message: String, onRetry: () -> Unit) {
+private fun ErrorStep(message: UiText, onRetry: () -> Unit) {
     OnboardingPage(
         step = null,
         hero = { HeroOrb(Icons.Rounded.ErrorOutline) },
-        title = { PageTitle("Something went wrong") },
-        subtitle = message,
-        primaryText = "Retry",
+        title = { PageTitle(stringResource(R.string.onboarding_error_title)) },
+        subtitle = message.asString(),
+        primaryText = stringResource(R.string.onboarding_retry),
         onPrimary = onRetry,
     )
 }

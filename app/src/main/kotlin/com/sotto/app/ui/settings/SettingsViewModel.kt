@@ -2,11 +2,13 @@ package com.sotto.app.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sotto.app.R
 import com.sotto.app.domain.model.DisappearingDuration
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.repository.SettingsRepository
+import com.sotto.app.ui.text.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,8 +50,8 @@ class SettingsViewModel @Inject constructor(
     /** A fresh invite to show and share; null when none is open. */
     val invite: StateFlow<InviteShare?> = _invite
 
-    private val _inviteError = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
-    val inviteError: StateFlow<String?> = _inviteError
+    private val _inviteError = kotlinx.coroutines.flow.MutableStateFlow<UiText?>(null)
+    val inviteError: StateFlow<UiText?> = _inviteError
 
     private var creatingInvite = false
 
@@ -71,7 +73,7 @@ class SettingsViewModel @Inject constructor(
             } catch (e: com.sotto.app.data.remote.ApiHttpException) {
                 _inviteError.value = com.sotto.app.domain.model.inviteLimitMessage(e.message)
             } catch (e: Exception) {
-                _inviteError.value = "Couldn't create an invite. Check your connection and try again."
+                _inviteError.value = UiText.res(R.string.settings_invite_error)
             } finally {
                 creatingInvite = false
             }
@@ -113,8 +115,8 @@ class SettingsViewModel @Inject constructor(
     private val _wipeCompleted = MutableStateFlow(false)
     val wipeCompleted: StateFlow<Boolean> = _wipeCompleted.asStateFlow()
 
-    private val _wipeError = MutableStateFlow<String?>(null)
-    val wipeError: StateFlow<String?> = _wipeError.asStateFlow()
+    private val _wipeError = MutableStateFlow<UiText?>(null)
+    val wipeError: StateFlow<UiText?> = _wipeError.asStateFlow()
 
     private val _showRotateConfirmation = MutableStateFlow(false)
     val showRotateConfirmation: StateFlow<Boolean> = _showRotateConfirmation.asStateFlow()
@@ -122,8 +124,8 @@ class SettingsViewModel @Inject constructor(
     private val _isRotatingKeys = MutableStateFlow(false)
     val isRotatingKeys: StateFlow<Boolean> = _isRotatingKeys.asStateFlow()
 
-    private val _rotationError = MutableStateFlow<String?>(null)
-    val rotationError: StateFlow<String?> = _rotationError.asStateFlow()
+    private val _rotationError = MutableStateFlow<UiText?>(null)
+    val rotationError: StateFlow<UiText?> = _rotationError.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -310,10 +312,7 @@ class SettingsViewModel @Inject constructor(
                 action()
                 _wipeCompleted.value = true
             } catch (_: Exception) {
-                _wipeError.value = "We could not reach the server to delete your account. " +
-                    "Your contacts may still try to send you messages.\n\n" +
-                    "Please check your internet connection and tap Retry, " +
-                    "or tap Delete Anyway to continue without server notification."
+                _wipeError.value = UiText.res(R.string.settings_wipe_unreachable_text)
             }
         }
     }
@@ -340,9 +339,9 @@ class SettingsViewModel @Inject constructor(
             } catch (e: Exception) {
                 android.util.Log.e("SettingsVM", "Key rotation failed", e)
                 _rotationError.value = when (e) {
-                    is java.io.IOException -> "Network error — check your connection and try again."
-                    is IllegalStateException -> "Key rotation failed — local key error."
-                    else -> "Key rotation failed. Please try again."
+                    is java.io.IOException -> UiText.res(R.string.settings_rotate_failed_network)
+                    is IllegalStateException -> UiText.res(R.string.settings_rotate_failed_local)
+                    else -> UiText.res(R.string.settings_rotate_failed)
                 }
             } finally {
                 _isRotatingKeys.value = false
