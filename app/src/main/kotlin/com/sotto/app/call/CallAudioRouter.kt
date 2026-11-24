@@ -9,8 +9,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import com.sotto.app.R
 import com.sotto.app.domain.model.AudioRoute
 import com.sotto.app.domain.model.AudioRouteKind
+import com.sotto.app.ui.text.UiText
 
 /**
  * A call's audio route: the earpiece, the speaker, a wired or USB headset, a hearing aid or a
@@ -427,15 +429,15 @@ internal fun reassertTarget(current: AudioRoute?, chosen: AudioRoute?, available
 }
 
 /** "Phone", "Speaker", or the device's own name for headsets and Bluetooth (a car's name). */
-internal fun routeLabel(kind: AudioRouteKind, productName: String?): String {
-    val name = productName?.trim()?.takeIf { it.isNotEmpty() }
+internal fun routeLabel(kind: AudioRouteKind, productName: String?): UiText {
+    val name = productName?.trim()?.takeIf { it.isNotEmpty() }?.let { UiText.Plain(it) }
     return when (kind) {
-        AudioRouteKind.EARPIECE -> "Phone"
-        AudioRouteKind.SPEAKER -> "Speaker"
-        AudioRouteKind.WIRED -> name ?: "Headset"
-        AudioRouteKind.USB -> name ?: "USB headset"
-        AudioRouteKind.BLUETOOTH -> name ?: "Bluetooth"
-        AudioRouteKind.HEARING_AID -> name ?: "Hearing aid"
+        AudioRouteKind.EARPIECE -> UiText.res(R.string.call_route_phone)
+        AudioRouteKind.SPEAKER -> UiText.res(R.string.call_route_speaker)
+        AudioRouteKind.WIRED -> name ?: UiText.res(R.string.call_route_headset)
+        AudioRouteKind.USB -> name ?: UiText.res(R.string.call_route_usb_headset)
+        AudioRouteKind.BLUETOOTH -> name ?: UiText.res(R.string.call_route_bluetooth)
+        AudioRouteKind.HEARING_AID -> name ?: UiText.res(R.string.call_route_hearing_aid)
     }
 }
 

@@ -58,7 +58,7 @@ class PushSyncWorker @AssistedInject constructor(
         NOTIFICATION_ID,
         NotificationCompat.Builder(applicationContext, ChatNotificationManager.CHANNEL_BACKGROUND_CONNECTION)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Checking for messages")
+            .setContentTitle(applicationContext.getString(R.string.notification_checking_messages))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .build(),

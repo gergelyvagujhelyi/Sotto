@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import android.net.Uri
 import com.sotto.app.call.CallManager
 import com.sotto.app.domain.model.CallState
+import com.sotto.app.ui.text.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +21,7 @@ class CallViewModel @Inject constructor(
 ) : ViewModel() {
 
     val callState: StateFlow<CallState?> = callManager.callState
-    val callError: StateFlow<String?> = callManager.callError
+    val callError: StateFlow<UiText?> = callManager.callError
 
     private val pendingContactId: String = savedStateHandle["contactId"] ?: ""
     private val pendingDisplayName: String = savedStateHandle.get<String>("displayName")
