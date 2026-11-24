@@ -42,6 +42,40 @@ def idle_timeout_seconds(has_push: bool) -> int:
     return config.WS_IDLE_TIMEOUT_SECONDS if has_push else config.WS_NO_PUSH_IDLE_TIMEOUT_SECONDS
 
 
+async def _has_push(db: AsyncSession, user_id: str) -> bool:
+    try:
+        token = (await db.execute(
+            select(Identity.fcm_token).where(Identity.user_id == user_id)
+        )).scalar_one_or_none()
+    finally:
+        await db.close()
+    return bool(token)
+
+
+async def _next_frame(websocket: WebSocket, db: AsyncSession, user_id: str, has_push: bool) -> tuple[Optional[str], bool]:
+    """The next text frame, or None once the socket has been quiet too long; and whether the
+    account has push now. A socket that logged in without push is checked again after every
+    WS_IDLE_TIMEOUT_SECONDS of quiet: a token registered since (a phone registers it after its
+    first login) gives it the short timeout, so a dead socket can't hold back its pushes for
+    longer than before."""
+    receive = asyncio.ensure_future(websocket.receive_text())
+    quiet = 0.0
+    try:
+        while True:
+            step = min(config.WS_IDLE_TIMEOUT_SECONDS, idle_timeout_seconds(has_push) - quiet)
+            if step <= 0:
+                return None, has_push
+            done, _ = await asyncio.wait({receive}, timeout=step)
+            if done:
+                return receive.result(), has_push
+            quiet += step
+            if not has_push:
+                has_push = await _has_push(db, user_id)
+    finally:
+        if not receive.done():
+            receive.cancel()
+
+
 @router.websocket("/v1/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -107,7 +141,7 @@ async def websocket_endpoint(
             await websocket.close(code=4003)
             return
         pub_key_b64, pqc_signing_key_b64, fcm_token = row
-        idle_timeout = idle_timeout_seconds(bool(fcm_token))
+        has_push = bool(fcm_token)
 
         try:
             user_id = verify_token(token, pub_key_b64, pqc_signing_key_b64 or "")
@@ -156,12 +190,8 @@ async def websocket_endpoint(
 
         # Keep alive loop — idle connections are closed after timeout
         while True:
-            try:
-                raw = await asyncio.wait_for(
-                    websocket.receive_text(),
-                    timeout=idle_timeout,
-                )
-            except asyncio.TimeoutError:
+            raw, has_push = await _next_frame(websocket, db, user_id, has_push)
+            if raw is None:
                 await websocket.close(code=4008, reason="Idle timeout")
                 break
             if len(raw) > _MAX_AUTH_MESSAGE_BYTES:

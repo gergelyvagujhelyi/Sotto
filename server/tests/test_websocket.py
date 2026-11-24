@@ -202,6 +202,32 @@ def test_a_phone_without_push_keeps_its_quiet_socket_longer(monkeypatch):
         assert _quiet_then_ping(tc, with_push, 0.8) == {"closed": 4008}
 
 
+
+def test_a_push_token_registered_after_login_brings_back_the_short_timeout(monkeypatch):
+    """A phone registers its push token after its socket logged in (first setup, a token
+    refresh). That socket mustn't keep the long timeout: once it has push, a dead socket
+    would hold back its pushes."""
+    from starlette.testclient import TestClient
+    from starlette.websockets import WebSocketDisconnect
+    from app import config
+    from app.main import app
+
+    monkeypatch.setattr(config, "WS_IDLE_TIMEOUT_SECONDS", 0.3)
+    monkeypatch.setattr(config, "WS_NO_PUSH_IDLE_TIMEOUT_SECONDS", 5)
+    with TestClient(app) as tc:
+        user = _bootstrap_user_sync(tc, "ws_push_later")
+        with tc.websocket_connect("/v1/ws") as ws:
+            ws.send_text(json.dumps({"type": "auth", "token": _make_token(user["private_key"], user["user_id"])}))
+            assert json.loads(ws.receive_text())["type"] == "auth_ok"
+            _register_push_sync(tc, user)
+            time.sleep(0.8)
+            try:
+                ws.send_text(json.dumps({"type": "ping"}))
+                answer = json.loads(ws.receive_text())
+            except WebSocketDisconnect as e:
+                answer = {"closed": e.code}
+    assert answer == {"closed": 4008}
+
 def test_idle_timeouts_by_push():
     from app import config
     from app.routers.websocket import idle_timeout_seconds
