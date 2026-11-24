@@ -208,4 +208,12 @@
     <string name="chat_date_weekday">EEEE</string>
     <string name="chat_date_this_year">EEE, d MMM</string>
     <string name="chat_date_other_year">d MMM yyyy</string>
+    <!-- What a screen reader says for a message's tick. -->
+    <string name="chat_state_sending">Sending</string>
+    <string name="chat_state_sent">Sent</string>
+    <string name="chat_state_delivered">Delivered</string>
+    <string name="chat_state_seen">Seen</string>
+    <string name="chat_state_failed">Not sent</string>
+    <string name="chat_state_decrypt_failed">Couldn\'t decrypt</string>
+    <string name="chat_state_rejected">Rejected</string>
 </resources>

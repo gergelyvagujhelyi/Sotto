@@ -207,4 +207,11 @@
     <string name="chat_date_weekday">EEEE</string>
     <string name="chat_date_this_year">MMM d., EEEE</string>
     <string name="chat_date_other_year">yyyy. MMM d.</string>
+    <string name="chat_state_sending">Küldés…</string>
+    <string name="chat_state_sent">Elküldve</string>
+    <string name="chat_state_delivered">Kézbesítve</string>
+    <string name="chat_state_seen">Olvasva</string>
+    <string name="chat_state_failed">Nincs elküldve</string>
+    <string name="chat_state_decrypt_failed">Nem sikerült visszafejteni</string>
+    <string name="chat_state_rejected">Elutasítva</string>
 </resources>

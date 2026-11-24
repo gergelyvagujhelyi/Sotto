@@ -602,7 +602,17 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
     }
     Icon(
         imageVector = icon,
-        contentDescription = state.name.lowercase(),
+        contentDescription = stringResource(
+            when (state) {
+                MessageState.SENDING -> R.string.chat_state_sending
+                MessageState.DELIVERED -> R.string.chat_state_delivered
+                MessageState.SEEN -> R.string.chat_state_seen
+                MessageState.FAILED -> R.string.chat_state_failed
+                MessageState.DECRYPT_FAILED -> R.string.chat_state_decrypt_failed
+                MessageState.REJECTED -> R.string.chat_state_rejected
+                else -> R.string.chat_state_sent
+            },
+        ),
         tint = tint,
         modifier = Modifier.size(15.dp),
     )
