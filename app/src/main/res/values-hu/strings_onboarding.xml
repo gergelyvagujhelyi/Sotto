@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Welcome -->
-    <string name="onboarding_welcome_subtitle">Privát üzenetküldés posztkvantum biztonsággal.</string>
+    <string name="onboarding_welcome_subtitle">Privát üzenetküldés posztkvantumos biztonsággal.</string>
     <string name="onboarding_get_started">Kezdjük</string>
     <string name="onboarding_feature_no_phone_title">Se e-mail, se telefonszám.</string>
     <string name="onboarding_feature_no_phone_body">Az identitásod egy kriptográfiai kulcs, amely ezen az eszközön készül.</string>

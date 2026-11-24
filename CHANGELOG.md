@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Sotto speaks Hungarian** — Every screen, notification and message the app shows now comes in English and Hungarian (informal, *te*). Sotto follows the phone's language; on Android 13 and later it can also have its own, from the new Language row in Settings > Display or Android's per-app language setting. Dates follow the language too ("Ma", "Tegnap", "nov. 3., hétfő"). Chat-list previews and call entries saved before a language switch keep the language they were saved in.
 
 ## 0.7.24 — 2026-11-24
 
