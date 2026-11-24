@@ -3,6 +3,7 @@ package com.sotto.app.ui.onboarding
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sotto.app.BuildConfig
+import com.sotto.app.R
 import com.sotto.app.connection.PendingInvite
 import com.sotto.app.connection.RelayConfig
 import com.sotto.app.connection.normalizeRelayUrl
@@ -23,6 +24,7 @@ import com.sotto.app.domain.repository.SettingsRepository
 import com.sotto.app.domain.usecase.AddContactUseCase
 import com.sotto.app.domain.usecase.CreateIdentityUseCase
 import com.sotto.app.domain.usecase.SendMyNameUseCase
+import com.sotto.app.ui.text.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -102,7 +104,7 @@ class OnboardingViewModel @Inject constructor(
         if (relay == null) {
             _state.value = OnboardingState.RelayChoice(
                 input = text,
-                error = "That isn't an invite link. Paste the whole link you were sent.",
+                error = UiText.res(R.string.onboarding_not_an_invite),
             )
             return
         }
@@ -133,16 +135,16 @@ class OnboardingViewModel @Inject constructor(
             _state.value = when {
                 unreachable -> OnboardingState.RelayChoice(
                     input = input.ifEmpty { relay },
-                    error = "Couldn't reach $host. Check the address and your connection.",
+                    error = UiText.res(R.string.onboarding_relay_unreachable, host),
                 )
                 health == null || !health.isSottoRelay -> OnboardingState.RelayChoice(
                     input = input.ifEmpty { relay },
-                    error = "$host isn't a Sotto relay.",
+                    error = UiText.res(R.string.onboarding_not_a_relay, host),
                 )
                 // Only an invite link gets someone in here: it carries the code with the relay.
                 health.inviteRequired && normalizeInviteCode(code) == null -> OnboardingState.RelayChoice(
                     input = input.ifEmpty { relay },
-                    error = "$host takes new people only with an invite link. Ask someone on it to send you one.",
+                    error = UiText.res(R.string.onboarding_host_invite_only, host),
                 )
                 else -> OnboardingState.RelayChoice(
                     relay = relay,
@@ -161,7 +163,7 @@ class OnboardingViewModel @Inject constructor(
         val code = normalizeInviteCode(current.code)
         if (current.inviteRequired && code == null) {
             _state.value = OnboardingState.RelayChoice(
-                error = "This relay takes new people only with an invite link. Ask someone on it to send you one.",
+                error = UiText.res(R.string.onboarding_invite_required),
             )
             return
         }
@@ -250,10 +252,10 @@ class OnboardingViewModel @Inject constructor(
                     inviterShareCode = null
                     OnboardingState.RelayChoice(error = message)
                 } else {
-                    OnboardingState.Error("Failed to create identity. Please try again.")
+                    OnboardingState.Error(UiText.res(R.string.onboarding_create_failed))
                 }
             } catch (e: Exception) {
-                _state.value = OnboardingState.Error("Failed to create identity. Please try again.")
+                _state.value = OnboardingState.Error(UiText.res(R.string.onboarding_create_failed))
             }
         }
     }
@@ -274,7 +276,7 @@ sealed interface OnboardingState {
         val inviteRequired: Boolean = false,
         val code: String = "",
         val inviterShareCode: String? = null,
-        val error: String? = null,
+        val error: UiText? = null,
     ) : OnboardingState
 
     data object PrivacyExplainer : OnboardingState
@@ -283,5 +285,5 @@ sealed interface OnboardingState {
     data object NotificationPermission : OnboardingState
     data object CreatingIdentity : OnboardingState
     data class Complete(val identity: Identity) : OnboardingState
-    data class Error(val message: String) : OnboardingState
+    data class Error(val message: UiText) : OnboardingState
 }

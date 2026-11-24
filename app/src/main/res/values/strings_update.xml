@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The update bar above every screen, its explanation, and the "update ready" notification. -->
+<resources>
+    <string name="update_ready">Sotto %1$s is ready</string>
+    <string name="update_on_its_way">Sotto %1$s is on its way</string>
+    <string name="update_action">Update</string>
+    <string name="update_action_label">Update with SourceDrop</string>
+    <string name="update_why">Why?</string>
+    <string name="update_why_label">Why</string>
+    <string name="update_on_its_way_title">An update is on its way</string>
+    <string name="update_on_its_way_text">Your relay now runs Sotto %1$s, newer than this app (%2$s). Until the app update is out, some things may not work. You\'ll get a notification when it\'s ready.</string>
+    <string name="update_channel_name">App updates</string>
+    <string name="update_channel_description">When a new version of Sotto is out</string>
+    <string name="update_notification_text">Your relay already runs it. Tap to update with SourceDrop.</string>
+</resources>

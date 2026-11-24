@@ -1,6 +1,8 @@
 package com.sotto.app.domain.model
 
+import com.sotto.app.R
 import com.sotto.app.connection.normalizeRelayUrl
+import com.sotto.app.ui.text.UiText
 import java.net.URLDecoder
 
 /**
@@ -95,20 +97,20 @@ fun normalizeInviteCode(text: String): String? {
 fun displayInviteCode(code: String): String = code.chunked(4).joinToString("-")
 
 /** What to tell someone whose sign-up the relay refused over the invite; null for other errors. */
-fun inviteErrorMessage(detail: String?): String? = when (detail) {
-    "invite_required" -> "This relay takes new people only with an invite link. Ask someone on it to send you one."
-    "invite_invalid" -> "That invite doesn't work on this relay. Ask for a new one."
-    "invite_used" -> "This invite was already used. Ask for a new one."
-    "invite_expired" -> "This invite has expired. Ask for a new one."
+fun inviteErrorMessage(detail: String?): UiText? = when (detail) {
+    "invite_required" -> UiText.res(R.string.onboarding_invite_required)
+    "invite_invalid" -> UiText.res(R.string.onboarding_invite_invalid)
+    "invite_used" -> UiText.res(R.string.onboarding_invite_used)
+    "invite_expired" -> UiText.res(R.string.onboarding_invite_expired)
     else -> null
 }
 
 /** Why the relay wouldn't create another invite right now. */
-fun inviteLimitMessage(detail: String?): String = when (detail) {
-    "invite_limit_open" -> "You have 5 invites nobody has used yet. Wait until someone joins, or until they expire."
-    "invite_limit_daily" -> "You've created 10 invites today. Try again tomorrow."
-    "invite_rate_limited" -> "Too many at once. Try again in a minute."
-    else -> "Couldn't create an invite. Try again."
+fun inviteLimitMessage(detail: String?): UiText = when (detail) {
+    "invite_limit_open" -> UiText.res(R.string.settings_invite_limit_open)
+    "invite_limit_daily" -> UiText.res(R.string.settings_invite_limit_daily)
+    "invite_rate_limited" -> UiText.res(R.string.settings_invite_rate_limited)
+    else -> UiText.res(R.string.settings_invite_failed)
 }
 
 /** What opening an invite link does for someone who already has an account. */
@@ -138,5 +140,5 @@ fun InviteLink.actionForMember(myRelay: String?, myShareCode: String?): MemberIn
     return MemberInviteAction.AddInviter(inviter)
 }
 
-/** Shown when the member opens their own invite link. */
+/** Shown when the member opens their own invite link. Translated as R.string.settings_invite_own, for MainActivity to use. */
 const val OWN_INVITE_MESSAGE = "This is your own invite. Send it to the person you're inviting."

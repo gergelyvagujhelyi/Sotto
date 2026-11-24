@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Settings, its dialogs, and the invite sheet. -->
+<resources>
+    <!-- Identity -->
+    <string name="settings_section_identity">Identity</string>
+    <string name="settings_your_share_code">Your share code</string>
+    <string name="settings_loading">Loading...</string>
+    <string name="settings_live_qr_hint">The QR code changes every second: scanned in person, it adds and verifies you. The share code, or a picture of the QR code, only adds you.</string>
+    <string name="settings_your_name">Your name</string>
+    <string name="settings_name_not_set">Not set — new contacts see your ID</string>
+    <string name="settings_name_hint">Sent end-to-end encrypted to people you add, and to people whose request you accept. The relay never sees it.</string>
+
+    <!-- Invite -->
+    <string name="settings_invite_title">Invite someone</string>
+    <string name="settings_invite_subtitle">A one-time code to join your relay, valid for 7 days</string>
+    <string name="settings_invite_sheet_text">They scan this with their camera, or you send them the link. It works once, until %1$s, and adds you as their contact.</string>
+    <string name="settings_invite_copy_link">Copy link</string>
+    <string name="settings_invite_send_chooser">Send the invite</string>
+    <string name="settings_invite_share_text">Join me on Sotto, an end-to-end encrypted messenger: %1$s\n\nThe invite works once, until %2$s.</string>
+    <!-- How the invite's last day is written (java.time pattern): "26 Nov". -->
+    <string name="settings_invite_date_pattern">d MMM</string>
+    <string name="settings_invite_error">Couldn\'t create an invite. Check your connection and try again.</string>
+    <string name="settings_invite_limit_open">You have 5 invites nobody has used yet. Wait until someone joins, or until they expire.</string>
+    <string name="settings_invite_limit_daily">You\'ve created 10 invites today. Try again tomorrow.</string>
+    <string name="settings_invite_rate_limited">Too many at once. Try again in a minute.</string>
+    <string name="settings_invite_failed">Couldn\'t create an invite. Try again.</string>
+    <!-- Toast when a member opens their own invite link (MainActivity, OWN_INVITE_MESSAGE). -->
+    <string name="settings_invite_own">This is your own invite. Send it to the person you\'re inviting.</string>
+
+    <!-- Lock screen notifications -->
+    <string name="settings_section_lock_screen">Lock screen notifications</string>
+    <string name="settings_preview_show_all">Show sender and message</string>
+    <string name="settings_preview_sender_only">Show sender only</string>
+    <string name="settings_preview_hide_body">Hide message body</string>
+    <string name="settings_preview_hide_all">No lock screen preview</string>
+
+    <!-- Connection -->
+    <string name="settings_section_connection">Connection</string>
+    <string name="settings_background_connection">Background connection</string>
+    <string name="settings_background_connection_subtitle">Get messages and calls while the app is closed. Shows a permanent notification and uses more battery.</string>
+    <string name="settings_background_recommended_no_relay_push">Recommended: your relay can\'t wake the app with push.</string>
+    <string name="settings_background_recommended_no_google_push">Recommended on this phone: it has no Google push.</string>
+    <string name="settings_allow_background">Allow background activity</string>
+    <string name="settings_allow_background_subtitle">Until you do, Android can delay messages and calls</string>
+    <string name="settings_relay">Relay</string>
+    <string name="settings_relay_subtitle">%1$s · to use another relay, wipe this app\'s data and set it up again</string>
+
+    <!-- Calls -->
+    <string name="settings_section_calls">Calls</string>
+    <string name="settings_hq_calls">High-quality calls</string>
+    <string name="settings_hq_calls_subtitle">Fuller sound in calls with someone who has this on too; the call screen then shows HD. Uses about a quarter more data.</string>
+    <string name="settings_level_voices">Level quiet voices</string>
+    <string name="settings_level_voices_subtitle">Lifts a quiet voice in a call to a normal level. Without it, Louder on the call screen lifts one person\'s voice, and is remembered for them.</string>
+    <string name="settings_webrtc_voice">WebRTC voice processing</string>
+    <string name="settings_webrtc_voice_subtitle">Your microphone goes through WebRTC\'s echo cancellation, noise suppression and volume instead of the phone\'s own. Try it if people hear an echo or you sound too quiet. From the next call.</string>
+
+    <!-- Privacy -->
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="settings_read_receipts">Read receipts</string>
+    <string name="settings_read_receipts_subtitle">Let others know when you\'ve read their messages. Works both ways: with this off you won\'t see when they read yours.</string>
+    <string name="settings_screen_security">Screen security</string>
+    <string name="settings_screen_security_subtitle">Block screenshots and app switcher preview</string>
+    <string name="settings_direct_calls">Direct calls</string>
+    <string name="settings_direct_calls_subtitle">When a contact also has this on, call audio and files go straight between your phones instead of through the relay: better sound, less relay data, but each of you can see the other\'s IP addresses (internet, home network and mobile). Calls and files with people who aren\'t your contacts always use the relay.</string>
+
+    <!-- Display -->
+    <string name="settings_section_display">Display</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_phone">Phone\'s language</string>
+    <string name="settings_reduce_animations">Reduce animations</string>
+    <string name="settings_reduce_animations_subtitle">No send animation; backgrounds and the call screen stay still. Also on while Android\'s “Remove animations” is.</string>
+
+    <!-- Message history -->
+    <string name="settings_section_history">Message history</string>
+    <string name="settings_keep_forever">Keep forever</string>
+    <string name="settings_keep_year">Keep for 1 year</string>
+    <plurals name="settings_keep_days">
+        <item quantity="one">Keep for %d day</item>
+        <item quantity="other">Keep for %d days</item>
+    </plurals>
+    <string name="settings_retention_title_year">Keep messages for 1 year?</string>
+    <plurals name="settings_retention_title_days">
+        <item quantity="one">Keep messages for %d day?</item>
+        <item quantity="other">Keep messages for %d days?</item>
+    </plurals>
+    <string name="settings_retention_text_year">Messages older than 1 year are deleted from this device now, and from then on as they reach that age. This can\'t be undone.</string>
+    <plurals name="settings_retention_text_days">
+        <item quantity="one">Messages older than %d day are deleted from this device now, and from then on as they reach that age. This can\'t be undone.</item>
+        <item quantity="other">Messages older than %d days are deleted from this device now, and from then on as they reach that age. This can\'t be undone.</item>
+    </plurals>
+    <string name="settings_retention_confirm">Delete older messages</string>
+
+    <!-- Disappearing messages -->
+    <string name="settings_section_disappearing">Disappearing messages</string>
+    <plurals name="settings_minutes">
+        <item quantity="one">%d minute</item>
+        <item quantity="other">%d minutes</item>
+    </plurals>
+    <plurals name="settings_hours">
+        <item quantity="one">%d hour</item>
+        <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="settings_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+
+    <!-- Blocked users -->
+    <string name="settings_section_blocked">Blocked users</string>
+    <string name="settings_none_blocked">No one is blocked</string>
+    <string name="settings_none_blocked_subtitle">Block from a chat\'s menu or a message request</string>
+    <string name="settings_unblock">Unblock</string>
+
+    <!-- Keys -->
+    <string name="settings_section_keys">Keys</string>
+    <string name="settings_rotating_keys">Rotating keys...</string>
+    <string name="settings_rotate_keys">Rotate identity keys</string>
+    <string name="settings_rotate_keys_subtitle">New keys and a new share code; every contact has to accept them</string>
+    <string name="settings_rotate_title">Rotate identity keys?</string>
+    <string name="settings_rotate_text">This generates new signing and encryption keys and a new share code. Every contact sees that your keys changed and has to accept them before your chats continue. Only needed if you think your keys were exposed.</string>
+    <string name="settings_rotate_confirm">Rotate</string>
+    <string name="settings_rotate_failed_title">Key rotation failed</string>
+    <string name="settings_rotate_failed_network">Network error — check your connection and try again.</string>
+    <string name="settings_rotate_failed_local">Key rotation failed — local key error.</string>
+    <string name="settings_rotate_failed">Key rotation failed. Please try again.</string>
+
+    <!-- Data -->
+    <string name="settings_section_data">Data</string>
+    <string name="settings_wipe">Wipe all local data</string>
+    <string name="settings_wipe_subtitle">Permanently delete everything on this device</string>
+    <string name="settings_wipe_title">Wipe all local data?</string>
+    <string name="settings_wipe_text">This will permanently delete your identity, all messages, contacts, and keys from this device. This cannot be undone.</string>
+    <string name="settings_wipe_confirm">Wipe</string>
+    <string name="settings_wipe_unreachable_title">Server unreachable</string>
+    <string name="settings_wipe_unreachable_text">We could not reach the server to delete your account. Your contacts may still try to send you messages.\n\nPlease check your internet connection and tap Retry, or tap Delete Anyway to continue without server notification.</string>
+    <string name="settings_wipe_retry">Retry</string>
+    <string name="settings_wipe_anyway">Delete Anyway</string>
+
+    <!-- Footer -->
+    <string name="settings_footer_encrypted">End-to-end encrypted</string>
+    <string name="settings_footer_version" translatable="false">Sotto %1$s</string>
+</resources>
