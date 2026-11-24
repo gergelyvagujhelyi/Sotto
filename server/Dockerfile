@@ -14,6 +14,7 @@ ENV PYTHONPATH=/app
 
 USER app
 
-# Run Alembic migrations then start uvicorn
+# Run Alembic migrations then start uvicorn. No access log: it would list every path, account
+# ids and share codes among them, which nginx's own log leaves out on purpose.
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]

@@ -46,6 +46,9 @@ class Identity(Base):
     fcm_fid = Column(Text, nullable=True)
     created_at = Column(DateTime, server_default=func.now())
     last_seen_at = Column(DateTime, server_default=func.now())
+    # The app version this account last used, and since when (apps 0.7.24+ say it).
+    app_version = Column(String(32), nullable=True)
+    app_version_at = Column(DateTime, nullable=True)
 
 
 

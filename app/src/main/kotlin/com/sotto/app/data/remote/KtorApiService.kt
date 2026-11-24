@@ -125,6 +125,9 @@ class KtorApiService @Inject constructor(
         defaultRequest {
             relayConfig.baseUrl?.let { url(it) }
             contentType(ContentType.Application.Json)
+            // The relay keeps each account's latest app version and logs when it changes,
+            // so its owner can see an update spreading (server/app/auth.py).
+            header(AppUpdates.APP_VERSION_HEADER, BuildConfig.VERSION_NAME)
         }
     }
 

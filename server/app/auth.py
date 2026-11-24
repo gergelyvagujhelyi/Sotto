@@ -13,6 +13,7 @@ both Ed25519 AND ML-DSA-65 to forge an auth token.
 
 import base64
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -28,6 +29,17 @@ from app.database import get_db
 from app.models.db import Identity
 
 logger = logging.getLogger(__name__)
+
+# The app names its version on every request (apps 0.7.24+). The relay keeps each account's
+# latest and logs when it changes, so an update can be seen spreading. Only a plain version
+# is taken: the header is the app's word, and anything else would end up in the log.
+APP_VERSION_HEADER = "Sotto-App-Version"
+_PLAIN_VERSION = re.compile(r"^[0-9]{1,4}(\.[0-9]{1,6}){1,3}$")
+
+
+def plain_app_version(value: object) -> Optional[str]:
+    """[value] when it's a plain dotted version ("0.7.24"), else None."""
+    return value if isinstance(value, str) and _PLAIN_VERSION.match(value) else None
 
 # Tokens older than 5 minutes are rejected.
 TOKEN_MAX_AGE_MS = 5 * 60 * 1000
@@ -172,6 +184,7 @@ def verify_token(
 
 async def key_lookup_auth(
     authorization: Optional[str] = Header(None, alias="Authorization"),
+    app_version: Optional[str] = Header(None, alias=APP_VERSION_HEADER),
     db: AsyncSession = Depends(get_db),
 ) -> Optional[str]:
     """Key lookups by members only, once KEY_LOOKUP_AUTH is on (config.py).
@@ -184,11 +197,12 @@ async def key_lookup_auth(
         return None
     if authorization is None:
         raise HTTPException(status_code=401, detail="Authentication failed")
-    return await verify_auth_token(authorization=authorization, db=db)
+    return await verify_auth_token(authorization=authorization, app_version=app_version, db=db)
 
 
 async def verify_auth_token(
     authorization: str = Header(..., alias="Authorization"),
+    app_version: Optional[str] = Header(None, alias=APP_VERSION_HEADER),
     db: AsyncSession = Depends(get_db),
 ) -> str:
     """FastAPI dependency that extracts and verifies a signed auth token.
@@ -211,7 +225,7 @@ async def verify_auth_token(
 
     # Fetch the public signing key (and PQC signing key) for this user
     result = await db.execute(
-        select(Identity.public_signing_key, Identity.pqc_signing_key).where(
+        select(Identity.public_signing_key, Identity.pqc_signing_key, Identity.app_version).where(
             Identity.user_id == claimed_user_id
         )
     )
@@ -219,7 +233,7 @@ async def verify_auth_token(
     if row is None:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
-    public_key_b64, pqc_signing_key_b64 = row
+    public_key_b64, pqc_signing_key_b64, previous_version = row
 
     try:
         verified_user_id = verify_token(
@@ -234,15 +248,24 @@ async def verify_auth_token(
     # need a second pooled connection while this one is still checked out: with
     # enough concurrent requests every request holds one and waits for another
     # (pool exhaustion, 30 s stalls).
+    # The app's version goes in the same write, only when it changed.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    values = {"last_seen_at": now}
+    version = plain_app_version(app_version)
+    if version is not None and version != previous_version:
+        values.update(app_version=version, app_version_at=now)
     try:
         await db.execute(
             update(Identity)
             .where(Identity.user_id == verified_user_id)
-            .values(last_seen_at=datetime.now(timezone.utc).replace(tzinfo=None))
+            .values(**values)
         )
         await db.commit()
     except Exception:
         await db.rollback()
         logger.warning("Failed to update last_seen_at for %s", verified_user_id[:8])
+    else:
+        if "app_version" in values:
+            logger.info("App version: %s %s -> %s", verified_user_id[:8], previous_version or "(unknown)", version)
 
     return verified_user_id

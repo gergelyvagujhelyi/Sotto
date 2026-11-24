@@ -1,6 +1,7 @@
 """Alembic environment configuration for async SQLAlchemy."""
 
 import asyncio
+import logging
 import os
 from logging.config import fileConfig
 
@@ -13,7 +14,11 @@ from app.models.db import Base  # noqa: F401
 
 config = context.config
 
-if config.config_file_name is not None:
+# Only for the alembic command. The relay also migrates from inside itself at startup
+# (main._run_alembic_upgrade), and fileConfig there switched off every logger that
+# already existed and set the root to WARN: the relay logged nothing at all, not even
+# its errors, from then on.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

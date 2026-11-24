@@ -145,7 +145,8 @@ class WebSocketManager:
         if evicted is not None:
             await self._close(evicted, code=4008, reason="Too many connections")
         metrics.active_ws_connections = self.connection_count()
-        logger.info("WebSocket connected: %s", user_id[:8])
+        # Debug only: at INFO, every login by account would be a record of who was online when.
+        logger.debug("WebSocket connected: %s", user_id[:8])
 
     async def disconnect(self, user_id: str, websocket: WebSocket) -> None:
         async with self._lock:
@@ -155,7 +156,7 @@ class WebSocketManager:
                 if not conns:
                     del self._connections[user_id]
         metrics.active_ws_connections = self.connection_count()
-        logger.info("WebSocket disconnected: %s", user_id[:8])
+        logger.debug("WebSocket disconnected: %s", user_id[:8])
 
     async def disconnect_user(self, user_id: str, reason: str) -> None:
         """Close every connection of a user and drop their buffered signals.

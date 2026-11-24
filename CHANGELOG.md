@@ -9,6 +9,8 @@ Nothing yet.
 ## 0.7.24 — 2026-11-24
 
 - **The update notice shows on every screen** — When your relay runs a newer Sotto, a bar at the top of every screen says so, not only a card in the chat list. Once the app update is out it's violet ("Sotto 0.7.24 is ready · Update") and a tap opens SourceDrop to install it; while it's still on its way it's a calm grey ("Sotto 0.7.24 is on its way · Why?") and a tap explains that some things may not work until then. With a call going on, it sits under the call bar.
+- **The relay sees which app version each account uses** — The app now names its version on every request. The relay keeps each account's latest version and logs a line when it changes ("App version: a1b2c3d4 0.7.23 -> 0.7.24", with the short account id its log uses), so you can see an update spreading. Only a plain version number is taken.
+- **Relay: its log works again** — Running the database migrations at startup switched off the relay's own logging, so it logged nothing, not even errors. It logs again, but only errors and a few events: socket logins stay out of it (they'd be a record of who was online when), as does the per-request access log, and the log is rotated at 10 MB.
 
 ## 0.7.23 — 2026-11-24
 

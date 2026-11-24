@@ -174,7 +174,7 @@ async def websocket_endpoint(
             await websocket.close(code=4003)
             user_id = None  # already unregistered; skip the cleanup in finally
             return
-        logger.info("WebSocket authenticated: %s", user_id[:8])
+        logger.debug("WebSocket authenticated: %s", user_id[:8])
 
         # Which Sotto the relay runs, and whether that app is out: a phone on an older app
         # says so (services/app_release.py). Older apps ignore the extra fields.
