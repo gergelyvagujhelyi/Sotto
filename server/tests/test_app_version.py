@@ -85,6 +85,7 @@ def test_plain_app_version():
     assert plain_app_version("1.0") == "1.0"
     assert plain_app_version("0.7.24.1") == "0.7.24.1"
     assert plain_app_version("0.7.24-debug") is None
+    assert plain_app_version("0.7.24\n") is None
     assert plain_app_version(None) is None
     assert plain_app_version(object()) is None
 

@@ -34,12 +34,13 @@ logger = logging.getLogger(__name__)
 # latest and logs when it changes, so an update can be seen spreading. Only a plain version
 # is taken: the header is the app's word, and anything else would end up in the log.
 APP_VERSION_HEADER = "Sotto-App-Version"
-_PLAIN_VERSION = re.compile(r"^[0-9]{1,4}(\.[0-9]{1,6}){1,3}$")
+_PLAIN_VERSION = re.compile(r"[0-9]{1,4}(\.[0-9]{1,6}){1,3}")
 
 
 def plain_app_version(value: object) -> Optional[str]:
     """[value] when it's a plain dotted version ("0.7.24"), else None."""
-    return value if isinstance(value, str) and _PLAIN_VERSION.match(value) else None
+    # fullmatch: "$" would also let a trailing newline through.
+    return value if isinstance(value, str) and _PLAIN_VERSION.fullmatch(value) else None
 
 # Tokens older than 5 minutes are rejected.
 TOKEN_MAX_AGE_MS = 5 * 60 * 1000
