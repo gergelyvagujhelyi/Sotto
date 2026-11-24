@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calls: the call screen, the ongoing-call bar, call notifications, call history entries. -->
+<resources>
+    <!-- Call screen -->
+    <string name="call_unknown_caller">Ismeretlen</string>
+    <string name="call_back_to_app">Vissza az alkalmazásba; a hívás folytatódik</string>
+    <string name="call_unknown_contact">Nem ismerős</string>
+    <string name="call_cant_reach">%1$s nem érhető el</string>
+    <string name="call_cant_reach_other_phone">A másik telefon nem érhető el</string>
+    <string name="call_peer_unreachable_detail">Nem jön semmi a telefonjáról. Ha egy percen belül nem áll helyre, a hívás véget ér.</string>
+    <string name="call_reconnecting">Újracsatlakozás…</string>
+    <string name="call_no_connection_now">Most nincs kapcsolat</string>
+    <string name="call_reconnected">Helyreállt a kapcsolat</string>
+    <string name="call_path_direct">Közvetlen</string>
+    <string name="call_path_relayed">Szerveren át</string>
+    <string name="call_verify_by_phone">Ellenőrzés hívással</string>
+    <string name="call_verify_by_phone_name">%1$s ellenőrzése hívással</string>
+    <string name="call_relay_unavailable_warning">A szerver nem érhető el – a hívás talán nem jön létre</string>
+    <string name="call_already_in_call">Már hívásban vagy</string>
+
+    <!-- Call buttons -->
+    <string name="call_accept">Fogadás</string>
+    <string name="call_answer">Fogadás</string>
+    <string name="call_decline">Elutasítás</string>
+    <string name="call_end_call">Hívás vége</string>
+    <string name="call_end">Bontás</string>
+    <string name="call_mute">Némítás</string>
+    <string name="call_muted">Némítva</string>
+    <string name="call_louder">Hangosabb</string>
+    <string name="call_speaker">Kihangosítás</string>
+    <string name="call_audio">Hang</string>
+    <string name="call_audio_route_description">Hang: %1$s. Válaszd ki, hol szóljon a hívás</string>
+    <string name="call_play_on">Hol szóljon a hívás?</string>
+    <string name="call_route_in_use">Használatban</string>
+
+    <!-- Where the call plays: the phone's own outputs, or a device without a name of its own -->
+    <string name="call_route_phone">Telefon</string>
+    <string name="call_route_speaker">Hangszóró</string>
+    <string name="call_route_headset">Fülhallgató</string>
+    <string name="call_route_usb_headset">USB-fülhallgató</string>
+    <string name="call_route_bluetooth">Bluetooth</string>
+    <string name="call_route_hearing_aid">Hallókészülék</string>
+
+    <!-- Call status -->
+    <string name="call_incoming">Bejövő hívás</string>
+    <string name="call_status_incoming">Bejövő hívás…</string>
+    <string name="call_ringing">Kicseng…</string>
+    <string name="call_connecting">Kapcsolódás…</string>
+    <string name="call_connecting_to">Kapcsolódás: %1$s…</string>
+    <string name="call_connected">Kapcsolódva</string>
+    <string name="call_ended">Hívás vége</string>
+    <string name="call_connection_lost">Megszakadt a kapcsolat</string>
+    <string name="call_failed">Sikertelen hívás</string>
+    <string name="call_failed_no_relay">Sikertelen hívás – a szerver nem érhető el</string>
+    <string name="call_no_internet">Nincs internetkapcsolat</string>
+    <string name="call_declined">Hívás elutasítva</string>
+    <string name="call_busy">Foglalt</string>
+    <string name="call_contact_unavailable">Az ismerős nem érhető el</string>
+    <string name="call_peer_gone">%1$s telefonja nem válaszol</string>
+    <string name="call_peer_gone_other_phone">A másik telefon nem válaszol</string>
+
+    <!-- Ongoing-call bar -->
+    <string name="call_calling">Hívás…</string>
+    <string name="call_return_to_call">Vissza a híváshoz</string>
+    <string name="call_tap_to_return">Visszatérés</string>
+
+    <!-- Verify by phone: comparing seven emoji -->
+    <string name="call_verify_asked_title">%1$s ellenőrzést kér hívással</string>
+    <string name="call_verify_code_title">Olvasd fel ezeket %1$s számára</string>
+    <string name="call_verify_matched_title">%1$s hívással ellenőrizve</string>
+    <string name="call_verify_different_title">A kódok nem egyeznek</string>
+    <string name="call_verify_unavailable_title">Most nem lehet hívással ellenőrizni</string>
+    <string name="call_verify_waiting_text">Várunk, hogy %1$s is az „Ellenőrzés hívással” gombra koppintson. Ha semmi sem történik, talán túl régi Sotto van a telefonján.</string>
+    <string name="call_verify_asked_text">Ha senki sem hallgatja le a hívást, mindketten ugyanazt a hét képet látjátok. Olvassátok fel egymásnak, hogy ellenőrizzétek.</string>
+    <string name="call_verify_exchanging_text">A kód készül…</string>
+    <string name="call_verify_code_text">Ugyanezek látszanak %1$s telefonján, ugyanebben a sorrendben? Csak akkor mondj igent, ha biztos vagy benne, hogy %1$s hangját hallod.</string>
+    <string name="call_verify_matched_text">A beszélgetésben ez áll: „Csak hívással ellenőrizve”. A hívás gyengébb bizonyíték, mint a személyes találkozás. Ha találkoztok, ellenőrizd személyesen is.</string>
+    <string name="call_verify_different_text">Lehet, hogy valaki – például a szerver – beékelődött ebbe a hívásba. Ne bízz ebben a beszélgetésben, amíg nem találkoztatok, és személyesen meg nem győződtél róla, hogy tényleg %1$s az.</string>
+    <string name="call_verify_unavailable_text">Ehhez %1$s legyen mentett ismerős, akinek a kulcsait ez a telefon már ellenőrizte. Próbáld újra később.</string>
+    <string name="call_verify">Ellenőrzés</string>
+    <string name="call_verify_matches">Egyezik</string>
+    <string name="call_verify_differs">Eltér</string>
+    <string name="call_not_now">Most nem</string>
+
+    <!-- The seven emoji's names, read out to each other -->
+    <string name="call_emoji_dog">Kutya</string>
+    <string name="call_emoji_cat">Macska</string>
+    <string name="call_emoji_lion">Oroszlán</string>
+    <string name="call_emoji_horse">Ló</string>
+    <string name="call_emoji_unicorn">Egyszarvú</string>
+    <string name="call_emoji_pig">Malac</string>
+    <string name="call_emoji_elephant">Elefánt</string>
+    <string name="call_emoji_rabbit">Nyúl</string>
+    <string name="call_emoji_panda">Panda</string>
+    <string name="call_emoji_rooster">Kakas</string>
+    <string name="call_emoji_penguin">Pingvin</string>
+    <string name="call_emoji_turtle">Teknős</string>
+    <string name="call_emoji_fish">Hal</string>
+    <string name="call_emoji_octopus">Polip</string>
+    <string name="call_emoji_butterfly">Pillangó</string>
+    <string name="call_emoji_flower">Virág</string>
+    <string name="call_emoji_tree">Fa</string>
+    <string name="call_emoji_cactus">Kaktusz</string>
+    <string name="call_emoji_mushroom">Gomba</string>
+    <string name="call_emoji_globe">Földgömb</string>
+    <string name="call_emoji_moon">Hold</string>
+    <string name="call_emoji_cloud">Felhő</string>
+    <string name="call_emoji_fire">Tűz</string>
+    <string name="call_emoji_banana">Banán</string>
+    <string name="call_emoji_apple">Alma</string>
+    <string name="call_emoji_strawberry">Eper</string>
+    <string name="call_emoji_corn">Kukorica</string>
+    <string name="call_emoji_pizza">Pizza</string>
+    <string name="call_emoji_cake">Torta</string>
+    <string name="call_emoji_heart">Szív</string>
+    <string name="call_emoji_smiley">Mosoly</string>
+    <string name="call_emoji_robot">Robot</string>
+    <string name="call_emoji_hat">Kalap</string>
+    <string name="call_emoji_glasses">Szemüveg</string>
+    <string name="call_emoji_spanner">Csavarkulcs</string>
+    <string name="call_emoji_santa">Mikulás</string>
+    <string name="call_emoji_thumbs_up">Hüvelykujj</string>
+    <string name="call_emoji_umbrella">Esernyő</string>
+    <string name="call_emoji_hourglass">Homokóra</string>
+    <string name="call_emoji_clock">Ébresztő</string>
+    <string name="call_emoji_gift">Ajándék</string>
+    <string name="call_emoji_light_bulb">Villanykörte</string>
+    <string name="call_emoji_book">Könyv</string>
+    <string name="call_emoji_pencil">Ceruza</string>
+    <string name="call_emoji_paperclip">Gemkapocs</string>
+    <string name="call_emoji_scissors">Olló</string>
+    <string name="call_emoji_lock">Lakat</string>
+    <string name="call_emoji_key">Kulcs</string>
+    <string name="call_emoji_hammer">Kalapács</string>
+    <string name="call_emoji_telephone">Telefon</string>
+    <string name="call_emoji_flag">Zászló</string>
+    <string name="call_emoji_train">Vonat</string>
+    <string name="call_emoji_bicycle">Bicikli</string>
+    <string name="call_emoji_aeroplane">Repülő</string>
+    <string name="call_emoji_rocket">Rakéta</string>
+    <string name="call_emoji_trophy">Serleg</string>
+    <string name="call_emoji_ball">Labda</string>
+    <string name="call_emoji_guitar">Gitár</string>
+    <string name="call_emoji_trumpet">Trombita</string>
+    <string name="call_emoji_bell">Csengő</string>
+    <string name="call_emoji_anchor">Horgony</string>
+    <string name="call_emoji_headphones">Fejhallgató</string>
+    <string name="call_emoji_folder">Mappa</string>
+    <string name="call_emoji_pin">Rajzszög</string>
+
+    <!-- Call notifications -->
+    <string name="call_channel_incoming">Bejövő hívások</string>
+    <string name="call_channel_incoming_description">Bejövő hanghívások; az alkalmazás maga csörög és rezeg hozzájuk</string>
+    <string name="call_channel_ongoing">Folyamatban lévő hívások</string>
+    <string name="call_channel_ongoing_description">Hívás közben látható</string>
+    <string name="call_incoming_encrypted">Bejövő titkosított hívás</string>
+    <string name="call_encrypted">Titkosított hívás</string>
+    <string name="call_generic">Hívás</string>
+
+    <!-- A call in the chat list's preview -->
+    <string name="call_history_voice_call">Hanghívás</string>
+    <string name="call_history_no_answer">Nem vette fel</string>
+    <string name="call_history_outgoing">Kimenő hívás</string>
+    <string name="call_history_declined">Elutasított hívás</string>
+    <string name="call_history_missed">Nem fogadott hívás</string>
+</resources>

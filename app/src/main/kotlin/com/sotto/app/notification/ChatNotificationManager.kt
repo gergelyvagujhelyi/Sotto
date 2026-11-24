@@ -19,6 +19,7 @@ import com.sotto.app.data.local.dao.MessageDao
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.domain.repository.SettingsRepository
+import com.sotto.app.ui.text.resolve
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
@@ -42,10 +43,10 @@ class ChatNotificationManager @Inject constructor(
 
         val messageChannel = NotificationChannel(
             CHANNEL_MESSAGES,
-            "Messages",
+            context.getString(R.string.notification_channel_messages),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "New message notifications"
+            description = context.getString(R.string.notification_channel_messages_description)
             // Leave lockscreenVisibility at default (VISIBILITY_PRIVATE) so
             // per-notification visibility set dynamically from privacy settings
             // is not capped by the channel.
@@ -53,10 +54,10 @@ class ChatNotificationManager @Inject constructor(
 
         val missedCallChannel = NotificationChannel(
             CHANNEL_MISSED_CALLS,
-            "Missed Calls",
+            context.getString(R.string.notification_channel_missed_calls),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Missed call notifications"
+            description = context.getString(R.string.notification_channel_missed_calls_description)
         }
 
         // Never used for anything; replaced by the background connection's channel.
@@ -65,10 +66,10 @@ class ChatNotificationManager @Inject constructor(
         // silent and out of the status bar.
         val backgroundConnectionChannel = NotificationChannel(
             CHANNEL_BACKGROUND_CONNECTION,
-            "Background connection",
+            context.getString(R.string.notification_channel_background),
             NotificationManager.IMPORTANCE_MIN,
         ).apply {
-            description = "Shown while Sotto stays connected for messages and calls"
+            description = context.getString(R.string.notification_channel_background_description)
             setSound(null, null)
             setShowBadge(false)
         }
@@ -134,7 +135,7 @@ class ChatNotificationManager @Inject constructor(
         val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(content.title)
-            .setContentText(content.text)
+            .setContentText(content.text.resolve(context))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setVisibility(visibility)
             .setContentIntent(pendingIntent)
@@ -143,7 +144,7 @@ class ChatNotificationManager @Inject constructor(
             .setGroup(GROUP_CHATS)
         if (content.messages.isNotEmpty()) {
             val sender = Person.Builder().setName(senderName).setKey(senderId).build()
-            val style = NotificationCompat.MessagingStyle(Person.Builder().setName("You").build())
+            val style = NotificationCompat.MessagingStyle(Person.Builder().setName(context.getString(R.string.notification_you)).build())
             content.messages.forEach { style.addMessage(it.text, it.timestamp, sender) }
             builder.setStyle(style)
         }
@@ -170,8 +171,8 @@ class ChatNotificationManager @Inject constructor(
         val (title, body) = when (settings.lockScreenPreview) {
             LockScreenPreviewMode.SHOW_ALL,
             LockScreenPreviewMode.SENDER_ONLY,
-            LockScreenPreviewMode.HIDE_BODY -> callerName to missedCallsText(missed)
-            LockScreenPreviewMode.HIDE_ALL -> "Sotto" to missedCallsText(missed)
+            LockScreenPreviewMode.HIDE_BODY -> callerName to missedCallsText(missed).resolve(context)
+            LockScreenPreviewMode.HIDE_ALL -> "Sotto" to missedCallsText(missed).resolve(context)
         }
 
         val visibility = when (settings.lockScreenPreview) {
@@ -235,7 +236,7 @@ class ChatNotificationManager @Inject constructor(
         val summary = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Sotto")
-            .setContentText("New messages")
+            .setContentText(context.getString(R.string.notification_new_messages_summary))
             .setVisibility(visibility)
             .setContentIntent(openChats)
             .setAutoCancel(true)

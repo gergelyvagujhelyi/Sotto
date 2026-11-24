@@ -80,7 +80,7 @@ class BackgroundConnectionService : Service() {
         return NotificationCompat.Builder(this, ChatNotificationManager.CHANNEL_BACKGROUND_CONNECTION)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Sotto")
-            .setContentText("Connected for messages and calls")
+            .setContentText(getString(R.string.notification_background_connected))
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setOngoing(true)

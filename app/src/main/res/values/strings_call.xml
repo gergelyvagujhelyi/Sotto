@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Calls: the call screen, the ongoing-call bar, call notifications, call history entries. -->
+<resources>
+    <!-- Call screen -->
+    <string name="call_unknown_caller">Unknown</string>
+    <string name="call_back_to_app">Back to the app; the call goes on</string>
+    <string name="call_unknown_contact">Unknown contact</string>
+    <string name="call_cant_reach">Can\'t reach %1$s</string>
+    <string name="call_cant_reach_other_phone">Can\'t reach the other phone</string>
+    <string name="call_peer_unreachable_detail">Nothing is coming from their phone. The call ends after a minute if it doesn\'t come back.</string>
+    <string name="call_reconnecting">Reconnecting…</string>
+    <string name="call_no_connection_now">No connection right now</string>
+    <string name="call_reconnected">Reconnected</string>
+    <string name="call_path_direct">Direct</string>
+    <string name="call_path_relayed">Via relay</string>
+    <string name="call_verify_by_phone">Verify by phone</string>
+    <string name="call_verify_by_phone_name">Verify %1$s by phone</string>
+    <string name="call_relay_unavailable_warning">Relay unavailable — call may not connect</string>
+    <string name="call_already_in_call">Already in a call</string>
+
+    <!-- Call buttons -->
+    <string name="call_accept">Accept</string>
+    <string name="call_answer">Answer</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_end_call">End call</string>
+    <string name="call_end">End</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_muted">Muted</string>
+    <string name="call_louder">Louder</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_audio">Audio</string>
+    <string name="call_audio_route_description">Audio on %1$s. Choose where the call plays</string>
+    <string name="call_play_on">Play the call on</string>
+    <string name="call_route_in_use">In use</string>
+
+    <!-- Where the call plays: the phone's own outputs, or a device without a name of its own -->
+    <string name="call_route_phone">Phone</string>
+    <string name="call_route_speaker">Speaker</string>
+    <string name="call_route_headset">Headset</string>
+    <string name="call_route_usb_headset">USB headset</string>
+    <string name="call_route_bluetooth">Bluetooth</string>
+    <string name="call_route_hearing_aid">Hearing aid</string>
+
+    <!-- Call status -->
+    <string name="call_incoming">Incoming call</string>
+    <string name="call_status_incoming">Incoming call…</string>
+    <string name="call_ringing">Ringing…</string>
+    <string name="call_connecting">Connecting…</string>
+    <string name="call_connecting_to">Connecting to %1$s…</string>
+    <string name="call_connected">Connected</string>
+    <string name="call_ended">Call ended</string>
+    <string name="call_connection_lost">Connection lost</string>
+    <string name="call_failed">Call failed</string>
+    <string name="call_failed_no_relay">Call failed — relay unavailable</string>
+    <string name="call_no_internet">No internet connection</string>
+    <string name="call_declined">Call declined</string>
+    <string name="call_busy">Busy</string>
+    <string name="call_contact_unavailable">Contact unavailable</string>
+    <string name="call_peer_gone">%1$s\'s phone stopped responding</string>
+    <string name="call_peer_gone_other_phone">The other phone stopped responding</string>
+
+    <!-- Ongoing-call bar -->
+    <string name="call_calling">Calling…</string>
+    <string name="call_return_to_call">Return to call</string>
+    <string name="call_tap_to_return">Tap to return</string>
+
+    <!-- Verify by phone: comparing seven emoji -->
+    <string name="call_verify_asked_title">%1$s wants to verify by phone</string>
+    <string name="call_verify_code_title">Read these to %1$s</string>
+    <string name="call_verify_matched_title">%1$s is verified by phone</string>
+    <string name="call_verify_different_title">The codes don\'t match</string>
+    <string name="call_verify_unavailable_title">Can\'t verify by phone now</string>
+    <string name="call_verify_waiting_text">Waiting for %1$s to tap Verify by phone too. If nothing happens, their Sotto may be too old.</string>
+    <string name="call_verify_asked_text">You\'ll both see the same seven pictures if nobody is listening in on this call. Read them to each other to check.</string>
+    <string name="call_verify_exchanging_text">Working out the code…</string>
+    <string name="call_verify_code_text">Are they the same, in the same order, on %1$s\'s phone? Only say yes if you\'re sure it\'s %1$s\'s voice.</string>
+    <string name="call_verify_matched_text">The chat says \"Verified by phone only\": a call is weaker proof than meeting. When you meet, verify in person too.</string>
+    <string name="call_verify_different_text">Someone may be in the middle of this call, such as the relay. Don\'t trust this chat until you\'ve met %1$s and verified in person.</string>
+    <string name="call_verify_unavailable_text">%1$s needs to be a saved contact whose keys this phone has checked. Try again later.</string>
+    <string name="call_verify">Verify</string>
+    <string name="call_verify_matches">It matches</string>
+    <string name="call_verify_differs">It\'s different</string>
+    <string name="call_not_now">Not now</string>
+
+    <!-- The seven emoji's names, read out to each other -->
+    <string name="call_emoji_dog">Dog</string>
+    <string name="call_emoji_cat">Cat</string>
+    <string name="call_emoji_lion">Lion</string>
+    <string name="call_emoji_horse">Horse</string>
+    <string name="call_emoji_unicorn">Unicorn</string>
+    <string name="call_emoji_pig">Pig</string>
+    <string name="call_emoji_elephant">Elephant</string>
+    <string name="call_emoji_rabbit">Rabbit</string>
+    <string name="call_emoji_panda">Panda</string>
+    <string name="call_emoji_rooster">Rooster</string>
+    <string name="call_emoji_penguin">Penguin</string>
+    <string name="call_emoji_turtle">Turtle</string>
+    <string name="call_emoji_fish">Fish</string>
+    <string name="call_emoji_octopus">Octopus</string>
+    <string name="call_emoji_butterfly">Butterfly</string>
+    <string name="call_emoji_flower">Flower</string>
+    <string name="call_emoji_tree">Tree</string>
+    <string name="call_emoji_cactus">Cactus</string>
+    <string name="call_emoji_mushroom">Mushroom</string>
+    <string name="call_emoji_globe">Globe</string>
+    <string name="call_emoji_moon">Moon</string>
+    <string name="call_emoji_cloud">Cloud</string>
+    <string name="call_emoji_fire">Fire</string>
+    <string name="call_emoji_banana">Banana</string>
+    <string name="call_emoji_apple">Apple</string>
+    <string name="call_emoji_strawberry">Strawberry</string>
+    <string name="call_emoji_corn">Corn</string>
+    <string name="call_emoji_pizza">Pizza</string>
+    <string name="call_emoji_cake">Cake</string>
+    <string name="call_emoji_heart">Heart</string>
+    <string name="call_emoji_smiley">Smiley</string>
+    <string name="call_emoji_robot">Robot</string>
+    <string name="call_emoji_hat">Hat</string>
+    <string name="call_emoji_glasses">Glasses</string>
+    <string name="call_emoji_spanner">Spanner</string>
+    <string name="call_emoji_santa">Santa</string>
+    <string name="call_emoji_thumbs_up">Thumbs up</string>
+    <string name="call_emoji_umbrella">Umbrella</string>
+    <string name="call_emoji_hourglass">Hourglass</string>
+    <string name="call_emoji_clock">Clock</string>
+    <string name="call_emoji_gift">Gift</string>
+    <string name="call_emoji_light_bulb">Light bulb</string>
+    <string name="call_emoji_book">Book</string>
+    <string name="call_emoji_pencil">Pencil</string>
+    <string name="call_emoji_paperclip">Paperclip</string>
+    <string name="call_emoji_scissors">Scissors</string>
+    <string name="call_emoji_lock">Lock</string>
+    <string name="call_emoji_key">Key</string>
+    <string name="call_emoji_hammer">Hammer</string>
+    <string name="call_emoji_telephone">Telephone</string>
+    <string name="call_emoji_flag">Flag</string>
+    <string name="call_emoji_train">Train</string>
+    <string name="call_emoji_bicycle">Bicycle</string>
+    <string name="call_emoji_aeroplane">Aeroplane</string>
+    <string name="call_emoji_rocket">Rocket</string>
+    <string name="call_emoji_trophy">Trophy</string>
+    <string name="call_emoji_ball">Ball</string>
+    <string name="call_emoji_guitar">Guitar</string>
+    <string name="call_emoji_trumpet">Trumpet</string>
+    <string name="call_emoji_bell">Bell</string>
+    <string name="call_emoji_anchor">Anchor</string>
+    <string name="call_emoji_headphones">Headphones</string>
+    <string name="call_emoji_folder">Folder</string>
+    <string name="call_emoji_pin">Pin</string>
+
+    <!-- Call notifications -->
+    <string name="call_channel_incoming">Incoming calls</string>
+    <string name="call_channel_incoming_description">Shows incoming voice calls; the app rings and vibrates for them</string>
+    <string name="call_channel_ongoing">Ongoing calls</string>
+    <string name="call_channel_ongoing_description">Shown while a call is in progress</string>
+    <string name="call_incoming_encrypted">Incoming encrypted call</string>
+    <string name="call_encrypted">Encrypted call</string>
+    <string name="call_generic">Call</string>
+
+    <!-- A call in the chat list's preview -->
+    <string name="call_history_voice_call">Voice call</string>
+    <string name="call_history_no_answer">No answer</string>
+    <string name="call_history_outgoing">Outgoing call</string>
+    <string name="call_history_declined">Declined call</string>
+    <string name="call_history_missed">Missed call</string>
+</resources>

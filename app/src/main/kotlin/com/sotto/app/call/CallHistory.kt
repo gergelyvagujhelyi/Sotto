@@ -1,7 +1,9 @@
 package com.sotto.app.call
 
+import com.sotto.app.R
 import com.sotto.app.domain.model.CallStatus
 import com.sotto.app.domain.model.MessageState
+import com.sotto.app.ui.text.UiText
 
 /** End states of a call that never got going: nobody declined or missed it. */
 private val CALL_FAILURES = setOf(CallStatus.FAILED, CallStatus.NO_RELAY, CallStatus.NO_NETWORK)
@@ -34,20 +36,22 @@ internal fun notifiesMissedCall(state: MessageState, endStatus: CallStatus): Boo
     state == MessageState.CALL_MISSED && endStatus != CallStatus.REJECTED
 
 /** The chat list's preview of that entry; [wasConnected] as for [callEventState]. */
-internal fun callEventPreview(state: MessageState, endStatus: CallStatus, wasConnected: Boolean): String = when (state) {
-    MessageState.CALL_OUTGOING -> "Voice call"
-    // Answered, but hung up before it connected: the chat says "Incoming call" too.
-    MessageState.CALL_INCOMING -> if (wasConnected) "Voice call" else "Incoming call"
-    MessageState.CALL_FAILED -> "Call failed"
-    MessageState.CALL_OUTGOING_MISSED -> when (endStatus) {
-        CallStatus.REJECTED -> "Call declined"
-        CallStatus.BUSY -> "Busy"
-        CallStatus.UNAVAILABLE -> "No answer"
-        else -> "Outgoing call"
-    }
-    MessageState.CALL_MISSED -> when (endStatus) {
-        CallStatus.REJECTED -> "Declined call"
-        else -> "Missed call"
-    }
-    else -> "Call"
-}
+internal fun callEventPreview(state: MessageState, endStatus: CallStatus, wasConnected: Boolean): UiText = UiText.res(
+    when (state) {
+        MessageState.CALL_OUTGOING -> R.string.call_history_voice_call
+        // Answered, but hung up before it connected: the chat says "Incoming call" too.
+        MessageState.CALL_INCOMING -> if (wasConnected) R.string.call_history_voice_call else R.string.call_incoming
+        MessageState.CALL_FAILED -> R.string.call_failed
+        MessageState.CALL_OUTGOING_MISSED -> when (endStatus) {
+            CallStatus.REJECTED -> R.string.call_declined
+            CallStatus.BUSY -> R.string.call_busy
+            CallStatus.UNAVAILABLE -> R.string.call_history_no_answer
+            else -> R.string.call_history_outgoing
+        }
+        MessageState.CALL_MISSED -> when (endStatus) {
+            CallStatus.REJECTED -> R.string.call_history_declined
+            else -> R.string.call_history_missed
+        }
+        else -> R.string.call_generic
+    },
+)

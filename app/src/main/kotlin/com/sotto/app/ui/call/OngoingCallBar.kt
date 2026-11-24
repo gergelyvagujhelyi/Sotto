@@ -20,8 +20,10 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.sotto.app.R
 import com.sotto.app.domain.model.CallDirection
 import com.sotto.app.domain.model.CallState
 import com.sotto.app.domain.model.CallStatus
@@ -45,17 +47,17 @@ fun OngoingCallBar(call: CallState, onClick: () -> Unit, modifier: Modifier = Mo
         }
     }
     val status = when {
-        call.status == CallStatus.CONNECTED && call.peerUnreachable -> "Can't reach ${call.peerDisplayName}"
-        call.status == CallStatus.CONNECTED && call.reconnecting -> "Reconnecting…"
+        call.status == CallStatus.CONNECTED && call.peerUnreachable -> stringResource(R.string.call_cant_reach, call.peerDisplayName)
+        call.status == CallStatus.CONNECTED && call.reconnecting -> stringResource(R.string.call_reconnecting)
         call.status == CallStatus.CONNECTED && connectedAt != null -> formatElapsed(elapsed)
-        call.direction == CallDirection.INCOMING && call.status == CallStatus.RINGING -> "Incoming call"
-        else -> "Calling…"
+        call.direction == CallDirection.INCOMING && call.status == CallStatus.RINGING -> stringResource(R.string.call_incoming)
+        else -> stringResource(R.string.call_calling)
     }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(if (call.reconnecting || call.peerUnreachable) ReconnectingColor else OngoingCallColor)
-            .clickable(onClickLabel = "Return to call", onClick = onClick)
+            .clickable(onClickLabel = stringResource(R.string.call_return_to_call), onClick = onClick)
             .statusBarsPadding()
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -77,7 +79,7 @@ fun OngoingCallBar(call: CallState, onClick: () -> Unit, modifier: Modifier = Mo
             maxLines = 1,
         )
         Spacer(Modifier.weight(1f))
-        Text("Tap to return", color = Color.White, style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.call_tap_to_return), color = Color.White, style = MaterialTheme.typography.labelMedium)
     }
 }
 

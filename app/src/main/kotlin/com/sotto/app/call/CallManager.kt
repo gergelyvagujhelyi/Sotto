@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import com.sotto.app.BuildConfig
+import com.sotto.app.R
 import com.sotto.app.crypto.KeyManager
 import com.sotto.app.crypto.PqcProvider
 import com.sotto.app.crypto.lengthPrefixed
@@ -35,6 +36,8 @@ import com.sotto.app.domain.repository.CryptoEngine
 import com.sotto.app.domain.repository.SessionKeys
 import com.sotto.app.domain.repository.SettingsRepository
 import com.sotto.app.notification.ChatNotificationManager
+import com.sotto.app.ui.text.UiText
+import com.sotto.app.ui.text.resolve
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
@@ -308,15 +311,15 @@ class CallManager @Inject constructor(
     private val callsEndedBeforeOffer = LinkedHashMap<String, Long>()
     /** Guards [endCall] against concurrent invocation — only the first caller proceeds. */
     private val endCallGuard = AtomicBoolean(false)
-    private val _callError = MutableStateFlow<String?>(null)
-    val callError: StateFlow<String?> = _callError.asStateFlow()
+    private val _callError = MutableStateFlow<UiText?>(null)
+    val callError: StateFlow<UiText?> = _callError.asStateFlow()
 
     fun clearCallError() { _callError.value = null }
 
     fun initiateCall(peerId: String, peerDisplayName: String) {
         // A call that just ended may still be on its end screen: calling back works anyway.
         if (_callState.value?.status?.isOver == false) {
-            _callError.value = "Already in a call"
+            _callError.value = UiText.res(R.string.call_already_in_call)
             return
         }
 
@@ -1294,7 +1297,7 @@ class CallManager @Inject constructor(
             )
 
             // Update the conversation preview
-            updateConversationPreview(conversationId, peerId, callEventPreview(messageState, endStatus, wasConnected), now)
+            updateConversationPreview(conversationId, peerId, callEventPreview(messageState, endStatus, wasConnected).resolve(context), now)
 
             // Show missed call notification for incoming calls the user didn't answer or reject
             if (notifiesMissedCall(messageState, endStatus)) {
