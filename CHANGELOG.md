@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+## 0.7.26 — 2026-11-25
+
 - **Group chats** — Make a group of up to 32 people from your contacts (the new-group button in the chat list), with a name. They get an invitation and join or decline; nothing from the group reaches them before they join. Each message goes to every member as its own end-to-end encrypted message, so your relay sees only one-to-one messages, and everything a 1:1 chat has works in a group: replies, reactions (everyone's, under the message), voice messages, photos, files (uploaded once for everyone), disappearing messages (set by the admin) and read receipts. Tap your message to see who has it, and send it again to those it didn't reach. Groups have no calls.
 - **The admin runs the group** — Only the admin changes its name, members and timer, or deletes it; every change is signed and checked on every phone. The admin can hand the group to another member, and leaving or deleting your account offers to do it first. Members who aren't your contacts are shown with how the admin verified them; you can still verify them in person yourself. A removed member keeps what they had, and gets nothing new once their phone has heard of it (an offline phone hears once it's back).
 - **Everyone needs this version for groups** — Sotto 0.7.25 and older show group messages as "needs a newer Sotto".
