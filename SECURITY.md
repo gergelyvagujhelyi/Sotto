@@ -81,11 +81,14 @@ messages from the losing session are still decrypted.
 - The IP address a phone connects from, while it's connected, as any server sees it. The IP rate limits count requests per address in memory. No log keeps addresses (see Relay Logs and Scanners).
 - For files sent through its object store (0.7.7): who sends a file to whom, its encrypted size and when, until the recipient has it (at most 30 days); and each account's bytes uploaded over 30 days, for its allowance. Never the file's name, type, content or key. A file sent to a group goes up once and names every member who gets it, so the relay learns that those accounts received the same file.
 
+- Group chats (ADR-32): nothing it can read. Each copy of a group message is an ordinary 1:1 envelope. It can guess that accounts form a group from one account sending to the same accounts at the same moment, again and again, and from a group file's list of recipients (above).
+
 ### What the Server Does NOT Know
 - Message content
 - Contact names or display names (your own name, if you set one, reaches contacts only inside an end-to-end encrypted message; see Display Names below)
 - Phone numbers, emails, real names
 - Which messages belong to which conversation (from the server's perspective, it's just sender → recipient)
+- Groups: their ids, names, members, admins, timers, or which envelopes are group messages
 
 ## Known Limitations & Risks
 
@@ -316,6 +319,19 @@ The name itself is public, because Certificate Transparency logs list every cert
 - **Direct transfers.** A file can go phone to phone over a WebRTC data channel that has STUN servers only, never TURN, so it never passes through the relay. The two connection descriptions (which hold IP addresses) travel as ratchet-encrypted, signed messages; both sides must allow direct connections and trust each other, as for direct calls (ADR-17), and the receiver goes direct only on an unmetered network. The bytes are the same encrypted file the store would hold, checked the same way; a broken transfer falls back to the store.
 - **The relay's key** to the bucket can read and write that bucket only. It can't create buckets, keys or policies.
 
+### Group Chats (ADR-32, ADR-33)
+- **Pairwise copies.** A group message goes to each member as its own copy, sealed on that member's 1:1 Double Ratchet session and dual-signed (Ed25519 + ML-DSA-65) like any message: the same forward secrecy, post-quantum protection and downgrade latch. No ciphertext is shared between members, and nothing about the group reaches the relay in clear.
+- **The packet** (`group/GroupPacket.kt`) is inside the encryption: version 1, at most 256 KB, every field checked (ids, user ids, epoch, a time no more than a day ahead or 31 days old, which fields each kind may carry). It names its group, its own id, its sender, its one recipient, the sender's roster epoch and its time; the receiver drops it unless sender and recipient are the envelope's authenticated ones. A malformed, oversized or later-version packet is dropped and acknowledged, so it can't block the queue.
+- **The roster** is signed by the admin (Ed25519, plus ML-DSA-65 whenever the admin has a post-quantum key: dropping it is refused) over a length-prefixed canonical form with its own domain. A phone takes one only from its issuer, with a higher epoch, issued by the admin it holds or by one reached through handovers each signed by the admin before, naming the new admin's key fingerprint. Signing keys come only from pins: the user's contacts, members vouched for by a roster the phone took, or the new admin a checked handover names. Never keys the relay hands out unchecked, never fingerprints from a roster not yet checked.
+- **Membership is enforced on every packet.** Content only from active members of the newest roster held, verified with exactly the keys vouched for them, while the user is active. After a newer roster is stored, a member it leaves out gets nothing more in, and gets nothing more sent. Content from an older epoch is taken only from members still in the newest roster. Packets with a newer epoch wait (decrypted, at most a week) for their roster.
+- **Invitations** only from accepted, unblocked contacts who are the roster's admin; nothing from the group arrives before the user accepts, and declined groups drop everything later.
+- **Vouched members** (ADR-33): a member who isn't the user's contact is pinned only when the relay's keys for them match the fingerprint the admin vouched for, as a contact row marked group-only that's never shown or offered a chat. The screen says how they're verified, by the user or by the admin. Members whose keys don't match get and give nothing in the group.
+- **Removal can't reach an offline phone.** It learns once it's back; until then it keeps its old roster and keeps sending (the admin's group info shows which members the latest change reached). A removed member keeps what they had received.
+- **Copies aren't sent twice or re-encrypted.** Each copy is kept sealed (in the SQLCipher database) from before it leaves until the relay has it, under its own client id; a retry, also after the app was killed, sends exactly those bytes. Receipts mark only the copy they name.
+- **Blocking**: a blocked member's group messages are dropped like their 1:1 ones, and they get no copies. The admin can't add someone blocked.
+- **No group calls.**
+- **Account deletion**: the app offers to hand every group the user runs to another member first; otherwise the group freezes for the others once they hear of the deletion.
+
 ## Security Checklist
 
 - [x] Messages encrypted before leaving device (AES-256-GCM)
@@ -354,6 +370,7 @@ The name itself is public, because Certificate Transparency logs list every cert
 - [x] Call frame encryption — AES-GCM via WebRTC FrameCryptor, HKDF-derived keys with per-call salt
 - [x] Key material zeroization — signing keys, shared secrets, chain material wiped after use
 - [x] Mandatory message signatures — unsigned messages rejected unconditionally
+- [x] Group chats — pairwise copies, admin-signed rosters with growing epochs and signed handovers, membership checked on every packet, an outbox that never re-encrypts a sent copy
 - [x] Nginx security headers — HSTS, CSP, X-Frame-Options, nosniff, Referrer-Policy
 - [x] Server TOCTOU protection — row-level locking on message queue depth check
 - [x] Ratchet header validation — bounds checking on untrusted messageNumber/previousChainLength

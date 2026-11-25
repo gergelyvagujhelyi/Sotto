@@ -58,6 +58,12 @@ language (Settings > Apps > Sotto > Language, or Sotto's own Settings > Language
 | end-to-end encrypted | végponttól végpontig titkosított |
 | voice message | hangüzenet |
 | photo, video, file | fénykép, videó, fájl |
+| group, group chat | csoport, csoportos beszélgetés |
+| member | tag |
+| admin (of a group) | admin |
+| group invitation | csoportmeghívó |
+| join / leave (a group) | csatlakozás / kilépés |
+| vouch for (the admin vouches) | kezeskedik (az admin kezeskedik érte) |
 | attachment | csatolmány |
 | reply, react, reaction | válasz, reagálás, reakció |
 | sent, delivered, read | elküldve, kézbesítve, olvasva |
