@@ -116,13 +116,14 @@ async def reserve_upload(
     db: AsyncSession = Depends(get_db),
 ) -> ReserveResponse:
     store = _store()
+    # A malformed request is refused before it uses up a token of the limit.
+    recipients = request.recipients()
+    if x_user_id in recipients:
+        raise HTTPException(status_code=400, detail="attachment_to_self")
     if not await limiter.allow(x_user_id):
         raise HTTPException(status_code=429, detail="attachment_rate_limited")
     if request.size > config.ATTACHMENT_MAX_BYTES:
         raise HTTPException(status_code=413, detail="attachment_too_large")
-    recipients = request.recipients()
-    if x_user_id in recipients:
-        raise HTTPException(status_code=400, detail="attachment_to_self")
     # The sender's row, locked: two reservations can't both slip under the allowance.
     sender = (await db.execute(
         select(Identity.user_id).where(Identity.user_id == x_user_id).with_for_update()
@@ -303,7 +304,15 @@ async def delete_attachment(
     recipient is left. The sender's removes it for everyone.
     """
     store = _store()
-    row = await _own(db, attachment_id)
+    # The row, locked: deletes of one attachment (its last two recipients at once, or the
+    # sender and a recipient) take turns, so the last one sees no claim left and removes the
+    # object, and a later one finds the row gone (404) instead of deleting it twice.
+    await _own(db, attachment_id)
+    row = (await db.execute(
+        select(Attachment).where(Attachment.id == attachment_id).with_for_update()
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
     if x_user_id != row.sender_id:
         if not await _is_recipient(db, attachment_id, x_user_id):
             raise HTTPException(status_code=404, detail="Attachment not found")
@@ -325,7 +334,8 @@ async def delete_attachment(
             # The row stays, so the purge tries again later.
             raise HTTPException(status_code=502, detail="store_unreachable")
     await db.execute(delete(AttachmentRecipient).where(AttachmentRecipient.attachment_id == attachment_id))
-    await db.delete(row)
+    # A plain DELETE: a purge that removed the row meanwhile leaves nothing to fail on.
+    await db.execute(delete(Attachment).where(Attachment.id == attachment_id))
     await db.commit()
     return {"status": "deleted"}
 
@@ -374,7 +384,7 @@ async def purge_attachments(db: AsyncSession) -> int:
                 except httpx.HTTPError:
                     continue
                 await db.execute(delete(AttachmentRecipient).where(AttachmentRecipient.attachment_id == row.id))
-                await db.delete(row)
+                await db.execute(delete(Attachment).where(Attachment.id == row.id))
                 removed += 1
     await db.execute(delete(AttachmentUsage).where(AttachmentUsage.created_at < now - timedelta(days=31)))
     await db.commit()

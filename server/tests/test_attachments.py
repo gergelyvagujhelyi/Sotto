@@ -403,3 +403,61 @@ async def test_the_migration_gives_existing_attachments_their_recipient(tmp_path
 async def asyncio_to_thread(fn, *args):
     import asyncio
     return await asyncio.to_thread(fn, *args)
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_reservation_uses_no_token_of_the_limit(client: AsyncClient, store: FakeStore, monkeypatch):
+    alice, bob = await _pair(client)
+    for _ in range(25):
+        r = await client.post("/v1/attachments", json={"recipient_ids": [], "size": 10}, headers=_auth(alice))
+        assert r.status_code == 422
+    assert (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 10}, headers=_auth(alice))).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_deleting_an_account_drops_its_claims(client: AsyncClient, store: FakeStore):
+    from app.models.db import AttachmentRecipient
+    from sqlalchemy import select
+    from tests.conftest import test_session
+
+    alice, bob, carol = await _group(client, 3)
+    att = (await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"]], "size": 10,
+    }, headers=_auth(alice))).json()
+    assert (await client.delete("/v1/identity/me", headers=_auth(bob))).status_code == 200
+    async with test_session() as db:
+        left = (await db.execute(
+            select(AttachmentRecipient.recipient_id).where(AttachmentRecipient.attachment_id == att["id"])
+        )).scalars().all()
+    assert left == [carol["user_id"]]
+
+
+@pytest.mark.asyncio
+async def test_a_second_delete_after_the_file_is_gone_is_a_404_not_an_error(client: AsyncClient, store: FakeStore):
+    alice, bob = await _pair(client)
+    att = (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 10}, headers=_auth(alice))).json()
+    store.objects[f"a/{att['id']}"] = 10
+    await client.post(f"/v1/attachments/{att['id']}/complete", headers=_auth(alice))
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(alice))).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_delete_locks_the_attachment_row(client: AsyncClient, store: FakeStore, monkeypatch):
+    """Deletes of one file take turns on PostgreSQL (SQLite, which the tests use, ignores the lock)."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    alice, bob, carol = await _group(client, 3)
+    att = (await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"]], "size": 10,
+    }, headers=_auth(alice))).json()
+    seen = []
+    real = AsyncSession.execute
+
+    async def spy(self, statement, *args, **kwargs):
+        seen.append(statement)
+        return await real(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", spy)
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+    assert any(getattr(st, "_for_update_arg", None) is not None for st in seen)

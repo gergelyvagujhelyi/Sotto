@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import config
 from app.auth import key_lookup_auth, verify_auth_token
 from app.database import get_db
-from app.models.db import DeliveryReceipt, Identity, Invite, PendingMessage, RateLimit, ReadReceipt, RetiredShareCode
+from app.models.db import AttachmentRecipient, DeliveryReceipt, Identity, Invite, PendingMessage, RateLimit, ReadReceipt, RetiredShareCode
 from app.services import invites
 from app.services.call_rate_limiter import SlidingWindowLimiter
 from app.services.ip_rate_limiter import check_ip_rate_limit
@@ -209,6 +209,9 @@ async def delete_identity(
         (DeliveryReceipt.recipient_id == x_user_id) | (DeliveryReceipt.sender_id == x_user_id)
     ))
     await db.execute(delete(RateLimit).where(RateLimit.user_id == x_user_id))
+    # Files waiting for this account can't be fetched by it any more (the purge removes a file
+    # once nobody is left to fetch it).
+    await db.execute(delete(AttachmentRecipient).where(AttachmentRecipient.recipient_id == x_user_id))
     # Invites nobody used yet die with their member.
     await db.execute(delete(Invite).where(Invite.created_by == x_user_id, Invite.used_at.is_(None)))
     await db.commit()
