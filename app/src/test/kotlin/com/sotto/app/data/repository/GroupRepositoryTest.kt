@@ -580,7 +580,9 @@ class GroupRepositoryTest {
         astrid.repo.flushOutbox()
         fetchAll()
         assertNull(bjorn.groupDao.getMember(id, "cecilia"))
-        assertTrue(GroupEvent.LEFT in astrid.events(id))
+        // Noted once, on the admin's phone and on a member's.
+        assertEquals(1, astrid.events(id).count { it == GroupEvent.LEFT })
+        assertEquals(1, bjorn.events(id).count { it == GroupEvent.LEFT })
         assertFalse(GroupEvent.REMOVED in astrid.events(id))
         relay.posted.clear()
         astrid.repo.sendText(id, "Nu är vi två")
@@ -600,6 +602,7 @@ class GroupRepositoryTest {
         val id = fika()
         bjorn.repo.onAccountDeleted("astrid")
         assertTrue(bjorn.group(id)!!.frozen)
+        assertEquals(1, bjorn.events(id).count { it == GroupEvent.LEFT })
         assertTrue(GroupEvent.FROZEN in bjorn.events(id))
         // Messages still go between those left.
         relay.posted.clear()
@@ -781,6 +784,11 @@ class GroupRepositoryTest {
         astrid.repo.setTimer(id, 3_600_000)
         fetchAll()
         assertEquals(3_600_000, bjorn.group(id)!!.timerMs)
+        // The admin's own change reads "You ..." (no name); others see who.
+        val ownEvent = astrid.messageDao.inGroup(id).map { GroupEvent.decode(it.plaintext) }.last { it?.type == GroupEvent.TIMER }!!
+        assertEquals(listOf(""), ownEvent.names)
+        val theirs = bjorn.messageDao.inGroup(id).map { GroupEvent.decode(it.plaintext) }.last { it?.type == GroupEvent.TIMER }!!
+        assertEquals(listOf("Astrid"), theirs.names)
         assertThrows { bjorn.repo.setTimer(id, 0) }
         cecilia.repo.sendText(id, "Snart borta")
         fetchAll()
@@ -843,6 +851,8 @@ class GroupRepositoryTest {
         assertEquals(2, bodies.size)
         val files = bodies.map { FilePayload.decode(it)!! }
         assertEquals(setOf("a".repeat(32)), files.map { it.id }.toSet())
+        // Here it's simply ours to open; who has it is per member.
+        assertEquals("ready", astrid.messageDao.getById(row.id)!!.mediaState)
         assertTrue(files.all { it.key.contentEquals(key) && it.name == "fika.pdf" })
         fetchAll()
         val atBjorn = bjorn.messageDao.messagesIn(id).single()

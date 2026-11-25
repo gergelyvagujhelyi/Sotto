@@ -65,6 +65,8 @@
     <string name="group_event_declined">%1$s elutasította a meghívást</string>
     <string name="group_event_title">%1$s átnevezte a csoportot: „%2$s”</string>
     <string name="group_event_timer">%1$s beállította az eltűnő üzeneteket: %2$s</string>
+    <string name="group_event_title_you">Átnevezted a csoportot: „%1$s”</string>
+    <string name="group_event_timer_you">Beállítottad az eltűnő üzeneteket: %1$s</string>
     <string name="group_event_admin">%1$s lett az admin</string>
     <string name="group_event_admin_you">Te lettél az admin</string>
     <string name="group_event_ended">Az admin törölte a csoportot</string>

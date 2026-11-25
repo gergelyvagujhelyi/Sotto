@@ -428,7 +428,8 @@ class GroupRepositoryImpl @Inject constructor(
         val group = groupDao.get(groupId) ?: return
         if (recipientsFor(groupId).isEmpty()) {
             // Nobody else to send to (everyone left, or is still invited): it's sent.
-            if (row.mediaState == FileState.UPLOADING.wire) messageDao.setMediaState(row.id, FileState.SENT.wire)
+            if (row.mediaKind == MediaKind.FILE.wire) messageDao.setMediaState(row.id, FileState.READY.wire)
+            else if (row.mediaState == FileState.UPLOADING.wire) messageDao.setMediaState(row.id, FileState.SENT.wire)
             messageDao.updateState(row.id, MessageState.SENT.name)
             return
         }
@@ -446,6 +447,9 @@ class GroupRepositoryImpl @Inject constructor(
             copyFor(groupId, row.id, member.userId, packet, now)
         }
         groupDao.insertCopies(copies)
+        // Our file is up for every member: here it's simply ours to open (no "not downloaded
+        // yet": several members fetch it, each in their own time; the copies say who has it).
+        if (row.mediaKind == MediaKind.FILE.wire) messageDao.setMediaState(row.id, FileState.READY.wire)
         deliver(groupDao.getCopiesForMessage(row.id))
         refreshState(row.id)
     }
@@ -961,17 +965,16 @@ class GroupRepositoryImpl @Inject constructor(
         }
         val goneIds = old.members.filter { new.member(it.userId) == null && it.userId != me }
         for (m in goneIds) {
-            // Someone who told us they left (or whose account went) left; anyone else the admin removed.
-            val toldUs = previousMembers[m.userId]?.status == MEMBER_GONE
-            val type = when {
-                m.status == RosterMember.INVITED -> GroupEvent.DECLINED
-                toldUs -> GroupEvent.LEFT
-                else -> GroupEvent.REMOVED
-            }
+            // Someone who told us they left (or whose account went) is already noted as gone;
+            // anyone else the admin removed.
+            if (previousMembers[m.userId]?.status == MEMBER_GONE) continue
+            val type = if (m.status == RosterMember.INVITED) GroupEvent.DECLINED else GroupEvent.REMOVED
             addEvent(groupId, GroupEvent(type, listOf(m.userId), listOf(shown(m.userId))))
         }
-        if (new.title != old.title) addEvent(groupId, GroupEvent(GroupEvent.TITLE, listOf(new.issuer), listOf(shown(new.issuer)), new.title))
-        if (new.timerMs != old.timerMs) addEvent(groupId, GroupEvent(GroupEvent.TIMER, listOf(new.issuer), listOf(shown(new.issuer)), new.timerMs.toString()))
+        // The user's own change: no name (it reads "You ...").
+        val by = if (new.issuer == me) "" else shown(new.issuer)
+        if (new.title != old.title) addEvent(groupId, GroupEvent(GroupEvent.TITLE, listOf(new.issuer), listOf(by), new.title))
+        if (new.timerMs != old.timerMs) addEvent(groupId, GroupEvent(GroupEvent.TIMER, listOf(new.issuer), listOf(by), new.timerMs.toString()))
         if (new.admin != old.admin) addEvent(groupId, GroupEvent(GroupEvent.ADMIN, listOf(new.admin), listOf(if (new.admin == me) "" else shown(new.admin))))
         if (newStatus == GroupStatus.ENDED && oldStatus != GroupStatus.ENDED) addEvent(groupId, GroupEvent(GroupEvent.ENDED))
         if (newStatus == GroupStatus.REMOVED && oldStatus == GroupStatus.ACTIVE) addEvent(groupId, GroupEvent(GroupEvent.YOU_REMOVED))
@@ -1167,13 +1170,14 @@ class GroupRepositoryImpl @Inject constructor(
         if (inbound.senderFingerprint != member.fingerprint) return drop(inbound, "leave not signed with the vouched keys")
         // Anyone may take themselves out: we stop sending to them at once, whatever the roster says.
         groupDao.markGone(group.id, inbound.sender)
+        if (GroupStatus.fromWire(group.status) == GroupStatus.ACTIVE) {
+            addEvent(group.id, GroupEvent(GroupEvent.LEFT, listOf(inbound.sender), listOf(nameOf(group.id, inbound.sender))))
+        }
         if (group.adminId == me && !group.frozen && GroupStatus.fromWire(group.status) == GroupStatus.ACTIVE) {
             val roster = parseRoster(group.roster)
             if (roster.member(inbound.sender) != null) {
-                issue(group, roster.copy(members = roster.members.filter { it.userId != inbound.sender }), sendNow = false)
+                issue(groupDao.get(group.id) ?: group, roster.copy(members = roster.members.filter { it.userId != inbound.sender }), sendNow = false)
             }
-        } else if (GroupStatus.fromWire(group.status) == GroupStatus.ACTIVE) {
-            addEvent(group.id, GroupEvent(GroupEvent.LEFT, listOf(inbound.sender), listOf(nameOf(group.id, inbound.sender))))
         }
     }
 

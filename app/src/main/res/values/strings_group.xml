@@ -65,6 +65,8 @@
     <string name="group_event_declined">%1$s declined the invitation</string>
     <string name="group_event_title">%1$s renamed the group to “%2$s”</string>
     <string name="group_event_timer">%1$s set disappearing messages: %2$s</string>
+    <string name="group_event_title_you">You renamed the group to “%1$s”</string>
+    <string name="group_event_timer_you">You set disappearing messages: %1$s</string>
     <string name="group_event_admin">%1$s is now the admin</string>
     <string name="group_event_admin_you">You\'re now the admin</string>
     <string name="group_event_ended">The admin deleted the group</string>

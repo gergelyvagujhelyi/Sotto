@@ -145,8 +145,16 @@ internal fun groupEventText(event: GroupEvent): String {
         GroupEvent.LEFT -> stringResource(R.string.group_event_left, who)
         GroupEvent.REMOVED -> stringResource(R.string.group_event_removed, who)
         GroupEvent.DECLINED -> stringResource(R.string.group_event_declined, who)
-        GroupEvent.TITLE -> stringResource(R.string.group_event_title, who, event.value)
-        GroupEvent.TIMER -> stringResource(R.string.group_event_timer, who, timerLabel(event.value.toLongOrNull() ?: 0))
+        GroupEvent.TITLE -> if (event.names.firstOrNull().isNullOrBlank()) {
+            stringResource(R.string.group_event_title_you, event.value)
+        } else {
+            stringResource(R.string.group_event_title, who, event.value)
+        }
+        GroupEvent.TIMER -> if (event.names.firstOrNull().isNullOrBlank()) {
+            stringResource(R.string.group_event_timer_you, timerLabel(event.value.toLongOrNull() ?: 0))
+        } else {
+            stringResource(R.string.group_event_timer, who, timerLabel(event.value.toLongOrNull() ?: 0))
+        }
         GroupEvent.ADMIN -> if (names.firstOrNull() == stringResource(R.string.chat_you)) {
             stringResource(R.string.group_event_admin_you)
         } else {
