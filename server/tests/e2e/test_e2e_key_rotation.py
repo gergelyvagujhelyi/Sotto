@@ -276,3 +276,38 @@ async def test_delete_identity_clears_everything(client: AsyncClient):
     # delivered to Bob.
     msgs = (await client.get("/v1/messages/pending", headers=bob.auth_header())).json()
     assert [m["encrypted_body"] for m in msgs] == ["goodbye"]
+
+
+# ── Rate limit ───────────────────────────────────────────────────────
+
+
+async def _rotate(client: AsyncClient, user: User, *, good_proof: bool = True) -> int:
+    new_pk, new_pub_b64 = _new_ed25519()
+    new_id_key = base64.b64encode(new_pub_b64.encode()[:24]).decode()
+    proof_key = new_pk if good_proof else _new_ed25519()[0]
+    resp = await client.put(
+        "/v1/identity/me/keys",
+        json=user.endorse({
+            "public_signing_key": new_pub_b64,
+            "public_identity_key": new_id_key,
+            "new_key_proof": _ed25519_proof(proof_key, new_pub_b64),
+        }),
+        headers=user.auth_header(),
+    )
+    if resp.status_code == 200:
+        user.ed25519_private = new_pk
+        user.ed25519_pub_b64 = new_pub_b64
+        user.identity_key_b64 = new_id_key
+    return resp.status_code
+
+
+@pytest.mark.asyncio
+async def test_key_rotation_is_rate_limited_per_account(client: AsyncClient, alice: User, bob: User):
+    """A few rotations an hour per account; failed attempts count too; others unaffected."""
+    assert await _rotate(client, alice, good_proof=False) == 400
+    for _ in range(4):
+        assert await _rotate(client, alice) == 200
+    assert await _rotate(client, alice) == 429
+    # The limited request changed nothing: the current keys still sign in.
+    assert (await client.get("/v1/messages/pending", headers=alice.auth_header())).status_code == 200
+    assert await _rotate(client, bob) == 200

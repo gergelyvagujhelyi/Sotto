@@ -53,6 +53,8 @@ async def setup_db():
     invites.limiter.reset()
     from app.routers import attachments
     attachments.limiter.reset()
+    from app.routers import identity
+    identity.rotation_limiter.reset()
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
