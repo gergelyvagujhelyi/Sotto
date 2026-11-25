@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-- **Relay: a call to a deleted account is dropped** — When an account was deleted, or changed its keys, in the 3 seconds before its app answered an incoming call, the relay kept that call's offer for the account's next connection anyway, a few hundred bytes held until the signal buffer filled up. It now drops it with the rest of the account's buffered call signals. Nobody could notice it: no push went out, and the space was freed when it was needed.
+- **Relay: an unanswered call ends with a deleted account or a key change** — When an account was deleted, or changed its keys, in the 3 seconds before its app answered an incoming call, the relay still kept that call for the account's next connection. For a deleted account that was a few hundred bytes nobody could fetch, held until the signal buffer filled up. After a key change, the phone was woken by push and got the call's offer, made before the change. The relay now drops such a call along with the account's other buffered call signals, as it already did for a call that hadn't reached the phone yet.
 
 ## 0.7.26 — 2026-11-25
 
