@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Relay: an unanswered call ends with a deleted account or a key change** — When an account was deleted, or changed its keys, in the 3 seconds before its app answered an incoming call, the relay still kept that call for the account's next connection. For a deleted account that was a few hundred bytes nobody could fetch, held until the signal buffer filled up. After a key change, the phone was woken by push and got the call's offer, made before the change. The relay now drops such a call along with the account's other buffered call signals, as it already did for a call that hadn't reached the phone yet.
+
 ## 0.7.26 — 2026-11-25
 
 - **Group chats** — Make a group of up to 32 people from your contacts (the new-group button in the chat list), with a name. They get an invitation and join or decline; nothing from the group reaches them before they join. Each message goes to every member as its own end-to-end encrypted message, so your relay sees only one-to-one messages, and everything a 1:1 chat has works in a group: replies, reactions (everyone's, under the message), voice messages, photos, files (uploaded once for everyone), disappearing messages (set by the admin) and read receipts. Tap your message to see who has it, and send it again to those it didn't reach. Groups have no calls.

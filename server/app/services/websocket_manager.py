@@ -162,12 +162,15 @@ class WebSocketManager:
         """Close every connection of a user and drop their buffered signals.
 
         Called when the user's keys change or the identity is deleted: sockets
-        authenticated with the old keys must not stay alive.
+        authenticated with the old keys must not stay alive. Offers to the user that
+        await an answer go too: park_unconfirmed_offer would buffer them again.
         """
         async with self._lock:
             sockets = list(self._connections.pop(user_id, {}))
             dropped = self._pending_call_signals.pop(user_id, [])
             self._pending_signal_bytes -= sum(len(p) for _, p in dropped)
+            for key in [k for k in self._unconfirmed if k[0] == user_id]:
+                del self._unconfirmed[key]
         for ws in sockets:
             await self._close(ws, code=4001, reason=reason)
         metrics.active_ws_connections = self.connection_count()
