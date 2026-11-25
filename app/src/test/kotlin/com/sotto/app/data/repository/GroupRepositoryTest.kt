@@ -519,6 +519,54 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun `a phone that missed a handover to someone it never knew follows it with the vouched keys`() = runTest {
+        val id = fika()
+        // Cecilia is away: nothing reaches her for a while.
+        fun holdCecilia() = relay.queues.remove("cecilia")
+        astrid.repo.invite(id, listOf("dagny"))
+        holdCecilia(); fetchAll()
+        dagny.repo.acceptInvitation(id)
+        holdCecilia(); fetchAll()
+        astrid.repo.flushOutbox()
+        holdCecilia(); fetchAll()
+        astrid.repo.makeAdmin(id, "dagny")
+        holdCecilia(); fetchAll()
+        dagny.repo.rename(id, "Dagnys fika")
+        // Only Dagny's latest roster reaches Cecilia; the ones before it were lost.
+        val latest = relay.queues.remove("cecilia")!!.last { it.sender == "dagny" }
+        assertNull(cecilia.contactDao.getByUserId("dagny"))
+        cecilia.receive(latest)
+        assertEquals("Dagnys fika", cecilia.group(id)!!.title)
+        assertEquals("dagny", cecilia.group(id)!!.adminId)
+        // Dagny's keys were taken from the relay only because Astrid's handover vouched for them.
+        val pin = cecilia.contactDao.getByUserId("dagny")!!
+        assertTrue(pin.groupOnly)
+        assertEquals(accounts.getValue("dagny").fingerprint, pin.keyFingerprint)
+    }
+
+    @Test
+    fun `a relay serving other keys for an unknown new admin can't take the group over`() = runTest {
+        val id = fika()
+        fun holdCecilia() = relay.queues.remove("cecilia")
+        astrid.repo.invite(id, listOf("dagny"))
+        holdCecilia(); fetchAll()
+        dagny.repo.acceptInvitation(id)
+        holdCecilia(); fetchAll()
+        astrid.repo.flushOutbox()
+        holdCecilia(); fetchAll()
+        astrid.repo.makeAdmin(id, "dagny")
+        holdCecilia(); fetchAll()
+        dagny.repo.rename(id, "Dagnys fika")
+        val latest = relay.queues.remove("cecilia")!!.last { it.sender == "dagny" }
+        // The relay now hands out someone else's keys for Dagny.
+        relay.directory["dagny"] = TestAccount("dagny")
+        cecilia.receive(latest)
+        assertEquals("Fika", cecilia.group(id)!!.title)
+        assertEquals("astrid", cecilia.group(id)!!.adminId)
+        assertNull(cecilia.contactDao.getByUserId("dagny"))
+    }
+
+    @Test
     fun `a member who leaves is taken out by the admin, and the admin who leaves hands over first`() = runTest {
         val id = fika()
         cecilia.repo.leave(id)

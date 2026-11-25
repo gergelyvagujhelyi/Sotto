@@ -100,7 +100,7 @@ class GroupRosterTest {
     @Test
     fun `the admin hands over with a signed handover, and the new admin's rosters follow`() {
         val before = roster(epoch = 5)
-        val handover = RosterRules.transfer(groupId, 6, astrid.userId, bjorn.userId, astrid.signatures)
+        val handover = RosterRules.transfer(groupId, 6, astrid.userId, bjorn.userId, bjorn.fingerprint, astrid.signatures)
         val atHandover = roster(epoch = 6, admin = bjorn, issuer = astrid, transfers = listOf(handover))
         assertEquals(Verdict.Accept, verify(atHandover, before, astrid))
 
@@ -116,11 +116,11 @@ class GroupRosterTest {
     @Test
     fun `a handover not signed by the admin is refused`() {
         val before = roster(epoch = 5)
-        val forged = RosterRules.transfer(groupId, 6, astrid.userId, bjorn.userId, bjorn.signatures)
+        val forged = RosterRules.transfer(groupId, 6, astrid.userId, bjorn.userId, bjorn.fingerprint, bjorn.signatures)
         val bjorns = roster(epoch = 7, admin = bjorn, transfers = listOf(forged))
         assertEquals(Verdict.Reject("handover signature"), verify(bjorns, before, bjorn))
         // Nor one from someone who wasn't admin.
-        val fromCecilia = RosterRules.transfer(groupId, 6, cecilia.userId, bjorn.userId, cecilia.signatures)
+        val fromCecilia = RosterRules.transfer(groupId, 6, cecilia.userId, bjorn.userId, bjorn.fingerprint, cecilia.signatures)
         assertEquals(
             Verdict.Reject("handover from someone not admin"),
             verify(roster(epoch = 7, admin = bjorn, transfers = listOf(fromCecilia)), before, bjorn),
@@ -130,10 +130,42 @@ class GroupRosterTest {
     }
 
     @Test
+    fun `a handover vouches for the new admin's keys, and only a checked one is believed`() {
+        val before = roster(epoch = 5)
+        val handover = RosterRules.transfer(groupId, 6, astrid.userId, bjorn.userId, bjorn.fingerprint, astrid.signatures)
+        // The handover is signed over bjorn's fingerprint: a roster naming other keys for him fails.
+        val otherKeys = TestAccount("bjorn")
+        val atHandover = roster(epoch = 6, admin = bjorn, issuer = astrid, transfers = listOf(handover))
+        val swapped = RosterRules.sign(
+            atHandover.unsigned().copy(members = atHandover.members.map { if (it.userId == "bjorn") it.copy(fingerprint = otherKeys.fingerprint) else it }),
+            astrid.signatures,
+        )
+        assertEquals(Verdict.Reject("handover names other keys"), verify(swapped, before, astrid))
+        // Nor can the handover's own fingerprint be changed.
+        val retargeted = handover.copy(toFingerprint = otherKeys.fingerprint)
+        val bjorns = roster(epoch = 7, admin = bjorn, transfers = listOf(retargeted))
+        assertEquals(Verdict.Reject("handover signature"), verify(bjorns, before, bjorn))
+
+        // A phone that never had bjorn (he joined while it was away) and has no keys for him is
+        // told which keys to take: those the checked handover names.
+        val noBjorn: (String) -> SigningKeys? = { if (it == "bjorn") null else keys(it) }
+        val beforeHim = roster(epoch = 5, members = listOf(astrid.member(), cecilia.member()))
+        val honest = roster(epoch = 7, admin = bjorn, transfers = listOf(handover))
+        assertEquals(Verdict.NeedKeys("bjorn", bjorn.fingerprint), RosterRules.verifyUpdate(honest, beforeHim, "bjorn", noBjorn, bjorn.signatures))
+        // Even if the new roster itself claims other keys for him.
+        val lying = RosterRules.sign(
+            honest.unsigned().copy(members = honest.members.map { if (it.userId == "bjorn") it.copy(fingerprint = otherKeys.fingerprint) else it }),
+            bjorn.signatures,
+        )
+        assertEquals(Verdict.NeedKeys("bjorn", bjorn.fingerprint), RosterRules.verifyUpdate(lying, beforeHim, "bjorn", noBjorn, bjorn.signatures))
+    }
+
+    @Test
     fun `keys this phone doesn't have are asked for, not guessed`() {
         val stranger = TestAccount("eskil")
         val r = roster(admin = stranger, members = listOf(stranger.member(), bjorn.member(RosterMember.INVITED)))
-        assertEquals(Verdict.NeedKeys("eskil"), verify(r, null, stranger))
+        // An invitation's sender is a contact (pinned) or it's refused: no fingerprint to take keys by.
+        assertEquals(Verdict.NeedKeys("eskil", null), verify(r, null, stranger))
     }
 
     @Test

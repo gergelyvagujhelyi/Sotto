@@ -800,7 +800,10 @@ class GroupRepositoryImpl @Inject constructor(
         val previous = parseRoster(group.roster)
         val epoch = previous.epoch + 1
         var transfers = previous.transfers
-        if (draft.admin != me) transfers = transfers + RosterRules.transfer(group.id, epoch, me, draft.admin, signatures)
+        if (draft.admin != me) {
+            val heirFp = draft.member(draft.admin)?.fingerprint ?: throw IllegalStateException("No keys for the new admin")
+            transfers = transfers + RosterRules.transfer(group.id, epoch, me, draft.admin, heirFp, signatures)
+        }
         val refreshed = draft.members.map { m ->
             if (m.userId == me) return@map m.copy(name = RosterRules.cleanName(env.myName()))
             // Our own contacts: our pin and how we verified them. Members we only know through
@@ -1061,16 +1064,16 @@ class GroupRepositoryImpl @Inject constructor(
         }
         val stored = parseRoster(group.roster)
         var verdict = verify(roster, stored, inbound.sender)
-        if (verdict is RosterRules.Verdict.NeedKeys) {
-            // An admin (or one in the handover chain) whose keys we haven't fetched: they're
-            // members of the roster we hold, so their vouched fingerprint says which keys to take.
-            val need = verdict.userId
-            val vouched = stored.member(need) ?: roster.member(need)?.takeIf { stored.member(roster.issuer) != null }
-            if (vouched != null) {
-                val state = memberKeys.ensure(need, vouched.fingerprint, vouched.name)
-                groupDao.setKeyState(group.id, need, state.wire)
-                verdict = verify(roster, stored, inbound.sender)
-            }
+        // An admin (or one in the handover chain) whose keys we haven't pinned: the roster we
+        // hold, or a handover already checked, says which keys to take. Never the new roster.
+        var tries = 0
+        while (tries++ <= GroupRoster.MAX_TRANSFERS) {
+            val need = verdict as? RosterRules.Verdict.NeedKeys ?: break
+            val fp = need.fingerprint ?: break
+            val state = memberKeys.ensure(need.userId, fp, stored.member(need.userId)?.name.orEmpty())
+            if (groupDao.getMember(group.id, need.userId) != null) groupDao.setKeyState(group.id, need.userId, state.wire)
+            if (state != GroupKeyState.OK) break
+            verdict = verify(roster, stored, inbound.sender)
         }
         when (verdict) {
             RosterRules.Verdict.Accept -> Unit
@@ -1155,8 +1158,14 @@ class GroupRepositoryImpl @Inject constructor(
         if (entry == null || entry.status != RosterMember.ACTIVE) return drop(inbound, "sender not an active member")
         val member = groupDao.getMember(group.id, inbound.sender)
         if (member == null || member.status == MEMBER_GONE) return drop(inbound, "sender left")
-        // The envelope must have been verified with the keys the admin vouched for.
-        if (inbound.senderFingerprint != entry.fingerprint) return drop(inbound, "sender's keys aren't the vouched ones")
+        // The envelope must have been verified with the keys the admin vouched for. (After a
+        // key change, until the admin's roster vouches for the new keys, they show as not matching.)
+        if (inbound.senderFingerprint != entry.fingerprint) {
+            if (inbound.newSenderKeys == null && member.keyState != GroupKeyState.MISMATCH.wire) {
+                groupDao.setKeyState(group.id, inbound.sender, GroupKeyState.MISMATCH.wire)
+            }
+            return drop(inbound, "sender's keys aren't the vouched ones")
+        }
         if (inbound.newSenderKeys != null) memberKeys.adopt(inbound.newSenderKeys, entry.name)
         if (member.keyState != GroupKeyState.OK.wire) groupDao.setKeyState(group.id, inbound.sender, GroupKeyState.OK.wire)
         when (packet.kind) {

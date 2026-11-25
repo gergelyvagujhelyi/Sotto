@@ -75,8 +75,9 @@ data class GroupRoster(
         const val MAX_TIMER_MS = 30L * 24 * 60 * 60 * 1000
         const val MAX_EPOCH = 1L shl 53
 
-        fun transferPayload(groupId: String, epoch: Long, from: String, to: String): ByteArray =
-            lengthPrefixed(TRANSFER_DOMAIN) + text(groupId) + long(epoch) + text(from) + text(to)
+        /** What a handover signs: the group, its epoch, both admins, and the keys the old one vouches for in the new one. */
+        fun transferPayload(groupId: String, epoch: Long, from: String, to: String, toFingerprint: String): ByteArray =
+            lengthPrefixed(TRANSFER_DOMAIN) + text(groupId) + long(epoch) + text(from) + text(to) + text(toFingerprint)
 
         internal fun text(s: String) = lengthPrefixed(s.toByteArray(Charsets.UTF_8))
         internal fun long(v: Long) = ByteBuffer.allocate(8).putLong(v).array()
@@ -106,12 +107,16 @@ data class RosterMember(
     }
 }
 
-/** "At [epoch], admin [from] handed the group to [to]", signed by [from]. */
+/**
+ * "At [epoch], admin [from] handed the group to [to], whose keys are [toFingerprint]", signed by
+ * [from]. The fingerprint lets a phone that never had [to]'s keys pin the right ones.
+ */
 @Serializable
 data class AdminTransfer(
     @SerialName("e") val epoch: Long,
     @SerialName("f") val from: String,
     @SerialName("t") val to: String,
+    @SerialName("tf") val toFingerprint: String,
     @SerialName("sig") val signature: String,
     @SerialName("pq") val pqcSignature: String = "",
 )
@@ -161,7 +166,7 @@ object RosterRules {
         var lastEpoch = 0L
         for (t in roster.transfers) {
             if (t.epoch <= lastEpoch || t.epoch > roster.epoch) return "transfer order"
-            if (!isUserId(t.from) || !isUserId(t.to) || t.from == t.to) return "transfer"
+            if (!isUserId(t.from) || !isUserId(t.to) || t.from == t.to || !isFingerprint(t.toFingerprint)) return "transfer"
             lastEpoch = t.epoch
         }
         if (roster.signature.isEmpty()) return "unsigned"
@@ -172,8 +177,12 @@ object RosterRules {
         data object Accept : Verdict
         /** Not newer than the one held: a duplicate or an old one, ignored. */
         data object Stale : Verdict
-        /** Signing keys of [userId] are needed and not on this phone (yet). */
-        data class NeedKeys(val userId: String) : Verdict
+        /**
+         * Signing keys of [userId] are needed and not on this phone (yet). [fingerprint] is the one
+         * a source already verified vouches for (the roster held, or a checked handover), or null
+         * when there's none: then the keys can't be taken from anywhere.
+         */
+        data class NeedKeys(val userId: String, val fingerprint: String? = null) : Verdict
         data class Reject(val reason: String) : Verdict
     }
 
@@ -196,6 +205,9 @@ object RosterRules {
     ): Verdict {
         validate(new)?.let { return Verdict.Reject(it) }
         if (new.issuer != sender) return Verdict.Reject("not sent by its issuer")
+        // Fingerprints vouched for by something already checked: the roster held, then each
+        // handover as it checks out. Never the new roster's own (it isn't checked yet).
+        val vouched = stored?.members?.associate { it.userId to it.fingerprint }.orEmpty().toMutableMap()
         if (stored == null) {
             if (new.admin != sender) return Verdict.Reject("invitation not from its admin")
         } else {
@@ -205,10 +217,11 @@ object RosterRules {
             for (t in new.transfers) {
                 if (t.epoch <= stored.epoch || t.epoch >= new.epoch) continue
                 if (t.from != current) return Verdict.Reject("handover from someone not admin")
-                val fromKeys = keys(t.from) ?: return Verdict.NeedKeys(t.from)
-                if (!signatures.verify(GroupRoster.transferPayload(new.groupId, t.epoch, t.from, t.to), t.signature, t.pqcSignature, fromKeys)) {
+                val fromKeys = keys(t.from) ?: return Verdict.NeedKeys(t.from, vouched[t.from])
+                if (!signatures.verify(GroupRoster.transferPayload(new.groupId, t.epoch, t.from, t.to, t.toFingerprint), t.signature, t.pqcSignature, fromKeys)) {
                     return Verdict.Reject("handover signature")
                 }
+                vouched[t.to] = t.toFingerprint
                 current = t.to
             }
             if (new.issuer != current) return Verdict.Reject("issuer is not the admin")
@@ -217,12 +230,13 @@ object RosterRules {
             val own = new.transfers.lastOrNull { it.epoch == new.epoch }
                 ?: return Verdict.Reject("new admin without a handover")
             if (own.from != new.issuer || own.to != new.admin) return Verdict.Reject("handover doesn't match")
-            val issuerKeys = keys(new.issuer) ?: return Verdict.NeedKeys(new.issuer)
-            if (!signatures.verify(GroupRoster.transferPayload(new.groupId, own.epoch, own.from, own.to), own.signature, own.pqcSignature, issuerKeys)) {
+            if (new.member(own.to)?.fingerprint != own.toFingerprint) return Verdict.Reject("handover names other keys")
+            val issuerKeys = keys(new.issuer) ?: return Verdict.NeedKeys(new.issuer, vouched[new.issuer])
+            if (!signatures.verify(GroupRoster.transferPayload(new.groupId, own.epoch, own.from, own.to, own.toFingerprint), own.signature, own.pqcSignature, issuerKeys)) {
                 return Verdict.Reject("handover signature")
             }
         }
-        val issuerKeys = keys(new.issuer) ?: return Verdict.NeedKeys(new.issuer)
+        val issuerKeys = keys(new.issuer) ?: return Verdict.NeedKeys(new.issuer, vouched[new.issuer])
         if (!signatures.verify(new.canonical(), new.signature, new.pqcSignature, issuerKeys)) {
             return Verdict.Reject("roster signature")
         }
@@ -235,10 +249,10 @@ object RosterRules {
         return roster.copy(signature = sig, pqcSignature = pq)
     }
 
-    /** The handover at [epoch] from [from] (the local account) to [to], signed. */
-    fun transfer(groupId: String, epoch: Long, from: String, to: String, signatures: GroupSignatures): AdminTransfer {
-        val (sig, pq) = signatures.sign(GroupRoster.transferPayload(groupId, epoch, from, to))
-        return AdminTransfer(epoch, from, to, sig, pq)
+    /** The handover at [epoch] from [from] (the local account) to [to], whose keys are [toFingerprint], signed. */
+    fun transfer(groupId: String, epoch: Long, from: String, to: String, toFingerprint: String, signatures: GroupSignatures): AdminTransfer {
+        val (sig, pq) = signatures.sign(GroupRoster.transferPayload(groupId, epoch, from, to, toFingerprint))
+        return AdminTransfer(epoch, from, to, toFingerprint, sig, pq)
     }
 
     /** Member names: no control or text-direction characters, at most [GroupRoster.MAX_NAME]. */
