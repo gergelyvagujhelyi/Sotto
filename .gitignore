@@ -10,7 +10,7 @@ local.properties
 .DS_Store
 
 # Server
-server/.venv/
+server/.venv
 sotto.db
 server/sotto.db
 chatcontroll.db
