@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-Nothing yet.
+- **Relay: key changes are rate-limited** — An account can change its keys at most 5 times an hour; further tries get "key_rotation_rate_limited" (429), and failed tries count too. Every key change retires a share code for good and costs the relay several signature checks, and nothing limited them before. The app changes keys rarely; if it ever hits the limit, the change fails cleanly and the account keeps its current keys.
 
 ## 0.7.25 — 2026-11-24
 

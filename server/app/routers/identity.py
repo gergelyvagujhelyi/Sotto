@@ -19,6 +19,7 @@ from app.auth import key_lookup_auth, verify_auth_token
 from app.database import get_db
 from app.models.db import DeliveryReceipt, Identity, Invite, PendingMessage, RateLimit, ReadReceipt, RetiredShareCode
 from app.services import invites
+from app.services.call_rate_limiter import SlidingWindowLimiter
 from app.services.ip_rate_limiter import check_ip_rate_limit
 from app.services.websocket_manager import ws_manager
 from app.models.schemas import (
@@ -30,6 +31,11 @@ from app.models.schemas import (
 )
 
 router = APIRouter(prefix="/v1/identity", tags=["identity"])
+
+# Key rotations per account. Each one retires a share code for good (a row
+# that is never purged) and checks up to four signatures, and the app rotates
+# rarely, so a handful an hour is plenty.
+rotation_limiter = SlidingWindowLimiter(limit=5, window=3600.0)
 
 
 @router.post("/bootstrap", response_model=BootstrapResponse, dependencies=[Depends(check_ip_rate_limit)])
@@ -231,6 +237,9 @@ async def rotate_keys(
     endorsement is published with the key bundle; contacts accept the new
     keys only if it verifies against the keys they already trust.
     """
+    # Before any signature check: failed attempts count too.
+    if not await rotation_limiter.allow(x_user_id):
+        raise HTTPException(status_code=429, detail="key_rotation_rate_limited")
     # Verify proof-of-possession for the new signing key
     try:
         new_pub_bytes = base64.b64decode(request.public_signing_key, validate=True)
