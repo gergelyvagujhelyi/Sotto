@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Relay: a call to a deleted account is dropped** — When an account was deleted, or changed its keys, in the 3 seconds before its app answered an incoming call, the relay kept that call's offer for the account's next connection anyway, a few hundred bytes held until the signal buffer filled up. It now drops it with the rest of the account's buffered call signals. Nobody could notice it: no push went out, and the space was freed when it was needed.
+
 ## 0.7.26 — 2026-11-25
 
 - **Group chats** — Make a group of up to 32 people from your contacts (the new-group button in the chat list), with a name. They get an invitation and join or decline; nothing from the group reaches them before they join. Each message goes to every member as its own end-to-end encrypted message, so your relay sees only one-to-one messages, and everything a 1:1 chat has works in a group: replies, reactions (everyone's, under the message), voice messages, photos, files (uploaded once for everyone), disappearing messages (set by the admin) and read receipts. Tap your message to see who has it, and send it again to those it didn't reach. Groups have no calls.

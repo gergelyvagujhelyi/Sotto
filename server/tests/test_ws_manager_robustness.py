@@ -86,6 +86,24 @@ async def test_disconnect_user_closes_sockets_and_drops_buffered_signals():
     assert mgr._pending_signal_bytes == 0
 
 
+async def test_disconnect_user_also_drops_offers_awaiting_an_answer():
+    # The account is deleted (or its keys change) in the seconds before its app answers
+    # an offer. The wake task then parks the offer: it must find nothing to buffer.
+    mgr = WebSocketManager()
+    ws = FakeSocket()
+    await logged_in(mgr, "bob", ws)
+    assert await mgr.relay_call_signal("alice", "bob", "call_offer", "c1", "offer", expect_answer=True)
+    await mgr.relay_call_signal("alice", "bob", "call_ice_candidate", "c1", "ice")
+    assert ("bob", "c1") in mgr._unconfirmed
+
+    await mgr.disconnect_user("bob", "Identity deleted")
+
+    assert not mgr.offer_sockets_open("bob", "c1")
+    assert await mgr.park_unconfirmed_offer("bob", "c1") is None
+    assert "bob" not in mgr._pending_call_signals
+    assert mgr._pending_signal_bytes == 0
+
+
 async def test_buffered_signals_have_a_global_byte_budget(monkeypatch):
     monkeypatch.setattr(wsm, "_MAX_PENDING_SIGNAL_BYTES", 1000)
     mgr = WebSocketManager()
