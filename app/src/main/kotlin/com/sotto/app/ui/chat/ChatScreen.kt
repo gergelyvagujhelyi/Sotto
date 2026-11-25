@@ -696,13 +696,14 @@ fun ChatContent(
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onSendFile(uri)
     }
-    val quoteName = contactName ?: stringResource(R.string.chat_them)
-    // In a group a quote names the original's sender.
+    val them = stringResource(R.string.chat_them)
+    val quoteName = if (group != null) them else contactName ?: them
+    // In a group a quote names the original's sender ("them" when it's gone from this phone).
     val quoteAuthor: (Message) -> String = { reply ->
         if (group == null) {
             quoteName
         } else {
-            messages.firstOrNull { it.id == reply.replyTo?.messageId }?.let { group.nameOf(it.senderId) } ?: quoteName
+            messages.firstOrNull { it.id == reply.replyTo?.messageId }?.let { group.nameOf(it.senderId) } ?: them
         }
     }
     val scope = rememberCoroutineScope()
