@@ -10,8 +10,17 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ContactDao {
 
-    @Query("SELECT * FROM contacts ORDER BY displayName ASC")
+    /** The user's contacts: not the group members only vouched for by a group's admin. */
+    @Query("SELECT * FROM contacts WHERE groupOnly = 0 ORDER BY displayName ASC")
     fun getAll(): Flow<List<ContactEntity>>
+
+    /** Everyone whose keys are pinned, group members included: those told of a key change or account deletion. */
+    @Query("SELECT * FROM contacts ORDER BY displayName ASC")
+    suspend fun getAllWithKeys(): List<ContactEntity>
+
+    /** The user now knows them as a contact (added them, or accepted their request). */
+    @Query("UPDATE contacts SET groupOnly = 0 WHERE userId = :userId")
+    suspend fun clearGroupOnly(userId: String)
 
     @Query("SELECT * FROM contacts WHERE userId = :userId")
     suspend fun getByUserId(userId: String): ContactEntity?

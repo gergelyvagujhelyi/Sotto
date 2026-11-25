@@ -597,7 +597,7 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
         // Call/key events are rendered by their own composables — but keep the when exhaustive
         MessageState.CALL_OUTGOING, MessageState.CALL_OUTGOING_MISSED, MessageState.CALL_INCOMING, MessageState.CALL_MISSED,
         MessageState.CALL_FAILED,
-        MessageState.KEY_ROTATED_LOCAL, MessageState.KEY_ROTATED_REMOTE, MessageState.ACCOUNT_DELETED ->
+        MessageState.KEY_ROTATED_LOCAL, MessageState.KEY_ROTATED_REMOTE, MessageState.ACCOUNT_DELETED, MessageState.GROUP_EVENT ->
             Icons.Rounded.Done to baseTint
     }
     Icon(

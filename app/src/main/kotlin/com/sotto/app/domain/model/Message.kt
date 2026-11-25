@@ -25,7 +25,7 @@ data class Message(
 
     /** Whether this can be replied to: a readable message, not a call, key change or "could not decrypt" placeholder. */
     val canReply: Boolean
-        get() = !state.isCallEvent && !state.isKeyChangeEvent &&
+        get() = !state.isCallEvent && !state.isKeyChangeEvent && !state.isGroupEvent &&
             state != MessageState.REJECTED && state != MessageState.DECRYPT_FAILED &&
             (plaintext.isNotEmpty() || media != null)
 

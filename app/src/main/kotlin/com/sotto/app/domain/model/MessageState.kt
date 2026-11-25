@@ -25,15 +25,20 @@ enum class MessageState {
     /** Remote peer deleted their account. */
     ACCOUNT_DELETED,
     /** Voice call that failed before it connected (no internet, no relay, an error): outgoing, or incoming and answered. */
-    CALL_FAILED;
+    CALL_FAILED,
+    /** Something happened in a group (someone joined or left, a new title...): plaintext is a [GroupEvent]. */
+    GROUP_EVENT;
 
     val isTerminal: Boolean
         get() = this == DELIVERED || this == SEEN || this == FAILED || this == DECRYPT_FAILED || this == REJECTED
-                || isCallEvent || isKeyChangeEvent || this == ACCOUNT_DELETED
+                || isCallEvent || isKeyChangeEvent || this == ACCOUNT_DELETED || this == GROUP_EVENT
 
     val isCallEvent: Boolean
         get() = this == CALL_OUTGOING || this == CALL_OUTGOING_MISSED
                 || this == CALL_INCOMING || this == CALL_MISSED || this == CALL_FAILED
+
+    val isGroupEvent: Boolean
+        get() = this == GROUP_EVENT
 
     val isKeyChangeEvent: Boolean
         get() = this == KEY_ROTATED_LOCAL || this == KEY_ROTATED_REMOTE || this == ACCOUNT_DELETED

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="group_notification_invited">%1$s meghívott a(z) „%2$s” csoportba</string>
+</resources>

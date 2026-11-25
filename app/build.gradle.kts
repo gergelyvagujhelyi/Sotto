@@ -292,6 +292,7 @@ dependencies {
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
+    testImplementation(libs.xerial.sqlite.jdbc)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
 }

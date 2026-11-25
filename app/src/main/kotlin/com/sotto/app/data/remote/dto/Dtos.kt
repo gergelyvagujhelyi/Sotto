@@ -21,7 +21,12 @@ data class InviteDto(
 )
 
 @Serializable
-data class AttachmentReserveRequest(val recipientId: String, val size: Long)
+data class AttachmentReserveRequest(
+    val recipientId: String,
+    val size: Long,
+    /** A group file: every member who may fetch the one upload (the relay takes this or [recipientId]). */
+    val recipientIds: List<String> = emptyList(),
+)
 
 @Serializable
 data class AttachmentReserveResponse(
