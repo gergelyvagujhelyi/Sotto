@@ -62,6 +62,8 @@ class GroupRepositoryTest {
         var outboxScheduled = 0
         /** Seals per recipient: a retry must not seal a copy again. */
         val seals = mutableMapOf<String, Int>()
+        /** Sealing for these finds an endorsed key change (as MessageRepositoryImpl.recordRemoteRotation reports it). */
+        val rotatedOnSeal = mutableSetOf<String>()
         val uploads = mutableListOf<List<String>>()
 
         val transport = object : GroupTransport {
@@ -69,6 +71,7 @@ class GroupRepositoryTest {
                 // As the real channel: only to someone whose keys are pinned on this phone.
                 contactDao.getByUserId(peerId) ?: throw SecurityException("No keys pinned for $peerId")
                 seals[peerId] = (seals[peerId] ?: 0) + 1
+                if (peerId in rotatedOnSeal) repo.keysRotated(peerId)
                 return GroupTransport.Sealed(plaintext.toByteArray(), byteArrayOf(seals[peerId]!!.toByte()), "sig", "pq")
             }
 
@@ -102,7 +105,7 @@ class GroupRepositoryTest {
         val fileDrop = mockk<FileDrop>(relaxed = true)
         val transfers = mockk<FileTransfers>(relaxed = true)
 
-        val repo = GroupRepositoryImpl(
+        val repo: GroupRepositoryImpl = GroupRepositoryImpl(
             groupDao = groupDao,
             messageDao = messageDao,
             contactDao = contactDao,
@@ -609,6 +612,92 @@ class GroupRepositoryTest {
         assertThrows { bjorn.repo.sendText(id, "?") }
         bjorn.repo.deleteLocally(id)
         assertTrue(bjorn.messageDao.inGroup(id).isEmpty())
+    }
+
+    // ── Found in review ───────────────────────────────────────────────────
+
+    @Test
+    fun `a key change noticed while sending a roster doesn't lock the group`() = runTest {
+        val id = fika()
+        astrid.rotatedOnSeal += "bjorn"
+        kotlinx.coroutines.withTimeout(5_000) { astrid.repo.rename(id, "Fika 2") }
+        kotlinx.coroutines.withTimeout(5_000) { astrid.repo.sendText(id, "Still works") }
+        assertEquals("Fika 2", astrid.group(id)!!.title)
+    }
+
+    @Test
+    fun `messages held while joining survive an older roster and come in with the one that adds us`() = runTest {
+        val id = astrid.repo.createGroup("Fika", listOf("bjorn", "cecilia"))
+        fetchAll()
+        cecilia.repo.acceptInvitation(id)
+        astrid.fetch(); astrid.repo.flushOutbox() // roster 2: Cecilia in, Bjorn invited
+        bjorn.repo.acceptInvitation(id)
+        astrid.fetch(); astrid.repo.flushOutbox() // roster 3: Bjorn in
+        cecilia.fetch()
+        cecilia.repo.sendText(id, "Hej Björn")
+        val queue = relay.queues.remove("bjorn")!!
+        val message = queue.single { it.sender == "cecilia" }
+        val rosters = queue.filter { it.sender == "astrid" }
+        bjorn.receive(message)
+        assertEquals(1, bjorn.groupDao.held.size)
+        // An older roster (he's still only invited in it): the message keeps waiting.
+        rosters.filter { "\"e\":2" in it.plaintext }.forEach { bjorn.receive(it) }
+        assertEquals(1, bjorn.groupDao.held.size)
+        rosters.forEach { bjorn.receive(it) }
+        assertEquals(listOf("cecilia" to "Hej Björn"), bjorn.texts(id))
+        // At the relay's time for it, and with Cecilia's vouched keys pinned.
+        assertEquals(message.timestamp, bjorn.messageDao.messagesIn(id).single().timestamp)
+        assertEquals(accounts.getValue("cecilia").fingerprint, bjorn.contactDao.getByUserId("cecilia")!!.keyFingerprint)
+        assertEquals(GroupKeyState.OK.wire, bjorn.groupDao.getMember(id, "cecilia")!!.keyState)
+    }
+
+    @Test
+    fun `a roster held for keys the relay couldn't give is taken once it can`() = runTest {
+        val id = fika()
+        fun holdCecilia() = relay.queues.remove("cecilia")
+        astrid.repo.invite(id, listOf("dagny"))
+        holdCecilia(); fetchAll()
+        dagny.repo.acceptInvitation(id)
+        holdCecilia(); fetchAll()
+        astrid.repo.flushOutbox()
+        holdCecilia(); fetchAll()
+        astrid.repo.makeAdmin(id, "dagny")
+        holdCecilia(); fetchAll()
+        dagny.repo.rename(id, "Dagnys fika")
+        val latest = relay.queues.remove("cecilia")!!.last { it.sender == "dagny" }
+        relay.failBundles += "dagny"
+        cecilia.receive(latest)
+        assertEquals("Fika", cecilia.group(id)!!.title)
+        assertEquals(1, cecilia.groupDao.held.size)
+        relay.failBundles.clear()
+        cecilia.repo.retryHeld()
+        assertEquals("Dagnys fika", cecilia.group(id)!!.title)
+        assertTrue(cecilia.groupDao.held.isEmpty())
+    }
+
+    @Test
+    fun `an admin who leaves is out of the group even if the new admin hears the leave first`() = runTest {
+        val id = fika()
+        astrid.repo.leave(id)
+        val queue = relay.queues.remove("bjorn")!!
+        // The leave first, the handover after.
+        queue.sortedByDescending { "\"leave\"" in it.plaintext }.forEach { bjorn.receive(it) }
+        assertEquals("bjorn", bjorn.group(id)!!.adminId)
+        assertNull(bjorn.groupDao.getMember(id, "astrid"))
+        cecilia.fetch()
+        assertNull(cecilia.groupDao.getMember(id, "astrid"))
+        assertEquals(GroupStatus.LEFT, astrid.status(id))
+    }
+
+    @Test
+    fun `a file sent while nobody else has joined yet is done, not stuck`() = runTest {
+        val id = astrid.repo.createGroup("Fika", listOf("bjorn"))
+        coEvery { astrid.fileDrop.encrypt(any(), any(), any()) } returns EncryptedFile(ByteArray(32), "a.pdf", "application/pdf", 10, 20)
+        astrid.repo.sendFile(id, mockk(relaxed = true), "", null)
+        val row = astrid.messageDao.messagesIn(id).single()
+        astrid.repo.finishSend(row)
+        assertEquals(MessageState.SENT.name, astrid.messageDao.getById(row.id)!!.state)
+        assertTrue(astrid.uploads.isEmpty())
     }
 
     // ── Replies, reactions, receipts, timer, notifications ────────────────

@@ -869,7 +869,8 @@ class MessageRepositoryImpl @Inject constructor(
             // A send whose file a background job still owns isn't interrupted: it goes on.
             if (usesStore(it) && transfers.isQueued(it.id, up = true)) return@forEach
             // A group message's copies are sealed and kept: the outbox sends them on (the same bytes).
-            if (it.groupId != null) return@forEach
+            // One whose file never got up (its job is gone) fails, and a retry uploads it again.
+            if (it.groupId != null && !(usesStore(it) && it.mediaState == com.sotto.app.domain.model.FileState.UPLOADING.wire)) return@forEach
             messageDao.updateState(it.id, MessageState.FAILED.name)
         }
         messageDao.getDownloadingMessages().forEach {
@@ -1037,8 +1038,9 @@ class MessageRepositoryImpl @Inject constructor(
 
     /** Insert a "keys changed" event after a verified (endorsed) remote key rotation. */
     private suspend fun recordRemoteRotation(peerId: String) {
-        // In groups the user runs, the roster now vouches for the new keys.
-        runCatching { groups.get().onKeysRotated(peerId) }
+        // In groups the user runs, the roster now vouches for the new keys. Later, on its own:
+        // this can run while a group's lock is held (sealing a copy for that group).
+        runCatching { groups.get().keysRotated(peerId) }
         // A member known only through a group has no chat with the user to note it in.
         if (contactDao.getByUserId(peerId)?.groupOnly == true) return
         val localUserId = keyManager.getUserId() ?: ""
@@ -1264,16 +1266,31 @@ class MessageRepositoryImpl @Inject constructor(
         // sender we have no keys pinned for gets no contact or chat from it; the group pins
         // their keys only if they're the ones its admin vouched for.
         if (GroupPacketCodec.isGroup(plaintextStr)) {
-            groups.get().receive(
-                GroupRepositoryImpl.Inbound(
-                    relayId = dto.messageId,
-                    sender = dto.senderId,
-                    plaintext = plaintextStr,
-                    timestamp = dto.timestamp,
-                    senderFingerprint = contact?.keyFingerprint ?: newSenderKeys?.fingerprintHex.orEmpty(),
-                    newSenderKeys = newSenderKeys,
-                ),
-            )
+            // A contact saved before fingerprints: fill it in from the keys we trust first.
+            val pinnedFp = contact?.let { c ->
+                c.keyFingerprint ?: run {
+                    runCatching { keyVerifier.check(c.userId) }
+                    contactDao.getByUserId(c.userId)?.keyFingerprint
+                }
+            }
+            try {
+                groups.get().receive(
+                    GroupRepositoryImpl.Inbound(
+                        relayId = dto.messageId,
+                        sender = dto.senderId,
+                        plaintext = plaintextStr,
+                        timestamp = dto.timestamp,
+                        senderFingerprint = pinnedFp ?: newSenderKeys?.fingerprintHex.orEmpty(),
+                        newSenderKeys = newSenderKeys,
+                    ),
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // receive keeps what it can't take now; anything left is logged, never retried
+                // into a duplicate (its ratchet key is used up).
+                if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.e("MessageRepo", "Group packet failed: ${e.message}", e)
+            }
             if (contactDao.getByUserId(dto.senderId) != null) recordSessionPqcStatus(dto.senderId)
             receivedIds.add(dto.messageId)
             return

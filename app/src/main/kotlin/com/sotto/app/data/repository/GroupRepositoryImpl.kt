@@ -54,6 +54,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -421,6 +422,12 @@ class GroupRepositoryImpl @Inject constructor(
         val groupId = row.groupId ?: return
         val me = env.me() ?: return
         val group = groupDao.get(groupId) ?: return
+        if (recipientsFor(groupId).isEmpty()) {
+            // Nobody else to send to (everyone left, or is still invited): it's sent.
+            if (row.mediaState == FileState.UPLOADING.wire) messageDao.setMediaState(row.id, FileState.SENT.wire)
+            messageDao.updateState(row.id, MessageState.SENT.name)
+            return
+        }
         val epoch = group.epoch
         val body = bodyOf(row)
         val ref = replyRef(row)
@@ -650,8 +657,9 @@ class GroupRepositoryImpl @Inject constructor(
             val status = GroupStatus.fromWire(group.status)
             if (status != GroupStatus.ACTIVE && status != GroupStatus.JOINING) return@withLock
             if (group.adminId == me && !group.frozen && recipientsFor(groupId).isNotEmpty()) {
-                // The admin hands over first, so the group isn't left without one.
-                handOverLocked(group)
+                // The admin hands over and leaves in one roster, so the group is never without an
+                // admin and the new one needn't see the leave first to take them out.
+                handOverLocked(group, leaving = true)
             }
             val current = groupDao.get(groupId) ?: return@withLock
             val tellAll = groupDao.getMembers(groupId).filter { it.userId != me && it.status != MEMBER_GONE }.map { it.userId }
@@ -767,13 +775,14 @@ class GroupRepositoryImpl @Inject constructor(
         count
     }
 
-    /** Hands [group] (ours) to its longest-standing other active member. */
-    private suspend fun handOverLocked(group: GroupEntity) {
+    /** Hands [group] (ours) to another active member whose keys we have; [leaving]: and drops us from it. */
+    private suspend fun handOverLocked(group: GroupEntity, leaving: Boolean = false) {
         val roster = parseRoster(group.roster)
         val me = env.me() ?: return
-        val heir = roster.activeMembers.firstOrNull { it.userId != me && memberUsable(group.id, it.userId) }
-            ?: roster.activeMembers.firstOrNull { it.userId != me } ?: return
-        issue(group, roster.copy(admin = heir.userId))
+        // Only someone whose keys check out: the handover vouches for exactly those.
+        val heir = roster.activeMembers.firstOrNull { it.userId != me && memberUsable(group.id, it.userId) } ?: return
+        val members = if (leaving) roster.members.filter { it.userId != me } else roster.members
+        issue(group, roster.copy(admin = heir.userId, members = members), myStatus = if (leaving) GroupStatus.LEFT else null)
     }
 
     private suspend fun memberUsable(groupId: String, userId: String): Boolean =
@@ -795,15 +804,11 @@ class GroupRepositoryImpl @Inject constructor(
      * to everyone in the old or new roster. A new admin gets a signed handover in it.
      * Call with the group's lock held.
      */
-    private suspend fun issue(group: GroupEntity, draft: GroupRoster, sendNow: Boolean = true) {
+    private suspend fun issue(group: GroupEntity, draft: GroupRoster, sendNow: Boolean = true, myStatus: GroupStatus? = null) {
         val me = env.me() ?: return
         val previous = parseRoster(group.roster)
         val epoch = previous.epoch + 1
         var transfers = previous.transfers
-        if (draft.admin != me) {
-            val heirFp = draft.member(draft.admin)?.fingerprint ?: throw IllegalStateException("No keys for the new admin")
-            transfers = transfers + RosterRules.transfer(group.id, epoch, me, draft.admin, heirFp, signatures)
-        }
         val refreshed = draft.members.map { m ->
             if (m.userId == me) return@map m.copy(name = RosterRules.cleanName(env.myName()))
             // Our own contacts: our pin and how we verified them. Members we only know through
@@ -816,6 +821,11 @@ class GroupRepositoryImpl @Inject constructor(
                 m
             }
         }
+        if (draft.admin != me) {
+            // The keys the handover vouches for are the ones this roster names (after the refresh above).
+            val heirFp = refreshed.firstOrNull { it.userId == draft.admin }?.fingerprint ?: throw IllegalStateException("No keys for the new admin")
+            transfers = transfers + RosterRules.transfer(group.id, epoch, me, draft.admin, heirFp, signatures)
+        }
         val roster = RosterRules.sign(
             draft.copy(
                 epoch = epoch, issuer = me, members = refreshed,
@@ -824,7 +834,7 @@ class GroupRepositoryImpl @Inject constructor(
             signatures,
         )
         RosterRules.validate(roster)?.let { throw IllegalStateException("Roster: $it") }
-        applyRoster(group, roster, null, invitedBy = null)
+        applyRoster(group, roster, myStatus, invitedBy = null)
         sendRoster(roster, previous, sendNow)
     }
 
@@ -1007,12 +1017,21 @@ class GroupRepositoryImpl @Inject constructor(
         if (packet.sender != inbound.sender) return drop(inbound, "sender doesn't match the envelope")
         if (packet.to != me) return drop(inbound, "not addressed to us")
         lockFor(packet.groupId).withLock {
-            when (packet.kind) {
-                GroupPacket.KIND_INVITE -> onInvite(packet, inbound)
-                GroupPacket.KIND_ROSTER -> onRoster(packet, inbound)
-                GroupPacket.KIND_ACCEPT, GroupPacket.KIND_REJECT -> onAnswer(packet, inbound)
-                GroupPacket.KIND_LEAVE -> onLeave(packet, inbound)
-                GroupPacket.KIND_MSG, GroupPacket.KIND_REACT -> onContent(packet, inbound, fromHeld = false)
+            try {
+                when (packet.kind) {
+                    GroupPacket.KIND_INVITE -> onInvite(packet, inbound)
+                    GroupPacket.KIND_ROSTER -> onRoster(packet, inbound)
+                    GroupPacket.KIND_ACCEPT, GroupPacket.KIND_REJECT -> onAnswer(packet, inbound)
+                    GroupPacket.KIND_LEAVE -> onLeave(packet, inbound)
+                    GroupPacket.KIND_MSG, GroupPacket.KIND_REACT -> onContent(packet, inbound, fromHeld = false)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Its ratchet key is used up: a redelivery couldn't be read again. Kept, decrypted,
+                // and tried again later (retryHeld), rather than lost.
+                if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w(TAG, "Group packet kept for a retry: ${e.message}")
+                runCatching { hold(packet, inbound) }
             }
         }
     }
@@ -1082,6 +1101,15 @@ class GroupRepositoryImpl @Inject constructor(
             is RosterRules.Verdict.Reject -> return drop(inbound, "roster: ${verdict.reason}")
         }
         applyRoster(group, roster, null, invitedBy = null)
+        // Just made admin: members who already told us they left go from the roster now.
+        val me = env.me()
+        val current = groupDao.get(group.id)
+        if (current != null && current.adminId == me && roster.issuer != me && !current.frozen &&
+            GroupStatus.fromWire(current.status) == GroupStatus.ACTIVE
+        ) {
+            val gone = groupDao.getMembers(group.id).filter { it.status == MEMBER_GONE }.map { it.userId }.toSet()
+            if (gone.isNotEmpty()) issue(current, roster.copy(members = roster.members.filter { it.userId !in gone }), sendNow = false)
+        }
         releaseHeld(group.id)
     }
 
@@ -1166,8 +1194,15 @@ class GroupRepositoryImpl @Inject constructor(
             }
             return drop(inbound, "sender's keys aren't the vouched ones")
         }
-        if (inbound.newSenderKeys != null) memberKeys.adopt(inbound.newSenderKeys, entry.name)
-        if (member.keyState != GroupKeyState.OK.wire) groupDao.setKeyState(group.id, inbound.sender, GroupKeyState.OK.wire)
+        if (inbound.newSenderKeys != null) {
+            memberKeys.adopt(inbound.newSenderKeys, entry.name)
+        } else if (memberKeys.pinnedFingerprint(inbound.sender) != entry.fingerprint) {
+            // Held from before their keys were pinned: pin the vouched ones now (it may wait for the relay).
+            groupDao.setKeyState(group.id, inbound.sender, memberKeys.ensure(inbound.sender, entry.fingerprint, entry.name).wire)
+        }
+        if (member.keyState != GroupKeyState.OK.wire && memberKeys.pinnedFingerprint(inbound.sender) == entry.fingerprint) {
+            groupDao.setKeyState(group.id, inbound.sender, GroupKeyState.OK.wire)
+        }
         when (packet.kind) {
             GroupPacket.KIND_MSG -> storeMessage(group, packet, inbound)
             GroupPacket.KIND_REACT -> applyReaction(group, packet, inbound)
@@ -1258,23 +1293,53 @@ class GroupRepositoryImpl @Inject constructor(
                 senderFingerprint = inbound.senderFingerprint,
                 packet = inbound.plaintext,
                 epoch = packet.epoch,
-                receivedAt = env.now(),
+                // The relay's time for it: a message let in later still sorts where it was sent.
+                receivedAt = inbound.timestamp,
             ),
         )
+        // Tried again in the background too (a roster waiting for keys needs no new roster to go on).
+        env.scheduleOutbox()
     }
 
-    /** Lets in what waited for the roster just taken. Call with the group's lock held. */
+    /**
+     * Lets in what waited. Content waits until the user is an active member holding its epoch;
+     * a roster is tried again each time (it may only have waited for keys). Anything else that
+     * was kept after an error is tried again too. Call with the group's lock held.
+     */
     private suspend fun releaseHeld(groupId: String) {
-        val group = groupDao.get(groupId) ?: return
         for (held in groupDao.getHeld(groupId)) {
-            if (held.epoch > group.epoch && GroupStatus.fromWire(group.status) == GroupStatus.ACTIVE) continue
-            groupDao.deleteHeld(held.relayId)
-            val decoded = GroupPacketCodec.decode(held.packet, env.now()) as? GroupPacketCodec.Decoded.Ok ?: continue
-            val inbound = Inbound(held.relayId, held.senderId, held.packet, held.receivedAt, held.senderFingerprint, null)
-            when (decoded.packet.kind) {
-                GroupPacket.KIND_MSG, GroupPacket.KIND_REACT -> onContent(decoded.packet, inbound, fromHeld = true)
-                GroupPacket.KIND_ROSTER -> onRoster(decoded.packet, inbound)
+            val group = groupDao.get(groupId) ?: return
+            val decoded = GroupPacketCodec.decode(held.packet, env.now()) as? GroupPacketCodec.Decoded.Ok
+            if (decoded == null) {
+                groupDao.deleteHeld(held.relayId)
+                continue
             }
+            val packet = decoded.packet
+            val isContent = packet.kind == GroupPacket.KIND_MSG || packet.kind == GroupPacket.KIND_REACT
+            if (isContent && (GroupStatus.fromWire(group.status) != GroupStatus.ACTIVE || held.epoch > group.epoch)) continue
+            groupDao.deleteHeld(held.relayId)
+            val inbound = Inbound(held.relayId, held.senderId, held.packet, held.receivedAt, held.senderFingerprint, null)
+            try {
+                when (packet.kind) {
+                    GroupPacket.KIND_MSG, GroupPacket.KIND_REACT -> onContent(packet, inbound, fromHeld = true)
+                    GroupPacket.KIND_ROSTER -> onRoster(packet, inbound)
+                    GroupPacket.KIND_INVITE -> onInvite(packet, inbound)
+                    GroupPacket.KIND_ACCEPT, GroupPacket.KIND_REJECT -> onAnswer(packet, inbound)
+                    GroupPacket.KIND_LEAVE -> onLeave(packet, inbound)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                runCatching { groupDao.hold(held) }
+            }
+        }
+    }
+
+    /** Tries again what waits in `group_held`, in every group (the outbox worker runs this). */
+    suspend fun retryHeld() {
+        for (group in groupDao.getAll()) {
+            if (groupDao.getHeld(group.id).isEmpty()) continue
+            lockFor(group.id).withLock { releaseHeld(group.id) }
         }
     }
 
@@ -1299,6 +1364,17 @@ class GroupRepositoryImpl @Inject constructor(
                 }
             }
         }
+    }
+
+    /** For work that must not run under the lock of whoever noticed it (see [keysRotated]). */
+    private val background = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
+
+    /**
+     * [userId]'s keys changed by an endorsed rotation. Noticed while sealing a copy, which may be
+     * under a group's lock, so the re-issue runs afterwards, on its own.
+     */
+    fun keysRotated(userId: String) {
+        background.launch { runCatching { onKeysRotated(userId) } }
     }
 
     /** [userId]'s keys changed by an endorsed rotation: in groups we run, the roster vouches for the new ones. */

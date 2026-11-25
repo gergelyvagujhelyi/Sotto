@@ -33,6 +33,7 @@ class GroupOutboxWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val waiting = try {
             groups.resumeInterrupted()
+            groups.retryHeld()
             groups.flushOutbox()
         } catch (e: Exception) {
             if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("GroupOutbox", "Flush failed: ${e.message}")

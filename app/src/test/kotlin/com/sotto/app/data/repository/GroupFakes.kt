@@ -174,6 +174,8 @@ class FakeRelay {
     var clock = 1_764_000_000_000L
     /** Posts to these recipients fail (a network error, the relay refusing). */
     val failFor = mutableSetOf<String>()
+    /** Key lookups for these accounts fail (the relay can't be reached). */
+    val failBundles = mutableSetOf<String>()
 
     fun post(sender: String, to: String, clientId: String, plaintext: String): SendMessageResponse {
         if (to in failFor) throw java.io.IOException("relay unreachable for $to")
@@ -193,7 +195,10 @@ class FakeRelay {
     }
 
     fun api(): ApiService = mockk(relaxed = true) {
-        coEvery { fetchKeyBundle(any(), any()) } answers { bundle(firstArg()) }
+        coEvery { fetchKeyBundle(any(), any()) } answers {
+            if (firstArg<String>() in failBundles) throw java.io.IOException("unreachable")
+            bundle(firstArg())
+        }
     }
 }
 
