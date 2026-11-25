@@ -47,6 +47,15 @@ class FakeGroupDao : GroupDao {
         groups[id]?.let { groups[id] = it.copy(lastMessagePreview = preview, lastMessageTimestamp = timestamp, unreadCount = it.unreadCount + unreadDelta) }
     }
     override suspend fun clearUnread(id: String) { groups[id]?.let { groups[id] = it.copy(unreadCount = 0) } }
+    override suspend fun clearPreviewsWithoutMessage() {
+        groups.replaceAll { _, g ->
+            if (g.lastMessagePreview != null && messages.rows.values.none { it.conversationId == g.id && it.timestamp == g.lastMessageTimestamp }) {
+                g.copy(lastMessagePreview = null)
+            } else {
+                g
+            }
+        }
+    }
     override suspend fun delete(id: String) { groups.remove(id) }
     override suspend fun deleteAll() = groups.clear()
     override fun observeMembers(groupId: String): Flow<List<GroupMemberEntity>> = flow { emit(getMembers(groupId)) }

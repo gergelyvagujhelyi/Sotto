@@ -51,6 +51,15 @@ interface GroupDao {
     @Query("UPDATE groups SET unreadCount = 0 WHERE id = :id")
     suspend fun clearUnread(id: String)
 
+    /** Drop previews whose message is gone (it disappeared): as for 1:1 chats, no plaintext stays in the list. */
+    @Query(
+        "UPDATE groups SET lastMessagePreview = NULL " +
+            "WHERE lastMessagePreview IS NOT NULL AND NOT EXISTS (" +
+            "SELECT 1 FROM messages WHERE messages.conversationId = groups.id " +
+            "AND messages.timestamp = groups.lastMessageTimestamp)",
+    )
+    suspend fun clearPreviewsWithoutMessage()
+
     @Query("DELETE FROM groups WHERE id = :id")
     suspend fun delete(id: String)
 

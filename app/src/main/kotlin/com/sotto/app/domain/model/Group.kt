@@ -42,7 +42,11 @@ data class Group(
     val lastMessageTimestamp: Instant?,
     val unreadCount: Int,
     val memberCount: Int,
-)
+    val createdAt: Instant = Instant.fromEpochMilliseconds(0),
+) {
+    /** Where it sorts in the chat list: its latest message, or when it was made. */
+    val sortTime: Instant get() = lastMessageTimestamp ?: createdAt
+}
 
 enum class GroupMemberStatus { ACTIVE, INVITED, GONE }
 

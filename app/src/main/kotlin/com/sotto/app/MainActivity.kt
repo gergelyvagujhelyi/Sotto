@@ -155,6 +155,19 @@ class MainActivity : ComponentActivity() {
                         _deepLinkIntent.value = null
                         return@LaunchedEffect
                     }
+                    // A group's notification opens its chat (ADR-32).
+                    currentIntent.getStringExtra(ChatNotificationManager.EXTRA_GROUP_ID)?.let { groupId ->
+                        navController.awaitGraph()
+                        val current = navController.currentBackStackEntry
+                        val onGroup = current?.destination?.route == Routes.GROUP
+                        if (!onGroup || current?.arguments?.getString("groupId") != groupId) {
+                            navController.navigate(Routes.group(groupId)) {
+                                if (onGroup) popUpTo(Routes.GROUP) { inclusive = true }
+                            }
+                        }
+                        _deepLinkIntent.value = null
+                        return@LaunchedEffect
+                    }
                     val conversationId = currentIntent.getStringExtra(
                         ChatNotificationManager.EXTRA_CONVERSATION_ID
                     )

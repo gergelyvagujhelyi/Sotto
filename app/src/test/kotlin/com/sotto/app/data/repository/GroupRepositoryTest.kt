@@ -651,6 +651,9 @@ class GroupRepositoryTest {
         relay.clock += 3_600_001
         bjorn.messageDao.deleteExpired(relay.clock)
         assertTrue(bjorn.texts(id).isEmpty())
+        // Its text doesn't stay behind in the chat list.
+        bjorn.repo.prune()
+        assertNull(bjorn.group(id)!!.lastMessagePreview)
     }
 
     @Test

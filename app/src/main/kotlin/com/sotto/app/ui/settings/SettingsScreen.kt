@@ -59,6 +59,7 @@ import androidx.compose.material.icons.rounded.SwapCalls
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WifiTethering
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -163,6 +164,8 @@ fun SettingsScreen(
         }
     }
     val showWipeConfirmation by viewModel.showWipeConfirmation.collectAsState()
+    val groupsToHandOver by viewModel.groupsToHandOver.collectAsState()
+    var handOver by remember { mutableStateOf(true) }
     val wipeCompleted by viewModel.wipeCompleted.collectAsState()
     val showRotateConfirmation by viewModel.showRotateConfirmation.collectAsState()
     val isRotatingKeys by viewModel.isRotatingKeys.collectAsState()
@@ -280,9 +283,21 @@ fun SettingsScreen(
             onDismissRequest = viewModel::cancelWipe,
             icon = { Icon(Icons.Rounded.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text(stringResource(R.string.settings_wipe_title)) },
-            text = { Text(stringResource(R.string.settings_wipe_text)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.settings_wipe_text))
+                    if (groupsToHandOver > 0) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(androidx.compose.ui.res.pluralStringResource(R.plurals.group_handover_note, groupsToHandOver, groupsToHandOver))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { handOver = !handOver }) {
+                            Checkbox(checked = handOver, onCheckedChange = { handOver = it })
+                            Text(stringResource(R.string.group_handover_checkbox), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { viewModel.confirmWipe() }) {
+                TextButton(onClick = { viewModel.confirmWipe(handOver) }) {
                     Text(stringResource(R.string.settings_wipe_confirm), color = MaterialTheme.colorScheme.error)
                 }
             },

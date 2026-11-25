@@ -30,7 +30,12 @@ class SettingsViewModel @Inject constructor(
     private val apiService: com.sotto.app.data.remote.ApiService,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
     private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
+    private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
 ) : ViewModel() {
+
+    /** Groups the user runs (with other members), offered a handover before the account goes. */
+    private val _groupsToHandOver = MutableStateFlow(0)
+    val groupsToHandOver: StateFlow<Int> = _groupsToHandOver.asStateFlow()
 
     /**
      * A fresh live QR code (it changes every second, as BankID's): scanned in person it adds
@@ -276,16 +281,23 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun requestWipe() {
-        _showWipeConfirmation.value = true
+        viewModelScope.launch {
+            _groupsToHandOver.value = runCatching { groupRepository.groupsToHandOver().size }.getOrDefault(0)
+            _showWipeConfirmation.value = true
+        }
     }
 
     fun cancelWipe() {
         _showWipeConfirmation.value = false
     }
 
-    fun confirmWipe() {
+    /** [handOver]: first give every group the user runs to another member (ADR-32); else they freeze. */
+    fun confirmWipe(handOver: Boolean = true) {
         _showWipeConfirmation.value = false
-        performWipe { settingsRepository.wipeLocalData() }
+        performWipe {
+            if (handOver) runCatching { groupRepository.handOverAll() }
+            settingsRepository.wipeLocalData()
+        }
     }
 
     fun retryWipe() {

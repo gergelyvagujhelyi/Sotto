@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,8 @@ fun ConversationItem(
     avatarSeed: String = displayName,
     /** How far the contact is verified: a shield in place of the lock. Null shows the lock. */
     trust: com.sotto.app.domain.model.ContactTrust? = null,
+    /** A group chat: how many members it has, shown with a group mark instead of the lock. */
+    groupMembers: Int? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val unread = unreadCount > 0
@@ -61,7 +64,22 @@ fun ConversationItem(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (trust != null) {
+                    if (groupMembers != null) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Rounded.Groups,
+                            contentDescription = null,
+                            modifier = Modifier.size(15.dp),
+                            tint = colors.onSurfaceVariant.copy(alpha = 0.8f),
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = androidx.compose.ui.res.pluralStringResource(R.plurals.group_member_count, groupMembers, groupMembers),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant,
+                            maxLines = 1,
+                        )
+                    } else if (trust != null) {
                         Spacer(Modifier.width(6.dp))
                         TrustIcon(trust, size = 15.dp)
                     } else if (isEncrypted) {

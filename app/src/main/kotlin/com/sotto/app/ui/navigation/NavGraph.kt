@@ -57,11 +57,19 @@ object Routes {
     const val CALL = "call/{contactId}/{displayName}"
     const val VERIFY = "verify/{contactId}"
     const val SCAN_VERIFY = "scan_verify"
+    const val GROUP = "group/{groupId}"
+    const val GROUP_DETAILS = "group_details/{groupId}"
+    /** A new group ("new"), or more members for one (its id). */
+    const val GROUP_PICK = "group_pick/{groupId}"
 
     fun verify(contactId: String) = "verify/$contactId"
 
     fun chat(conversationId: String, contactId: String) =
         "chat/$conversationId/$contactId"
+
+    fun group(groupId: String) = "group/$groupId"
+    fun groupDetails(groupId: String) = "group_details/$groupId"
+    fun groupPick(groupId: String? = null) = "group_pick/${groupId ?: "new"}"
 
     fun call(contactId: String, displayName: String) = "call/$contactId/${android.net.Uri.encode(displayName)}"
 }
@@ -155,11 +163,61 @@ fun ChatNavGraph(
                 onConversationClick = { conversationId, contactId ->
                     navController.navigate(Routes.chat(conversationId, contactId))
                 },
+                onGroupClick = { groupId -> navController.navigate(Routes.group(groupId)) },
+                onNewGroup = { navController.navigate(Routes.groupPick()) { launchSingleTop = true } },
+                onInvitationClick = { groupId -> navController.navigate(Routes.groupDetails(groupId)) },
                 onAddContact = {
                     navController.navigate(Routes.ADD_CONTACT)
                 },
                 onSettings = {
                     navController.navigate(Routes.SETTINGS)
+                },
+            )
+        }
+
+        screen(
+            route = Routes.GROUP,
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+        ) {
+            com.sotto.app.ui.chat.GroupChatScreen(
+                onBack = {
+                    if (navController.previousBackStackEntry != null) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate(Routes.CONVERSATIONS) { popUpTo(navController.graph.id) { inclusive = true } }
+                    }
+                },
+                onOpenDetails = { groupId -> navController.navigate(Routes.groupDetails(groupId)) { launchSingleTop = true } },
+            )
+        }
+
+        screen(
+            route = Routes.GROUP_DETAILS,
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+        ) {
+            com.sotto.app.ui.groups.GroupDetailsScreen(
+                onBack = { navController.popBackStack() },
+                onAddMembers = { groupId -> navController.navigate(Routes.groupPick(groupId)) { launchSingleTop = true } },
+                onOpenChat = { groupId ->
+                    navController.navigate(Routes.group(groupId)) { popUpTo(Routes.CONVERSATIONS) }
+                },
+                onGone = { navController.popBackStack(Routes.CONVERSATIONS, inclusive = false) },
+            )
+        }
+
+        screen(
+            route = Routes.GROUP_PICK,
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType }),
+        ) { entry ->
+            val adding = entry.arguments?.getString("groupId")?.takeIf { it != "new" }
+            com.sotto.app.ui.groups.NewGroupScreen(
+                onBack = { navController.popBackStack() },
+                onCreated = { groupId ->
+                    if (adding != null) {
+                        navController.popBackStack()
+                    } else {
+                        navController.navigate(Routes.group(groupId)) { popUpTo(Routes.CONVERSATIONS) }
+                    }
                 },
             )
         }

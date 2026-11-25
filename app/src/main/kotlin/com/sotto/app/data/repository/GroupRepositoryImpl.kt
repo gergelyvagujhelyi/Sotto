@@ -208,6 +208,7 @@ class GroupRepositoryImpl @Inject constructor(
             lastMessageTimestamp = g.lastMessageTimestamp?.let { Instant.fromEpochMilliseconds(it) },
             unreadCount = g.unreadCount,
             memberCount = members.count { it.status == MEMBER_ACTIVE },
+            createdAt = Instant.fromEpochMilliseconds(g.createdAt),
         )
     }
 
@@ -1330,6 +1331,7 @@ class GroupRepositoryImpl @Inject constructor(
 
     /** Drops what belongs to messages that are gone, and held packets nobody came for. */
     suspend fun prune() {
+        groupDao.clearPreviewsWithoutMessage()
         groupDao.pruneOrphanCopies()
         groupDao.pruneOrphanReactions()
         groupDao.pruneHeld(env.now() - HELD_KEEP_MS)
