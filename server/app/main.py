@@ -152,7 +152,7 @@ async def _purge_expired_messages() -> None:
                 await db.execute(delete(Invite).where(Invite.used_at.is_(None), Invite.expires_at < now))
                 await db.execute(delete(Invite).where(Invite.used_at < now - timedelta(days=30)))
                 await db.commit()
-                # Attachments: expired, never finished, or whose sender or recipient is gone.
+                # Attachments: expired, never finished, or whose sender or every recipient is gone.
                 try:
                     await attachments.purge_attachments(db)
                 except Exception:

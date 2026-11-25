@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Relay: message sends are limited by a token bucket** — Each account may send a burst of 160 messages, refilled at 240 a minute (`MESSAGE_BURST`, `MESSAGE_RATE_PER_MINUTE`), instead of a fixed 60 a minute. A group message goes out as one encrypted envelope per member, up to 31, so the old limit allowed about two group messages a minute. The queue limits per recipient are unchanged. `MAX_MESSAGES_PER_MINUTE` in a relay's `.env` is no longer read.
+- **Relay: one upload for a file sent to several people** — An attachment reservation can name up to 31 recipients (`recipient_ids`). Each of them may download it; a recipient's delete drops only its own claim, and the file goes from the store with the last one (or when the sender withdraws it, or after 30 days). It counts once against the sender's allowance and the store. Files in flight keep their one recipient. The relay learns that these accounts got the same file.
 - **Relay: key changes are rate-limited** — An account can change its keys at most 5 times an hour; further tries get "key_rotation_rate_limited" (429), and failed tries count too. Every key change retires a share code for good and costs the relay several signature checks, and nothing limited them before. The app changes keys rarely; if it ever hits the limit, the change fails cleanly and the account keeps its current keys.
 
 ## 0.7.25 — 2026-11-24

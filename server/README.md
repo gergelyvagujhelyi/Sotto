@@ -12,7 +12,7 @@ Privacy-first encrypted message relay built with Python and FastAPI.
 - Buffers undelivered call signals for offline recipients (30s TTL)
 - Deletes envelopes after recipient acknowledgement
 - Purges undelivered messages older than a configurable TTL (default 30 days)
-- Rate-limits senders to prevent abuse
+- Rate-limits senders to prevent abuse (a token bucket per account: a burst of `MESSAGE_BURST` sends, 160 by default, refilled at `MESSAGE_RATE_PER_MINUTE`, 240 a minute; a group message is one send per member)
 
 ## What the server does NOT do
 
@@ -70,11 +70,11 @@ pytest -v
 | POST | `/v1/push/register` | ✓ | Register the push target: `fid` (Firebase installation ID) or, from apps before 0.5.5, `token` |
 | POST | `/v1/calls/signal` | ✓ | Relay an encrypted call signal to the peer (pushes when a call offer isn't answered) |
 | GET | `/v1/calls/ice-servers` | ✓ | Get ICE/TURN server config with short-lived TURN credentials |
-| POST | `/v1/attachments` | ✓ | Reserve an upload of an encrypted file for a recipient (when `S3_*` is set) |
+| POST | `/v1/attachments` | ✓ | Reserve an upload of an encrypted file for a recipient (`recipient_id`) or, for a group, up to 31 of them (`recipient_ids`) (when `S3_*` is set) |
 | POST | `/v1/attachments/{id}/parts` | ✓ | Signed upload URLs for the file's parts |
 | POST | `/v1/attachments/{id}/complete` | ✓ | Finish the upload |
-| GET | `/v1/attachments/{id}` | ✓ | Signed download URL (the recipient) |
-| DELETE | `/v1/attachments/{id}` | ✓ | Delete it once downloaded |
+| GET | `/v1/attachments/{id}` | ✓ | Signed download URL (a named recipient) |
+| DELETE | `/v1/attachments/{id}` | ✓ | A recipient has it (drops its claim; the file goes with the last one), or the sender withdraws it |
 | WS | `/v1/ws` | token in the first frame | Real-time delivery: the relay sends `new_message`, `receipts`, call signals, `app_release`; the app sends only `auth` and `ping` |
 | POST | `/v1/app-release` | CI release key | The release workflow says the app of this relay's version is published |
 | GET | `/health` | — | Health check; `invite_required` says whether sign-up needs an invite |

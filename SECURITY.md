@@ -79,7 +79,7 @@ messages from the losing session are still decrypted.
 - Timing of message submission and retrieval
 - Who invited whom (since 0.5.17): each invite records the member who created it and the account that used it, until 30 days after its use
 - The IP address a phone connects from, while it's connected, as any server sees it. The IP rate limits count requests per address in memory. No log keeps addresses (see Relay Logs and Scanners).
-- For files sent through its object store (0.7.7): who sends a file to whom, its encrypted size and when, until the recipient has it (at most 30 days); and each account's bytes uploaded over 30 days, for its allowance. Never the file's name, type, content or key.
+- For files sent through its object store (0.7.7): who sends a file to whom, its encrypted size and when, until the recipient has it (at most 30 days); and each account's bytes uploaded over 30 days, for its allowance. Never the file's name, type, content or key. A file sent to a group goes up once and names every member who gets it, so the relay learns that those accounts received the same file.
 
 ### What the Server Does NOT Know
 - Message content
@@ -374,7 +374,7 @@ The name itself is public, because Certificate Transparency logs list every cert
 Abuse controls that preserve privacy:
 
 1. **Share-code gating**: You cannot message someone without their share code. This prevents unsolicited spam.
-2. **Rate limiting** (server-side): The relay server rate-limits message submission to 60 messages/minute per user ID, with a 1000-message pending queue cap per recipient.
+2. **Rate limiting** (server-side): The relay server limits message submission per user ID with a token bucket: a burst of 160 sends, refilled at 240 a minute (60 a minute in a fixed window until the group chats work, which send one envelope per member), with a 1000-message pending queue cap per recipient, a quarter of it per sender.
 3. **Local block list** (future): Users can block contacts locally. Blocked contacts' messages are silently dropped.
 4. **Report mechanism** (future): Users can forward an encrypted envelope + decrypted content to an abuse review system. This is opt-in and requires the reporter to reveal the message content.
 5. **No global directory**: There is no way to enumerate users or discover contacts without knowing their share code.

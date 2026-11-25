@@ -12,6 +12,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     Index,
     Integer,
     String,
@@ -72,13 +73,19 @@ class PendingMessage(Base):
 
 
 class RateLimit(Base):
-    """Simple per-user rate tracking."""
+    """Each account's message-send token bucket (`services/rate_limiter.py`).
+
+    `message_count` and `window_start` belonged to the fixed window used until the bucket
+    replaced it (migration 013); they are no longer read.
+    """
 
     __tablename__ = "rate_limits"
 
     user_id = Column(String(32), primary_key=True)
     message_count = Column(Integer, default=0)
     window_start = Column(DateTime, server_default=func.now())
+    tokens = Column(Float, nullable=True)
+    refilled_at = Column(DateTime, nullable=True)
 
 
 class Invite(Base):
@@ -169,7 +176,7 @@ class Attachment(Base):
 
     The relay only knows who sends to whom and how big the ciphertext is; the key
     travels inside the end-to-end encrypted message. The row (and the object) go
-    when the recipient has it, or after ATTACHMENT_TTL_DAYS.
+    when every recipient (`AttachmentRecipient`) has it, or after ATTACHMENT_TTL_DAYS.
     """
 
     __tablename__ = "attachments"
@@ -183,6 +190,19 @@ class Attachment(Base):
     expires_at = Column(DateTime, nullable=False, index=True)
     # A large file goes up in parts (resumable): the store's id for that multipart upload.
     upload_id = Column(String(512), nullable=True)
+
+
+class AttachmentRecipient(Base):
+    """Who may download an attachment: one row per recipient, removed when that recipient
+    has the file. A file for a group goes up once and names every member who gets it; the
+    object goes when the last of them has it (or the sender gives up, or it expires).
+    `Attachment.recipient_id` keeps the first recipient, as before.
+    """
+
+    __tablename__ = "attachment_recipients"
+
+    attachment_id = Column(String(32), primary_key=True)
+    recipient_id = Column(String(32), primary_key=True, index=True)
 
 
 class AttachmentUsage(Base):
