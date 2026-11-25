@@ -1,7 +1,9 @@
 """In-memory IP-based rate limiter for unauthenticated endpoints.
 
 Protects bootstrap, key lookup, and share-code resolution from brute-force.
-Uses a simple sliding-window counter per IP address with periodic cleanup.
+Uses a fixed-window counter per IP address (it resets once IP_RATE_WINDOW has passed
+since the window began, so up to twice the limit can pass around a reset), with
+periodic cleanup.
 
 WARNING: This rate limiter is per-process and stored in memory only.
 In multi-worker deployments (e.g. multiple uvicorn workers), each worker

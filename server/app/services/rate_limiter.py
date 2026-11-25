@@ -1,6 +1,9 @@
 """Simple per-user rate limiter backed by the database.
 
-Tracks message send count per rolling 1-minute window.
+Counts each sender's messages in a fixed 1-minute window: the window starts with the
+first message after the previous one ran out, and the count resets when it ends. One
+counter row per sender can't be rolling, so around a reset a sender can get up to twice
+MAX_MESSAGES_PER_MINUTE through within a few seconds.
 This is a privacy-preserving abuse control: it limits throughput without
 inspecting message content or building behavioral profiles.
 """
