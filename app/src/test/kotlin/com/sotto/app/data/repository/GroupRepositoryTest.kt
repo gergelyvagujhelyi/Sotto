@@ -416,6 +416,8 @@ class GroupRepositoryTest {
         bjorn.receive(ceciliasCopyToBjorn)
         assertEquals(listOf("astrid" to "Före"), bjorn.texts(id))
 
+        assertTrue(GroupEvent.REMOVED in bjorn.events(id))
+        assertFalse(GroupEvent.LEFT in bjorn.events(id))
         cecilia.fetch()
         assertEquals(GroupStatus.REMOVED, cecilia.status(id))
         assertTrue(GroupEvent.YOU_REMOVED in cecilia.events(id))
@@ -578,6 +580,8 @@ class GroupRepositoryTest {
         astrid.repo.flushOutbox()
         fetchAll()
         assertNull(bjorn.groupDao.getMember(id, "cecilia"))
+        assertTrue(GroupEvent.LEFT in astrid.events(id))
+        assertFalse(GroupEvent.REMOVED in astrid.events(id))
         relay.posted.clear()
         astrid.repo.sendText(id, "Nu är vi två")
         assertEquals(listOf("bjorn"), relay.posted.map { it.to })

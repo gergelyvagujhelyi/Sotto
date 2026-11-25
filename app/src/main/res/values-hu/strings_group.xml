@@ -87,7 +87,7 @@
 
     <!-- Bizalom -->
     <string name="group_vouch_in_person">Az admin személyesen ellenőrizte</string>
-    <string name="group_vouch_by_phone">Az admin hívással ellenőrizte</string>
+    <string name="group_vouch_by_phone">Az admin csak hívással ellenőrizte</string>
     <string name="group_vouch_share_code">Az admin megosztási kóddal adta hozzá</string>
     <string name="group_vouch_none">Az admin nem ellenőrizte</string>
     <string name="group_vouch_note">A saját ismerőseidnél azt látod, te hogyan ellenőrizted őket. Mindenki más kulcsaiért az admin telefonja kezeskedik: az adminban bízol. Ha biztos akarsz lenni, ellenőrizd őket személyesen.</string>

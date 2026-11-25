@@ -87,7 +87,7 @@
 
     <!-- Trust -->
     <string name="group_vouch_in_person">The admin verified them in person</string>
-    <string name="group_vouch_by_phone">The admin verified them by phone</string>
+    <string name="group_vouch_by_phone">The admin verified them by phone only</string>
     <string name="group_vouch_share_code">The admin added them by share code</string>
     <string name="group_vouch_none">Not verified by the admin</string>
     <string name="group_vouch_note">Your own contacts show how you verified them. For anyone else, the admin\'s phone vouches for their keys: you\'re trusting the admin. Verify them in person to be sure.</string>

@@ -113,11 +113,15 @@ class GroupRepositoryImpl @Inject constructor(
 
     // ── Reading ───────────────────────────────────────────────────────────
 
-    override fun observeGroups(): Flow<List<Group>> = groupDao.observeChats().map { list -> list.map { toDomain(it) } }
+    // Member counts come from the members table, which changes apart from the group rows.
+    override fun observeGroups(): Flow<List<Group>> =
+        combine(groupDao.observeChats(), groupDao.observeMemberChanges()) { list, _ -> list.map { toDomain(it) } }
 
-    override fun observeInvitations(): Flow<List<Group>> = groupDao.observeInvitations().map { list -> list.map { toDomain(it) } }
+    override fun observeInvitations(): Flow<List<Group>> =
+        combine(groupDao.observeInvitations(), groupDao.observeMemberChanges()) { list, _ -> list.map { toDomain(it) } }
 
-    override fun observeGroup(groupId: String): Flow<Group?> = groupDao.observe(groupId).map { it?.let { g -> toDomain(g) } }
+    override fun observeGroup(groupId: String): Flow<Group?> =
+        combine(groupDao.observe(groupId), groupDao.observeMemberChanges()) { g, _ -> g?.let { toDomain(it) } }
 
     override fun observeMembers(groupId: String): Flow<List<GroupMember>> =
         groupDao.observeMembers(groupId).map { list ->
@@ -925,7 +929,7 @@ class GroupRepositoryImpl @Inject constructor(
             )
         }
         groupDao.replaceMembers(roster.groupId, members)
-        if (previous != null) recordChanges(roster.groupId, previous, roster, oldStatus, newStatus, members)
+        if (previous != null) recordChanges(roster.groupId, previous, roster, oldStatus, newStatus, members, oldMembers)
         members.filter { it.keyState == GroupKeyState.MISMATCH.wire && oldMembers[it.userId]?.keyState != GroupKeyState.MISMATCH.wire }
             .forEach { addEvent(roster.groupId, GroupEvent(GroupEvent.KEYS_MISMATCH, listOf(it.userId), listOf(nameOf(roster.groupId, it.userId)))) }
         if (newStatus == GroupStatus.ENDED || newStatus == GroupStatus.REMOVED || newStatus == GroupStatus.REJECTED) {
@@ -941,6 +945,7 @@ class GroupRepositoryImpl @Inject constructor(
         oldStatus: GroupStatus?,
         newStatus: GroupStatus,
         members: List<GroupMemberEntity>,
+        previousMembers: Map<String, GroupMemberEntity>,
     ) {
         val me = env.me() ?: return
         fun name(id: String) = members.firstOrNull { it.userId == id }?.name?.ifBlank { null } ?: old.member(id)?.name?.ifBlank { null } ?: id.take(8)
@@ -956,7 +961,13 @@ class GroupRepositoryImpl @Inject constructor(
         }
         val goneIds = old.members.filter { new.member(it.userId) == null && it.userId != me }
         for (m in goneIds) {
-            val type = if (m.status == RosterMember.INVITED) GroupEvent.DECLINED else GroupEvent.LEFT
+            // Someone who told us they left (or whose account went) left; anyone else the admin removed.
+            val toldUs = previousMembers[m.userId]?.status == MEMBER_GONE
+            val type = when {
+                m.status == RosterMember.INVITED -> GroupEvent.DECLINED
+                toldUs -> GroupEvent.LEFT
+                else -> GroupEvent.REMOVED
+            }
             addEvent(groupId, GroupEvent(type, listOf(m.userId), listOf(shown(m.userId))))
         }
         if (new.title != old.title) addEvent(groupId, GroupEvent(GroupEvent.TITLE, listOf(new.issuer), listOf(shown(new.issuer)), new.title))

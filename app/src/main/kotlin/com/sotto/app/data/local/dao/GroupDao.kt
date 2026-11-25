@@ -104,6 +104,10 @@ interface GroupDao {
     @Query("SELECT COUNT(*) FROM group_members WHERE groupId = :groupId AND status = 'active'")
     fun observeActiveCount(groupId: String): Flow<Int>
 
+    /** Emits whenever any member row changes (for lists that show member counts). */
+    @Query("SELECT COUNT(*) FROM group_members WHERE status = 'active'")
+    fun observeMemberChanges(): Flow<Int>
+
     // ── Outbox ────────────────────────────────────────────────────────────
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)

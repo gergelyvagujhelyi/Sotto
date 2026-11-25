@@ -71,6 +71,7 @@ class FakeGroupDao : GroupDao {
     override suspend fun markGone(groupId: String, userId: String) {
         members[groupId to userId]?.let { members[groupId to userId] = it.copy(status = "gone") }
     }
+    override fun observeMemberChanges(): Flow<Int> = flow { emit(members.size) }
     override fun observeActiveCount(groupId: String): Flow<Int> = flow { emit(getMembers(groupId).count { it.status == "active" }) }
     override suspend fun insertCopies(copies: List<GroupOutboxEntity>) { copies.forEach { outbox.putIfAbsent(it.id, it) } }
     override suspend fun getCopy(id: String) = outbox[id]
