@@ -51,6 +51,8 @@ class ReceiptManager @Inject constructor(
     private val cryptoEngine: CryptoEngine,
     private val settingsRepository: Provider<SettingsRepository>,
     private val keyVerifier: com.sotto.app.crypto.ContactKeyVerifier,
+    /** Group copies are matched by their own relay ids (ADR-32). */
+    private val groups: Provider<GroupRepositoryImpl>,
 ) {
     private val fetchMutex = Mutex()
     private val markMutex = Mutex()
@@ -93,6 +95,41 @@ class ReceiptManager @Inject constructor(
         }
         // Exactly the messages the receipt covered (one arriving meanwhile still gets its own).
         messageDao.markSeen(recent)
+    }
+
+    /**
+     * The user is looking at group [groupId]: mark its messages seen and tell each sender, with
+     * a receipt naming the relay's ids for the copies they sent us (only those: one member's
+     * receipt never says another read anything). Under the same rules as [markConversationRead]:
+     * only with read receipts on, never to someone blocked.
+     */
+    suspend fun markGroupRead(groupId: String) = markMutex.withLock {
+        val me = keyManager.getUserId()
+        if (me == null || !receiptsEnabled()) {
+            messageDao.markIncomingSeen(groupId, before = Long.MAX_VALUE)
+            return@withLock
+        }
+        val since = System.currentTimeMillis() - RECEIPT_WINDOW_MS
+        messageDao.markIncomingSeen(groupId, before = since)
+        val recent = messageDao.getRecentUnseenGroupMessages(groupId, since, MAX_GROUP_UNSEEN)
+        for ((sender, rows) in recent.groupBy { it.senderId }) {
+            val withIds = rows.filter { it.relayId != null }
+            if (blockedUserDao.isBlocked(sender) || withIds.isEmpty()) {
+                messageDao.markSeen(rows.map { it.id })
+                continue
+            }
+            for (chunk in withIds.chunked(MAX_IDS_PER_RECEIPT)) {
+                val ids = chunk.map { it.relayId!! }
+                try {
+                    val signature = keyManager.sign(signedPayload(reader = me, sender = sender, ids = ids))
+                    apiService.sendReceipt(ReceiptRequest(sender, ids, Base64.encodeToString(signature, Base64.NO_WRAP)))
+                } catch (e: Exception) {
+                    if (BuildConfig.DEBUG) Log.w(TAG, "Sending group read receipt failed: ${e.message}")
+                    continue // left unseen: the next look retries
+                }
+                messageDao.markSeen(chunk.map { it.id })
+            }
+        }
     }
 
     /** Number of received messages in [conversationId] the user hasn't seen. */
@@ -151,6 +188,7 @@ class ReceiptManager @Inject constructor(
         val matched = messageDao.getUndeliveredOutgoingIds(receipt.senderId, since)
             .filter { relayMessageId(me, it) in wanted }
         if (matched.isNotEmpty()) matched.chunked(500).forEach { messageDao.markDelivered(it) }
+        groups.get().onDelivered(receipt.senderId, receipt.messageIds)
     }
 
     /** One page; null on a network error, otherwise whether the page was full. */
@@ -210,6 +248,7 @@ class ReceiptManager @Inject constructor(
         val matched = messageDao.getUnreadOutgoingIds(receipt.senderId, since)
             .filter { relayMessageId(me, it) in wanted }
         if (matched.isNotEmpty()) matched.chunked(500).forEach { messageDao.markSeen(it) }
+        groups.get().onRead(receipt.senderId, receipt.messageIds)
         return ReceiptResult.Done
     }
 
@@ -224,6 +263,7 @@ class ReceiptManager @Inject constructor(
     companion object {
         private const val TAG = "ReceiptManager"
         private const val MAX_IDS_PER_RECEIPT = 100
+        private const val MAX_GROUP_UNSEEN = 1_000
         private const val SERVER_PAGE_SIZE = 100
         private const val MAX_PAGES = 20
         /** Only messages this recent get a receipt (no burst for old history). */

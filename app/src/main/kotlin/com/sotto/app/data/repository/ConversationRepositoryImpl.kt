@@ -38,6 +38,8 @@ class ConversationRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getOrCreateConversation(contactId: String): String {
+        // The user starts a chat with them: a group member known only through a group becomes a contact.
+        contactDao.clearGroupOnly(contactId)
         val existing = conversationDao.getByContactId(contactId)
         if (existing != null) {
             // Auto-approve if user explicitly adds this contact
@@ -69,6 +71,8 @@ class ConversationRepositoryImpl @Inject constructor(
 
     override suspend fun approveConversation(conversationId: String) {
         conversationDao.approve(conversationId)
+        // Accepting their request makes a group member known only through a group a contact.
+        conversationDao.getByIdOnce(conversationId)?.contactId?.let { contactDao.clearGroupOnly(it) }
     }
 
     override suspend fun clearUnread(conversationId: String) {

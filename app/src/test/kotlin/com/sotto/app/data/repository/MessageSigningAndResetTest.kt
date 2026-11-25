@@ -63,6 +63,9 @@ class MessageSigningAndResetTest {
 
     private fun b64(bytes: ByteArray) = java.util.Base64.getEncoder().encodeToString(bytes)
 
+    /** Group packets go here; these tests are about one-to-one messages. */
+    private val groupRepo = mockk<GroupRepositoryImpl>(relaxed = true)
+
     @Before
     fun setUp() {
         mockkStatic(android.util.Base64::class)
@@ -108,6 +111,7 @@ class MessageSigningAndResetTest {
                     args.drop(1).flatMap { if (it is Array<*>) it.toList() else listOf(it) }.joinToString("\n\n")
                 }
             },
+            groups = javax.inject.Provider { groupRepo },
         )
     }
 
@@ -297,10 +301,12 @@ class MessageSigningAndResetTest {
             mockk<MessageEntity> {
                 every { this@mockk.id } returns id
                 every { mediaKind } returns null
+                every { groupId } returns null
             }
         }
         coEvery { messageDao.getSendingMessages() } returns stuck
         coEvery { messageDao.getDownloadingMessages() } returns emptyList()
+        coEvery { messageDao.getSendingGroupMessages() } returns emptyList()
 
         repo.failInterruptedSends()
 
@@ -319,6 +325,7 @@ class MessageSigningAndResetTest {
         val orphan = file.copy(id = "f2")
         coEvery { messageDao.getSendingMessages() } returns listOf(file, orphan)
         coEvery { messageDao.getDownloadingMessages() } returns emptyList()
+        coEvery { messageDao.getSendingGroupMessages() } returns emptyList()
         every { transfers.isQueued("f1", true) } returns true
         every { transfers.isQueued("f2", true) } returns false
 

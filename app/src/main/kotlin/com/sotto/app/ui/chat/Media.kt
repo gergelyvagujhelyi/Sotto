@@ -181,6 +181,8 @@ internal val Message.shownState: com.sotto.app.domain.model.MessageState
         if (!reached) return state // still sending its message, or that failed
         return when (m.fileState) {
             com.sotto.app.domain.model.FileState.RECEIVED -> state
+            // A group's file: up for every member; the ticks follow their copies (ADR-35).
+            com.sotto.app.domain.model.FileState.READY -> state
             com.sotto.app.domain.model.FileState.SENT -> com.sotto.app.domain.model.MessageState.SENT
             com.sotto.app.domain.model.FileState.UNSENT -> com.sotto.app.domain.model.MessageState.FAILED
             else -> com.sotto.app.domain.model.MessageState.SENDING

@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Group chats (ADR-32) -->
+    <string name="group_new">New group</string>
+    <string name="group_title_fallback">Group</string>
+    <string name="group_details">Group info</string>
+    <string name="group_members">Members</string>
+    <string name="group_admin">Admin</string>
+    <string name="group_member_you">%1$s (you)</string>
+    <string name="group_member_invited">Invited, hasn\'t joined yet</string>
+    <string name="group_member_gone">Left the group</string>
+    <string name="group_member_keys_mismatch">Keys don\'t match the admin\'s: nothing goes to or comes from them here</string>
+    <plurals name="group_member_count">
+        <item quantity="one">%d member</item>
+        <item quantity="other">%d members</item>
+    </plurals>
+    <plurals name="group_selected_count">
+        <item quantity="one">%d selected</item>
+        <item quantity="other">%d selected</item>
+    </plurals>
+
+    <!-- Creating, adding -->
+    <string name="group_name_hint">Group name</string>
+    <string name="group_pick_hint">Only your accepted contacts can be added. Members who aren\'t each other\'s contacts rely on how the admin verified them.</string>
+    <string name="group_create_action">Create group</string>
+    <string name="group_invite_action">Invite</string>
+    <string name="group_add_members">Add members</string>
+    <string name="group_no_contacts_title">No contacts to add</string>
+    <string name="group_no_contacts_body">Add contacts first, and accept their requests; then you can put them in a group.</string>
+    <string name="group_error_create">The group couldn\'t be created. Try again.</string>
+    <string name="group_error_change">That didn\'t work. Try again.</string>
+
+    <!-- Invitations -->
+    <string name="group_invitations">Group invitations</string>
+    <string name="group_invitation_from">From %1$s</string>
+    <string name="group_invitation_open">See who\'s in it</string>
+    <string name="group_invitation_title">%1$s invited you to this group</string>
+    <string name="group_invitation_body">Nothing from the group reaches you until you join. Members see your name and get your messages; the admin vouches for members you don\'t know.</string>
+    <string name="group_invitation_accept">Join</string>
+    <string name="group_invitation_decline">Decline</string>
+    <string name="group_notification_invited">%1$s invited you to “%2$s”</string>
+
+    <!-- Status -->
+    <string name="group_status_new">New group</string>
+    <string name="group_status_joining">Joining…</string>
+    <string name="group_joining_body">Waiting for the admin\'s phone to add you. Messages come in once it has.</string>
+    <string name="group_status_left">You left this group</string>
+    <string name="group_status_removed">You were removed from this group</string>
+    <string name="group_status_ended">The admin deleted this group</string>
+    <string name="group_not_member_body">You keep the messages you have. Nothing new reaches you, and you can\'t write here.</string>
+    <string name="group_frozen_title">The admin\'s account is gone</string>
+    <string name="group_frozen_body">You can still write to each other, but nobody can change the members, name or timer any more.</string>
+    <string name="group_composer_cant_send">You can\'t write in this group</string>
+    <string name="group_composer_invited">Join the group to write in it</string>
+    <string name="group_composer_joining">Joining…</string>
+    <string name="group_composer_not_member">You\'re not in this group any more</string>
+    <string name="group_composer_ended">This group was deleted</string>
+
+    <!-- Events in the chat -->
+    <string name="group_event_created">You created the group</string>
+    <string name="group_event_joined">%1$s joined</string>
+    <string name="group_event_invited">%1$s invited</string>
+    <string name="group_event_left">%1$s left</string>
+    <string name="group_event_removed">%1$s was removed</string>
+    <string name="group_event_declined">%1$s declined the invitation</string>
+    <string name="group_event_title">%1$s renamed the group to “%2$s”</string>
+    <string name="group_event_timer">%1$s set disappearing messages: %2$s</string>
+    <string name="group_event_title_you">You renamed the group to “%1$s”</string>
+    <string name="group_event_timer_you">You set disappearing messages: %1$s</string>
+    <string name="group_event_admin">%1$s is now the admin</string>
+    <string name="group_event_admin_you">You\'re now the admin</string>
+    <string name="group_event_ended">The admin deleted the group</string>
+    <string name="group_event_you_removed">You were removed from the group</string>
+    <string name="group_event_you_left">You left the group</string>
+    <string name="group_event_you_joined">You joined the group</string>
+    <string name="group_event_frozen">The admin\'s account is gone: the group can\'t be changed any more</string>
+    <string name="group_event_keys_mismatch">%1$s\'s keys don\'t match what the admin vouched for</string>
+    <string name="group_event_unknown">The group changed</string>
+
+    <!-- Delivery -->
+    <string name="group_message_info">Who has it</string>
+    <string name="group_message_info_nobody">Nobody else is in the group.</string>
+    <string name="group_message_retry_failed">Send to the others again</string>
+    <string name="group_copy_failed">Not sent</string>
+    <string name="group_copy_failed_keys">Not sent: keys don\'t match</string>
+    <string name="group_copy_failed_no_keys">Waiting for their keys</string>
+    <string name="group_copy_skipped">Not sent (blocked or left)</string>
+    <string name="group_roster_delivery">Latest change reached</string>
+
+    <!-- Trust -->
+    <string name="group_vouch_in_person">The admin verified them in person</string>
+    <string name="group_vouch_by_phone">The admin verified them by phone only</string>
+    <string name="group_vouch_share_code">The admin added them by share code</string>
+    <string name="group_vouch_none">Not verified by the admin</string>
+    <string name="group_vouch_note">Your own contacts show how you verified them. For anyone else, the admin\'s phone vouches for their keys: you\'re trusting the admin. Verify them in person to be sure.</string>
+
+    <!-- Details: changes -->
+    <string name="group_rename">Rename group</string>
+    <string name="group_timer">Disappearing messages</string>
+    <string name="group_timer_admin">Applies to everyone\'s new messages in this group.</string>
+    <string name="group_timer_member">Only the admin can change this.</string>
+    <string name="group_offline_title">Changes reach phones when they\'re online</string>
+    <string name="group_offline_body">A phone that\'s offline learns of a removal only when it\'s back. From then on it takes nothing from older versions of the group. Your phone shows above which members the latest change has reached.</string>
+    <string name="group_no_calls">Groups have no calls; call a member from your chat with them.</string>
+    <string name="group_remove">Remove from group</string>
+    <string name="group_remove_title">Remove %1$s?</string>
+    <string name="group_remove_body">They keep what they already received, and get nothing new. If their phone is offline, it learns this once it\'s back.</string>
+    <string name="group_make_admin">Make admin</string>
+    <string name="group_make_admin_title">Make %1$s the admin?</string>
+    <string name="group_make_admin_body">A group has one admin. You\'ll be a member, and only they can change the group.</string>
+    <string name="group_leave">Leave group</string>
+    <string name="group_leave_title">Leave this group?</string>
+    <string name="group_leave_body">You keep its messages on this phone, but get nothing new.</string>
+    <string name="group_leave_body_admin">The group goes to another member, who becomes its admin. You keep its messages on this phone, but get nothing new.</string>
+    <string name="group_delete">Delete group</string>
+    <string name="group_delete_title">Delete this group for everyone?</string>
+    <string name="group_delete_body">Nobody can write in it any more. Members keep the messages they have.</string>
+    <string name="group_delete_chat">Delete chat</string>
+    <string name="group_delete_chat_title">Delete this chat?</string>
+    <string name="group_delete_chat_body">Its messages are deleted from this phone.</string>
+
+    <!-- Deleting the account -->
+    <plurals name="group_handover_note">
+        <item quantity="one">You\'re the admin of a group. Before your account goes, it can be handed to another member, who becomes its admin; otherwise nobody can change it any more.</item>
+        <item quantity="other">You\'re the admin of %d groups. Before your account goes, each can be handed to another member, who becomes its admin; otherwise nobody can change them any more.</item>
+    </plurals>
+    <string name="group_handover_checkbox">Hand my groups over first</string>
+</resources>

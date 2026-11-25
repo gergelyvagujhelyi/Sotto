@@ -506,7 +506,7 @@ class IdentityRepositoryImpl @Inject constructor(
         val localUserId = keyManager.getUserId() ?: return
         val now = Clock.System.now().toEpochMilliseconds()
         try {
-            val contacts = contactDao.getAll().first()
+            val contacts = contactDao.getAllWithKeys()
             for (contact in contacts) {
                 // Insert a key-change event into each conversation
                 val conversation = conversationDao.getByContactId(contact.userId)

@@ -19,8 +19,13 @@ import com.sotto.app.data.local.entity.MessageEntity
         ConversationEntity::class,
         ContactEntity::class,
         BlockedUserEntity::class,
+        com.sotto.app.data.local.entity.GroupEntity::class,
+        com.sotto.app.data.local.entity.GroupMemberEntity::class,
+        com.sotto.app.data.local.entity.GroupOutboxEntity::class,
+        com.sotto.app.data.local.entity.GroupReactionEntity::class,
+        com.sotto.app.data.local.entity.GroupHeldEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -29,4 +34,5 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun conversationDao(): ConversationDao
     abstract fun contactDao(): ContactDao
     abstract fun blockedUserDao(): BlockedUserDao
+    abstract fun groupDao(): com.sotto.app.data.local.dao.GroupDao
 }

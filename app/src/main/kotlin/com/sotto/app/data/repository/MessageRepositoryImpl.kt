@@ -35,6 +35,7 @@ import com.sotto.app.domain.repository.DuplicateMessageException
 import com.sotto.app.domain.repository.EncryptedEnvelope
 import com.sotto.app.domain.repository.MessageRepository
 import com.sotto.app.domain.repository.PeerKeys
+import com.sotto.app.group.GroupPacketCodec
 import com.sotto.app.notification.ChatNotificationManager
 import com.sotto.app.ui.text.UiText
 import com.sotto.app.ui.text.resolve
@@ -71,7 +72,9 @@ class MessageRepositoryImpl @Inject constructor(
     private val transfers: com.sotto.app.worker.FileTransfers,
     /** For the words this repository stores or notifies with (previews, notes), in the user's language. */
     @ApplicationContext private val context: Context,
-) : MessageRepository {
+    /** Group packets go there, before anything one-to-one happens with them (ADR-32). */
+    private val groups: javax.inject.Provider<GroupRepositoryImpl>,
+) : MessageRepository, GroupTransport {
 
     override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
 
@@ -135,6 +138,7 @@ class MessageRepositoryImpl @Inject constructor(
             // Don't keep the plaintext of a deleted message in the conversation list.
             conversationDao.clearPreviewsWithoutMessage()
         }
+        runCatching { groups.get().prune() }
         sweepMedia()
     }
 
@@ -275,8 +279,11 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    /** Puts our file on the relay's store, once: reserve, upload, confirm. Returns the row as it is then. */
-    private suspend fun ensureUploaded(entity: MessageEntity): MessageEntity {
+    /**
+     * Puts our file on the relay's store, once: reserve, upload, confirm. Returns the row as it
+     * is then. [recipients]: a group message's members, who all may fetch the one upload.
+     */
+    private suspend fun ensureUploaded(entity: MessageEntity, recipients: List<String>? = null): MessageEntity {
         val sent = com.sotto.app.domain.model.FileState.SENT.wire
         if (entity.attachmentId != null && (entity.mediaState == sent || entity.mediaState == com.sotto.app.domain.model.FileState.RECEIVED.wire)) return entity
         messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.UPLOADING.wire)
@@ -300,7 +307,11 @@ class MessageRepositoryImpl @Inject constructor(
             messageDao.setAttachmentId(entity.id, null)
         }
         val reserved = apiService.reserveAttachment(
-            com.sotto.app.data.remote.dto.AttachmentReserveRequest(entity.recipientId, size),
+            if (recipients != null) {
+                com.sotto.app.data.remote.dto.AttachmentReserveRequest(recipientId = "", size = size, recipientIds = recipients)
+            } else {
+                com.sotto.app.data.remote.dto.AttachmentReserveRequest(entity.recipientId, size)
+            },
         )
         messageDao.setAttachmentId(entity.id, reserved.id)
         if (reserved.partUrls.isNotEmpty()) {
@@ -320,6 +331,7 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun finishSend(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
         if (!entity.isOutgoing) return
+        if (entity.groupId != null) return groups.get().finishSend(entity)
         val me = keyManager.getUserId() ?: throw IllegalStateException("No identity")
         val token = ReceiptManager.relayMessageId(me, entity.id)
         // Its message is out (sent, delivered or even seen) but the file isn't through yet.
@@ -520,7 +532,8 @@ class MessageRepositoryImpl @Inject constructor(
 
     /** A file from [entity]'s sender is on this phone now: they hear it, so theirs shows it as delivered. */
     private suspend fun tellGot(entity: MessageEntity) {
-        if (entity.isOutgoing || entity.mediaKind != MediaKind.FILE.wire) return
+        // In a group the sender follows its copies by delivery receipts instead.
+        if (entity.isOutgoing || entity.mediaKind != MediaKind.FILE.wire || entity.groupId != null) return
         runCatching { sendUnstored(entity.senderId, com.sotto.app.domain.model.FileUpdatePayload.encodeGot(entity.id)) }
     }
 
@@ -557,6 +570,7 @@ class MessageRepositoryImpl @Inject constructor(
 
     override suspend fun markSendFailed(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
+        if (entity.groupId != null) return groups.get().markSendFailed(entity)
         if (entity.state == MessageState.SENDING.name) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
             return
@@ -587,8 +601,9 @@ class MessageRepositoryImpl @Inject constructor(
     override suspend fun requestDownload(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
         if (!usesStore(entity) || entity.isOutgoing) return
-        // Nothing comes down from someone whose message request isn't accepted.
-        if (conversationDao.getByContactId(entity.senderId)?.isApproved != true) return
+        // Nothing comes down from someone whose message request isn't accepted. In a group, its
+        // members' files were taken in by joining it.
+        if (entity.groupId == null && conversationDao.getByContactId(entity.senderId)?.isApproved != true) return
         if (entity.mediaState != com.sotto.app.domain.model.FileState.REMOTE.wire) return
         messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.DOWNLOADING.wire)
         transfers.download(messageId)
@@ -802,6 +817,41 @@ class MessageRepositoryImpl @Inject constructor(
         )
     }
 
+    // ── Group copies (GroupTransport, ADR-32) ────────────────────────────────
+
+    override suspend fun seal(peerId: String, plaintext: String): GroupTransport.Sealed {
+        val me = keyManager.getUserId() ?: throw IllegalStateException("No identity")
+        val envelope = encryptFor(peerId, plaintext.toByteArray(Charsets.UTF_8), allowFirstUse = false)
+        val sigPayload = buildMessageSigPayload(me, peerId, envelope.nonce, envelope.ciphertext)
+        return GroupTransport.Sealed(
+            ciphertext = envelope.ciphertext,
+            nonce = envelope.nonce,
+            signature = Base64.encodeToString(keyManager.sign(sigPayload), Base64.NO_WRAP),
+            pqcSignature = signWithMlDsa(sigPayload),
+        )
+    }
+
+    override suspend fun post(peerId: String, sealed: GroupTransport.Sealed, clientMessageId: String) =
+        apiService.sendMessage(
+            SendMessageRequest(
+                recipientId = peerId,
+                encryptedBody = Base64.encodeToString(sealed.ciphertext, Base64.NO_WRAP),
+                nonce = Base64.encodeToString(sealed.nonce, Base64.NO_WRAP),
+                signature = sealed.signature,
+                pqcSignature = sealed.pqcSignature,
+                clientMessageId = clientMessageId,
+            ),
+        )
+
+    override suspend fun upload(entity: MessageEntity, recipients: List<String>): MessageEntity =
+        try {
+            ensureUploaded(entity, recipients)
+        } catch (e: com.sotto.app.data.remote.ApiHttpException) {
+            // An HD copy the store won't take: the photo still goes, without it (as in a 1:1 chat).
+            if (entity.mediaKind != MediaKind.PHOTO.wire || !isFinalRefusal(e)) throw e
+            dropHd(entity)
+        }
+
     override suspend fun markDelivered(messageId: String) {
         messageDao.updateState(messageId, MessageState.DELIVERED.name)
     }
@@ -818,6 +868,9 @@ class MessageRepositoryImpl @Inject constructor(
         messageDao.getSendingMessages().forEach {
             // A send whose file a background job still owns isn't interrupted: it goes on.
             if (usesStore(it) && transfers.isQueued(it.id, up = true)) return@forEach
+            // A group message's copies are sealed and kept: the outbox sends them on (the same bytes).
+            // One whose file never got up (its job is gone) fails, and a retry uploads it again.
+            if (it.groupId != null && !(usesStore(it) && it.mediaState == com.sotto.app.domain.model.FileState.UPLOADING.wire)) return@forEach
             messageDao.updateState(it.id, MessageState.FAILED.name)
         }
         messageDao.getDownloadingMessages().forEach {
@@ -825,10 +878,12 @@ class MessageRepositoryImpl @Inject constructor(
                 messageDao.setMediaState(it.id, com.sotto.app.domain.model.FileState.REMOTE.wire)
             }
         }
+        if (messageDao.getSendingGroupMessages().isNotEmpty()) groups.get().scheduleOutbox()
     }
 
     private suspend fun retryFailedInternal(messageId: String) {
         val entity = messageDao.getById(messageId) ?: return
+        if (entity.groupId != null) return groups.get().retry(messageId)
         // A file whose message is out but that couldn't follow it: only the file goes again.
         if (entity.isOutgoing && entity.mediaState == com.sotto.app.domain.model.FileState.UNSENT.wire) {
             retryFile(messageId)
@@ -922,7 +977,7 @@ class MessageRepositoryImpl @Inject constructor(
      * there is one; otherwise starts a new session with server keys that passed
      * [ContactKeyVerifier] (never raw server output).
      */
-    private suspend fun encryptFor(peerId: String, plaintext: ByteArray): EncryptedEnvelope {
+    private suspend fun encryptFor(peerId: String, plaintext: ByteArray, allowFirstUse: Boolean = true): EncryptedEnvelope {
         val peerMutex = peerLocks.computeIfAbsent(peerId) { kotlinx.coroutines.sync.Mutex() }
         return peerMutex.withLock {
             val contact = contactDao.getByUserId(peerId)
@@ -934,7 +989,7 @@ class MessageRepositoryImpl @Inject constructor(
                 // verified-keys path below so the ML-KEM key and downgrade latch apply.
                 existing
             } else {
-                val keys = verifiedKeysForNewSession(peerId)
+                val keys = verifiedKeysForNewSession(peerId, allowFirstUse)
                 val current = contactDao.getByUserId(peerId)
                 if (current?.pqcEstablished == true && keys.pqcEncapsulationKey.isEmpty()) {
                     throw SecurityException("PQC downgrade refused for ${peerId.take(8)}")
@@ -948,13 +1003,15 @@ class MessageRepositoryImpl @Inject constructor(
     }
 
     /** Keys for starting a new outbound session. Throws if they cannot be trusted. */
-    private suspend fun verifiedKeysForNewSession(peerId: String): VerifiedKeys {
+    private suspend fun verifiedKeysForNewSession(peerId: String, allowFirstUse: Boolean = true): VerifiedKeys {
         return when (val check = keyVerifier.check(peerId)) {
             is KeyCheck.Known -> {
                 if (check.rotated) recordRemoteRotation(peerId)
                 check.keys
             }
             is KeyCheck.Unknown -> {
+                // A group copy never trusts the relay's keys: the member must be pinned.
+                if (!allowFirstUse) throw SecurityException("No keys pinned for ${peerId.take(8)}")
                 // Sending to someone never added or seen: trust on first use.
                 contactDao.upsert(check.keys.toNewContact(verified = false))
                 check.keys
@@ -981,6 +1038,11 @@ class MessageRepositoryImpl @Inject constructor(
 
     /** Insert a "keys changed" event after a verified (endorsed) remote key rotation. */
     private suspend fun recordRemoteRotation(peerId: String) {
+        // In groups the user runs, the roster now vouches for the new keys. Later, on its own:
+        // this can run while a group's lock is held (sealing a copy for that group).
+        runCatching { groups.get().keysRotated(peerId) }
+        // A member known only through a group has no chat with the user to note it in.
+        if (contactDao.getByUserId(peerId)?.groupOnly == true) return
         val localUserId = keyManager.getUserId() ?: ""
         val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
         val conversationId = getOrCreateConversationId(peerId)
@@ -1199,6 +1261,41 @@ class MessageRepositoryImpl @Inject constructor(
         // Their session works again: should it break later, it needs a new reset.
         sessionResetSentTo.remove(dto.senderId)
 
+        val plaintextStr = String(plaintext, Charsets.UTF_8)
+        // A group packet (ADR-32): the group decides, before anything one-to-one happens. A
+        // sender we have no keys pinned for gets no contact or chat from it; the group pins
+        // their keys only if they're the ones its admin vouched for.
+        if (GroupPacketCodec.isGroup(plaintextStr)) {
+            // A contact saved before fingerprints: fill it in from the keys we trust first.
+            val pinnedFp = contact?.let { c ->
+                c.keyFingerprint ?: run {
+                    runCatching { keyVerifier.check(c.userId) }
+                    contactDao.getByUserId(c.userId)?.keyFingerprint
+                }
+            }
+            try {
+                groups.get().receive(
+                    GroupRepositoryImpl.Inbound(
+                        relayId = dto.messageId,
+                        sender = dto.senderId,
+                        plaintext = plaintextStr,
+                        timestamp = dto.timestamp,
+                        senderFingerprint = pinnedFp ?: newSenderKeys?.fingerprintHex.orEmpty(),
+                        newSenderKeys = newSenderKeys,
+                    ),
+                )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // receive keeps what it can't take now; anything left is logged, never retried
+                // into a duplicate (its ratchet key is used up).
+                if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.e("MessageRepo", "Group packet failed: ${e.message}", e)
+            }
+            if (contactDao.getByUserId(dto.senderId) != null) recordSessionPqcStatus(dto.senderId)
+            receivedIds.add(dto.messageId)
+            return
+        }
+
         if (newSenderKeys != null) {
             // First contact from this sender, signature and decryption both OK.
             contact = newSenderKeys.toNewContact(verified = false)
@@ -1206,7 +1303,6 @@ class MessageRepositoryImpl @Inject constructor(
         }
         recordSessionPqcStatus(dto.senderId)
 
-        val plaintextStr = String(plaintext, Charsets.UTF_8)
         // The name the sender chose, not chat text: apply it and store no message.
         if (ProfilePayload.isProfile(plaintextStr)) {
             applyReceivedProfile(dto.senderId, plaintextStr, dto.timestamp)
@@ -1468,6 +1564,8 @@ class MessageRepositoryImpl @Inject constructor(
             // Permanently failed — store as DECRYPT_FAILED so the user
             // sees a tombstone instead of silently losing the message.
             if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Giving up on message $messageId after $failures attempts")
+            // A member known only through a group: no 1:1 chat for the tombstone (the session reset below still goes).
+            if (contactDao.getByUserId(senderId)?.groupOnly != true) {
             val conversationId = getOrCreateConversationId(senderId)
             messageDao.insert(MessageEntity(
                 id = messageId,
@@ -1482,6 +1580,7 @@ class MessageRepositoryImpl @Inject constructor(
                 expiresAt = null,
                 isOutgoing = false,
             ))
+            }
             receivedIds.add(messageId)
             decryptFailCounts.remove(messageId)
 
@@ -1508,6 +1607,8 @@ class MessageRepositoryImpl @Inject constructor(
         envelope: EncryptedEnvelope,
         timestamp: Long,
     ) {
+        // A member known only through a group: dropped without opening a 1:1 chat for it.
+        if (contactDao.getByUserId(senderId)?.groupOnly == true) return
         val conversationId = getOrCreateConversationId(senderId)
         messageDao.insert(MessageEntity(
             id = messageId,
@@ -1632,9 +1733,12 @@ class MessageRepositoryImpl @Inject constructor(
         conversationDao.setNeedsSessionReset(dto.senderId, true)
         if (isAccountDeleted) {
             conversationDao.setPeerDeleted(dto.senderId, true)
+            // Gone from every group too; a group they ran can't change any more.
+            runCatching { groups.get().onAccountDeleted(dto.senderId) }
         }
 
-        if (isAccountDeleted || rotated) {
+        // A member known only through a group has no 1:1 chat to note it in: none is opened.
+        if ((isAccountDeleted || rotated) && contact?.groupOnly != true) {
             val eventState = if (isAccountDeleted) MessageState.ACCOUNT_DELETED else MessageState.KEY_ROTATED_REMOTE
             val conversationId = getOrCreateConversationId(dto.senderId)
             messageDao.insert(MessageEntity(

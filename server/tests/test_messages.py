@@ -193,9 +193,10 @@ async def test_pending_fetch_is_bounded_by_size(client: AsyncClient, monkeypatch
 
 @pytest.mark.asyncio
 async def test_failed_sends_count_toward_rate_limit(client: AsyncClient, monkeypatch):
-    import app.services.rate_limiter as rl
+    from app import config
 
-    monkeypatch.setattr(rl, "MAX_MESSAGES_PER_MINUTE", 3)
+    monkeypatch.setattr(config, "MESSAGE_BURST", 3)
+    monkeypatch.setattr(config, "MESSAGE_RATE_PER_MINUTE", 0)
     alice = await _bootstrap_user(client, "alice_rl")
     bob = await _bootstrap_user(client, "bob_rl")
     nobody = {"recipient_id": "doesnotexist0000", "encrypted_body": "x", "nonce": "n"}

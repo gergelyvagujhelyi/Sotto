@@ -7,6 +7,7 @@ Privacy-first Android messenger for 1:1 chats and voice calls, with hybrid post-
 - **End-to-end encryption** — Messages are encrypted before leaving your device using a hybrid classical + post-quantum scheme.
 - **Voices you can hear** — **Louder** on the call screen lifts the other person's voice without distortion, and is remembered for them; Settings > Calls can also lift every quiet voice by itself. Your microphone goes through the phone's own echo cancellation and noise suppression, or WebRTC's if you choose.
 - **Verified in person** — A contact counts as trusted only after you've checked their keys face to face: hold the phones together (NFC) or scan each other's codes. Until then the chat says "Not verified". In a call you can also verify by phone, which counts only as "Verified by phone only".
+- **Group chats** — Up to 32 people. Each message goes to every member as its own end-to-end encrypted message, so the relay sees only one-to-one traffic. The admin decides who's in; members who don't know each other rely on how the admin verified them. Groups have no calls.
 - **Minimal metadata** — The relay server sees only encrypted envelopes and the minimum routing information needed for delivery.
 
 ## Screenshots

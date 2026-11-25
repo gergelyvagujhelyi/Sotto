@@ -36,6 +36,13 @@ data class ContactEntity(
      * like [verifiedInPerson].
      */
     val verifiedByCall: Boolean = false,
+    /**
+     * Not a contact of the user: a group member's keys, vouched for by the group's admin
+     * (ADR-32). Pinned like a contact's so their messages can be checked and answered in the
+     * group, but never shown as a contact, never offered a chat or a direct call. Cleared
+     * when the user adds them, or accepts a message request from them.
+     */
+    val groupOnly: Boolean = false,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -54,7 +61,8 @@ data class ContactEntity(
             louderVoice == other.louderVoice &&
             verifiedInPerson == other.verifiedInPerson &&
             inPersonWarned == other.inPersonWarned &&
-            verifiedByCall == other.verifiedByCall
+            verifiedByCall == other.verifiedByCall &&
+            groupOnly == other.groupOnly
     }
 
     override fun hashCode(): Int {
@@ -73,6 +81,7 @@ data class ContactEntity(
         result = 31 * result + verifiedInPerson.hashCode()
         result = 31 * result + inPersonWarned.hashCode()
         result = 31 * result + verifiedByCall.hashCode()
+        result = 31 * result + groupOnly.hashCode()
         return result
     }
 }

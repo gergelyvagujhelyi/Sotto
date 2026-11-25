@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Csoportos beszélgetések (ADR-32) -->
+    <string name="group_new">Új csoport</string>
+    <string name="group_title_fallback">Csoport</string>
+    <string name="group_details">Csoport adatai</string>
+    <string name="group_members">Tagok</string>
+    <string name="group_admin">Admin</string>
+    <string name="group_member_you">%1$s (te)</string>
+    <string name="group_member_invited">Meghívva, még nem csatlakozott</string>
+    <string name="group_member_gone">Kilépett a csoportból</string>
+    <string name="group_member_keys_mismatch">A kulcsai nem egyeznek az adminéval: itt semmi nem megy hozzá, és tőle sem jön semmi</string>
+    <plurals name="group_member_count">
+        <item quantity="one">%d tag</item>
+        <item quantity="other">%d tag</item>
+    </plurals>
+    <plurals name="group_selected_count">
+        <item quantity="one">%d kiválasztva</item>
+        <item quantity="other">%d kiválasztva</item>
+    </plurals>
+
+    <!-- Létrehozás, hozzáadás -->
+    <string name="group_name_hint">A csoport neve</string>
+    <string name="group_pick_hint">Csak az elfogadott ismerőseidet adhatod hozzá. Azok a tagok, akik nem ismerősei egymásnak, arra hagyatkoznak, ahogy az admin ellenőrizte őket.</string>
+    <string name="group_create_action">Csoport létrehozása</string>
+    <string name="group_invite_action">Meghívás</string>
+    <string name="group_add_members">Tagok hozzáadása</string>
+    <string name="group_no_contacts_title">Nincs kit hozzáadni</string>
+    <string name="group_no_contacts_body">Előbb adj hozzá ismerősöket, és fogadd el az üzenetkéréseiket; utána csoportba teheted őket.</string>
+    <string name="group_error_create">Nem sikerült létrehozni a csoportot. Próbáld újra.</string>
+    <string name="group_error_change">Ez nem sikerült. Próbáld újra.</string>
+
+    <!-- Meghívók -->
+    <string name="group_invitations">Csoportmeghívók</string>
+    <string name="group_invitation_from">Tőle: %1$s</string>
+    <string name="group_invitation_open">Kik vannak benne</string>
+    <string name="group_invitation_title">%1$s meghívott ebbe a csoportba</string>
+    <string name="group_invitation_body">Amíg nem csatlakozol, semmi nem jut el hozzád a csoportból. A tagok látják a neved és megkapják az üzeneteidet; azokért a tagokért, akiket nem ismersz, az admin kezeskedik.</string>
+    <string name="group_invitation_accept">Csatlakozás</string>
+    <string name="group_invitation_decline">Elutasítás</string>
+    <string name="group_notification_invited">%1$s meghívott a(z) „%2$s” csoportba</string>
+
+    <!-- Állapot -->
+    <string name="group_status_new">Új csoport</string>
+    <string name="group_status_joining">Csatlakozás…</string>
+    <string name="group_joining_body">Várjuk, hogy az admin telefonja felvegyen. Utána jönnek az üzenetek.</string>
+    <string name="group_status_left">Kiléptél ebből a csoportból</string>
+    <string name="group_status_removed">Eltávolítottak ebből a csoportból</string>
+    <string name="group_status_ended">Az admin törölte ezt a csoportot</string>
+    <string name="group_not_member_body">A meglévő üzeneteid megmaradnak. Új már nem jön, és itt nem írhatsz.</string>
+    <string name="group_frozen_title">Az admin fiókja megszűnt</string>
+    <string name="group_frozen_body">Továbbra is írhattok egymásnak, de a tagokat, a nevet és az időzítőt már senki nem változtathatja meg.</string>
+    <string name="group_composer_cant_send">Ebben a csoportban nem írhatsz</string>
+    <string name="group_composer_invited">Csatlakozz, hogy írhass a csoportba</string>
+    <string name="group_composer_joining">Csatlakozás…</string>
+    <string name="group_composer_not_member">Már nem vagy ennek a csoportnak a tagja</string>
+    <string name="group_composer_ended">Ezt a csoportot törölték</string>
+
+    <!-- Események a beszélgetésben -->
+    <string name="group_event_created">Létrehoztad a csoportot</string>
+    <string name="group_event_joined">%1$s csatlakozott</string>
+    <string name="group_event_invited">Meghívva: %1$s</string>
+    <string name="group_event_left">%1$s kilépett</string>
+    <string name="group_event_removed">%1$s el lett távolítva</string>
+    <string name="group_event_declined">%1$s elutasította a meghívást</string>
+    <string name="group_event_title">%1$s átnevezte a csoportot: „%2$s”</string>
+    <string name="group_event_timer">%1$s beállította az eltűnő üzeneteket: %2$s</string>
+    <string name="group_event_title_you">Átnevezted a csoportot: „%1$s”</string>
+    <string name="group_event_timer_you">Beállítottad az eltűnő üzeneteket: %1$s</string>
+    <string name="group_event_admin">%1$s lett az admin</string>
+    <string name="group_event_admin_you">Te lettél az admin</string>
+    <string name="group_event_ended">Az admin törölte a csoportot</string>
+    <string name="group_event_you_removed">Eltávolítottak a csoportból</string>
+    <string name="group_event_you_left">Kiléptél a csoportból</string>
+    <string name="group_event_you_joined">Csatlakoztál a csoporthoz</string>
+    <string name="group_event_frozen">Az admin fiókja megszűnt: a csoport már nem változtatható</string>
+    <string name="group_event_keys_mismatch">%1$s kulcsai nem egyeznek azzal, amiért az admin kezeskedett</string>
+    <string name="group_event_unknown">A csoport megváltozott</string>
+
+    <!-- Kézbesítés -->
+    <string name="group_message_info">Kinél van meg</string>
+    <string name="group_message_info_nobody">Rajtad kívül senki nincs a csoportban.</string>
+    <string name="group_message_retry_failed">Küldés újra a többieknek</string>
+    <string name="group_copy_failed">Nincs elküldve</string>
+    <string name="group_copy_failed_keys">Nincs elküldve: a kulcsok nem egyeznek</string>
+    <string name="group_copy_failed_no_keys">Várakozás a kulcsaira</string>
+    <string name="group_copy_skipped">Nincs elküldve (letiltva vagy kilépett)</string>
+    <string name="group_roster_delivery">Kihez ért el a legutóbbi változás</string>
+
+    <!-- Bizalom -->
+    <string name="group_vouch_in_person">Az admin személyesen ellenőrizte</string>
+    <string name="group_vouch_by_phone">Az admin csak hívással ellenőrizte</string>
+    <string name="group_vouch_share_code">Az admin megosztási kóddal adta hozzá</string>
+    <string name="group_vouch_none">Az admin nem ellenőrizte</string>
+    <string name="group_vouch_note">A saját ismerőseidnél azt látod, te hogyan ellenőrizted őket. Mindenki más kulcsaiért az admin telefonja kezeskedik: az adminban bízol. Ha biztos akarsz lenni, ellenőrizd őket személyesen.</string>
+
+    <!-- Adatok: változtatások -->
+    <string name="group_rename">Csoport átnevezése</string>
+    <string name="group_timer">Eltűnő üzenetek</string>
+    <string name="group_timer_admin">Mindenki új üzeneteire vonatkozik ebben a csoportban.</string>
+    <string name="group_timer_member">Ezt csak az admin változtathatja meg.</string>
+    <string name="group_offline_title">A változások akkor érnek el egy telefont, amikor online</string>
+    <string name="group_offline_body">Egy offline telefon csak akkor tudja meg, hogy eltávolították, amikor újra online. Onnantól a csoport régebbi változataiból semmit nem fogad el. Fent látod, mely tagokhoz ért már el a legutóbbi változás.</string>
+    <string name="group_no_calls">A csoportokban nincs hívás; egy tagot a vele folytatott beszélgetésből hívhatsz.</string>
+    <string name="group_remove">Eltávolítás a csoportból</string>
+    <string name="group_remove_title">Eltávolítod: %1$s?</string>
+    <string name="group_remove_body">Ami már megérkezett hozzá, az megmarad neki; újat nem kap. Ha a telefonja offline, akkor tudja meg, amikor újra online.</string>
+    <string name="group_make_admin">Legyen admin</string>
+    <string name="group_make_admin_title">%1$s legyen az admin?</string>
+    <string name="group_make_admin_body">Egy csoportnak egy admina van. Te tag leszel, és csak ő változtathatja meg a csoportot.</string>
+    <string name="group_leave">Kilépés a csoportból</string>
+    <string name="group_leave_title">Kilépsz a csoportból?</string>
+    <string name="group_leave_body">Az üzenetei megmaradnak ezen a telefonon, de újat nem kapsz.</string>
+    <string name="group_leave_body_admin">A csoport egy másik taghoz kerül, aki az admin lesz. Az üzenetei megmaradnak ezen a telefonon, de újat nem kapsz.</string>
+    <string name="group_delete">Csoport törlése</string>
+    <string name="group_delete_title">Mindenkinek törlöd a csoportot?</string>
+    <string name="group_delete_body">Senki nem írhat bele többé. A tagoknál megmaradnak a meglévő üzenetek.</string>
+    <string name="group_delete_chat">Beszélgetés törlése</string>
+    <string name="group_delete_chat_title">Törlöd ezt a beszélgetést?</string>
+    <string name="group_delete_chat_body">Az üzenetei törlődnek erről a telefonról.</string>
+
+    <!-- Fiók törlése -->
+    <plurals name="group_handover_note">
+        <item quantity="one">Egy csoport adminja vagy. Mielőtt a fiókod megszűnik, átadhatod egy másik tagnak, aki az admin lesz; különben senki nem változtathatja meg többé.</item>
+        <item quantity="other">%d csoport adminja vagy. Mielőtt a fiókod megszűnik, mindegyiket átadhatod egy másik tagnak, aki az admin lesz; különben senki nem változtathatja meg őket többé.</item>
+    </plurals>
+    <string name="group_handover_checkbox">Előbb adjam át a csoportjaimat</string>
+</resources>

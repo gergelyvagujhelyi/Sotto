@@ -250,3 +250,214 @@ async def test_health_reports_attachments_only_with_a_whole_store_configuration(
     assert (await client.get("/health")).json()["attachment_max_bytes"] == 0
     monkeypatch.setattr(config, "S3_SECRET", "s")
     assert (await client.get("/health")).json()["attachment_max_bytes"] == config.ATTACHMENT_MAX_BYTES
+
+
+async def _group(client, n: int):
+    from app.services.ip_rate_limiter import _buckets
+
+    users = []
+    for i in range(n):
+        _buckets.clear()
+        users.append(await _bootstrap_user(client, f"g{i}"))
+    return users
+
+
+@pytest.mark.asyncio
+async def test_a_group_file_goes_up_once_for_every_member(client: AsyncClient, store: FakeStore):
+    alice, bob, carol, dave = await _group(client, 4)
+    eve = await _bootstrap_user(client, "eve_g")
+    r = await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"], dave["user_id"]], "size": 500,
+    }, headers=_auth(alice))
+    assert r.status_code == 200, r.text
+    att = r.json()
+    store.objects[f"a/{att['id']}"] = 500
+    assert (await client.post(f"/v1/attachments/{att['id']}/complete", headers=_auth(alice))).status_code == 200
+
+    # Every named recipient gets a URL; nobody else does, the sender included.
+    for member in (bob, carol, dave):
+        assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(member))).status_code == 200
+    for other in (alice, eve):
+        assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(other))).status_code == 404
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(eve))).status_code == 404
+
+    # A recipient's delete drops only its own claim.
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+    assert store.deleted == []
+    assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 404
+    assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(carol))).status_code == 200
+    # Deleting twice is refused rather than counted again.
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 404
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(carol))).status_code == 200
+    assert store.deleted == []
+    # The last one takes the object with it.
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(dave))).status_code == 200
+    assert store.deleted == [f"a/{att['id']}"]
+    assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(dave))).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_the_sender_can_withdraw_a_group_file(client: AsyncClient, store: FakeStore):
+    alice, bob, carol = await _group(client, 3)
+    att = (await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"]], "size": 10,
+    }, headers=_auth(alice))).json()
+    store.objects[f"a/{att['id']}"] = 10
+    await client.post(f"/v1/attachments/{att['id']}/complete", headers=_auth(alice))
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(alice))).status_code == 200
+    assert store.deleted == [f"a/{att['id']}"]
+    for member in (bob, carol):
+        assert (await client.get(f"/v1/attachments/{att['id']}", headers=_auth(member))).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_group_file_counts_once_against_the_allowance_and_the_store(client: AsyncClient, store: FakeStore, monkeypatch):
+    alice, bob, carol, dave = await _group(client, 4)
+    monkeypatch.setattr(config, "ATTACHMENT_MONTHLY_BYTES_PER_USER", 150)
+    monkeypatch.setattr(config, "ATTACHMENT_STORE_LIMIT_BYTES", 150)
+    trio = [bob["user_id"], carol["user_id"], dave["user_id"]]
+    assert (await client.post("/v1/attachments", json={"recipient_ids": trio, "size": 100}, headers=_auth(alice))).status_code == 200
+    over = await client.post("/v1/attachments", json={"recipient_ids": trio, "size": 51}, headers=_auth(alice))
+    assert over.status_code == 429 and over.json()["detail"] == "attachment_monthly_limit"
+    assert (await client.post("/v1/attachments", json={"recipient_ids": trio, "size": 50}, headers=_auth(alice))).status_code == 200
+    full = await client.post("/v1/attachments", json={"recipient_id": alice["user_id"], "size": 1}, headers=_auth(bob))
+    assert full.status_code == 507
+
+
+@pytest.mark.asyncio
+async def test_group_reservations_are_checked(client: AsyncClient, store: FakeStore):
+    alice, bob, carol = await _group(client, 3)
+    def reserve(body):
+        return client.post("/v1/attachments", json={**body, "size": 10}, headers=_auth(alice))
+    assert (await reserve({"recipient_ids": [bob["user_id"], alice["user_id"]]})).status_code == 400
+    assert (await reserve({"recipient_ids": [bob["user_id"], bob["user_id"]]})).status_code == 400
+    assert (await reserve({"recipient_ids": [bob["user_id"], "nobody"]})).status_code == 404
+    assert (await reserve({"recipient_id": bob["user_id"], "recipient_ids": [carol["user_id"]]})).status_code == 400
+    assert (await reserve({})).status_code == 422
+    assert (await reserve({"recipient_ids": []})).status_code == 422
+    assert (await reserve({"recipient_ids": [f"u{i}" for i in range(32)]})).status_code == 422
+    assert (await reserve({"recipient_ids": [""]})).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_purge_forgets_deleted_recipients_and_removes_a_file_nobody_waits_for(client: AsyncClient, store: FakeStore):
+    from app.models.db import Attachment, AttachmentRecipient, Identity
+    from sqlalchemy import delete, select
+    from tests.conftest import test_session
+
+    alice, bob, carol = await _group(client, 3)
+    both = (await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"]], "size": 10,
+    }, headers=_auth(alice))).json()
+    only_bob = (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 10}, headers=_auth(alice))).json()
+    for att in (both, only_bob):
+        store.objects[f"a/{att['id']}"] = 10
+        await client.post(f"/v1/attachments/{att['id']}/complete", headers=_auth(alice))
+    async with test_session() as db:
+        await db.execute(delete(Identity).where(Identity.user_id == bob["user_id"]))
+        await db.commit()
+        assert await attachments.purge_attachments(db) == 1
+        assert await db.get(Attachment, only_bob["id"]) is None
+        assert await db.get(Attachment, both["id"]) is not None
+        left = (await db.execute(
+            select(AttachmentRecipient.recipient_id).where(AttachmentRecipient.attachment_id == both["id"])
+        )).scalars().all()
+        assert left == [carol["user_id"]]
+    assert store.deleted == [f"a/{only_bob['id']}"]
+    assert (await client.get(f"/v1/attachments/{both['id']}", headers=_auth(carol))).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_the_migration_gives_existing_attachments_their_recipient(tmp_path):
+    """Upgrading a relay keeps every file in flight downloadable by its recipient."""
+    import sqlite3
+
+    from alembic import command
+    from alembic.config import Config
+
+    url = f"sqlite+aiosqlite:///{tmp_path / 'relay.db'}"
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", url)
+    import os
+    old = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = url
+    try:
+        await asyncio_to_thread(command.upgrade, cfg, "013")
+        con = sqlite3.connect(tmp_path / "relay.db")
+        con.execute(
+            "INSERT INTO attachments (id, sender_id, recipient_id, size, created_at, expires_at) "
+            "VALUES ('a1', 's', 'r', 5, '2026-11-25', '2026-12-25')"
+        )
+        con.commit()
+        await asyncio_to_thread(command.upgrade, cfg, "head")
+        assert con.execute("SELECT attachment_id, recipient_id FROM attachment_recipients").fetchall() == [("a1", "r")]
+        assert {r[1] for r in con.execute("PRAGMA table_info(rate_limits)")} >= {"tokens", "refilled_at"}
+        con.close()
+    finally:
+        if old is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = old
+
+
+async def asyncio_to_thread(fn, *args):
+    import asyncio
+    return await asyncio.to_thread(fn, *args)
+
+
+@pytest.mark.asyncio
+async def test_a_malformed_reservation_uses_no_token_of_the_limit(client: AsyncClient, store: FakeStore, monkeypatch):
+    alice, bob = await _pair(client)
+    for _ in range(25):
+        r = await client.post("/v1/attachments", json={"recipient_ids": [], "size": 10}, headers=_auth(alice))
+        assert r.status_code == 422
+    assert (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 10}, headers=_auth(alice))).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_deleting_an_account_drops_its_claims(client: AsyncClient, store: FakeStore):
+    from app.models.db import AttachmentRecipient
+    from sqlalchemy import select
+    from tests.conftest import test_session
+
+    alice, bob, carol = await _group(client, 3)
+    att = (await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"]], "size": 10,
+    }, headers=_auth(alice))).json()
+    assert (await client.delete("/v1/identity/me", headers=_auth(bob))).status_code == 200
+    async with test_session() as db:
+        left = (await db.execute(
+            select(AttachmentRecipient.recipient_id).where(AttachmentRecipient.attachment_id == att["id"])
+        )).scalars().all()
+    assert left == [carol["user_id"]]
+
+
+@pytest.mark.asyncio
+async def test_a_second_delete_after_the_file_is_gone_is_a_404_not_an_error(client: AsyncClient, store: FakeStore):
+    alice, bob = await _pair(client)
+    att = (await client.post("/v1/attachments", json={"recipient_id": bob["user_id"], "size": 10}, headers=_auth(alice))).json()
+    store.objects[f"a/{att['id']}"] = 10
+    await client.post(f"/v1/attachments/{att['id']}/complete", headers=_auth(alice))
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(alice))).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_a_delete_locks_the_attachment_row(client: AsyncClient, store: FakeStore, monkeypatch):
+    """Deletes of one file take turns on PostgreSQL (SQLite, which the tests use, ignores the lock)."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    alice, bob, carol = await _group(client, 3)
+    att = (await client.post("/v1/attachments", json={
+        "recipient_ids": [bob["user_id"], carol["user_id"]], "size": 10,
+    }, headers=_auth(alice))).json()
+    seen = []
+    real = AsyncSession.execute
+
+    async def spy(self, statement, *args, **kwargs):
+        seen.append(statement)
+        return await real(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSession, "execute", spy)
+    assert (await client.delete(f"/v1/attachments/{att['id']}", headers=_auth(bob))).status_code == 200
+    assert any(getattr(st, "_for_update_arg", None) is not None for st in seen)

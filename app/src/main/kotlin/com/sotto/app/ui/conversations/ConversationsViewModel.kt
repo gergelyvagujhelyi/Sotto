@@ -27,7 +27,26 @@ class ConversationsViewModel @Inject constructor(
     private val messageRepository: MessageRepository,
     private val sendMyName: SendMyNameUseCase,
     private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
+    private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
 ) : ViewModel() {
+
+    /** Groups the user is in (or was), for the chat list. */
+    val groups: StateFlow<List<com.sotto.app.domain.model.Group>> =
+        groupRepository.observeGroups()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Open invitations to groups. */
+    val groupInvitations: StateFlow<List<com.sotto.app.domain.model.Group>> =
+        groupRepository.observeInvitations()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun acceptInvitation(groupId: String) {
+        viewModelScope.launch { runCatching { groupRepository.acceptInvitation(groupId) } }
+    }
+
+    fun rejectInvitation(groupId: String) {
+        viewModelScope.launch { runCatching { groupRepository.rejectInvitation(groupId) } }
+    }
 
 
     val conversations: StateFlow<List<Conversation>> =

@@ -26,6 +26,26 @@ abstract class AppModule {
 
     @Binds
     @Singleton
+    abstract fun bindGroupRepository(impl: com.sotto.app.data.repository.GroupRepositoryImpl): com.sotto.app.domain.repository.GroupRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindGroupTransport(impl: MessageRepositoryImpl): com.sotto.app.data.repository.GroupTransport
+
+    @Binds
+    @Singleton
+    abstract fun bindMemberKeys(impl: com.sotto.app.data.repository.GroupKeys): com.sotto.app.data.repository.MemberKeys
+
+    @Binds
+    @Singleton
+    abstract fun bindGroupSignatures(impl: com.sotto.app.data.repository.AccountGroupSignatures): com.sotto.app.group.GroupSignatures
+
+    @Binds
+    @Singleton
+    abstract fun bindGroupEnvironment(impl: com.sotto.app.data.repository.AndroidGroupEnvironment): com.sotto.app.data.repository.GroupEnvironment
+
+    @Binds
+    @Singleton
     abstract fun bindConversationRepository(impl: ConversationRepositoryImpl): ConversationRepository
 
     @Binds

@@ -601,6 +601,8 @@ fun ChatContent(
     /** Checked by a code compared in a call only: the header says so (ADR-31). */
     verifiedByCall: Boolean = false,
     onVerify: () -> Unit = {},
+    /** A group chat (ADR-32): its header, senders and reactions; null for a 1:1 chat. */
+    group: GroupChatUi? = null,
 ) {
     val listState = rememberLazyListState()
     val context = LocalContext.current
@@ -694,7 +696,16 @@ fun ChatContent(
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) onSendFile(uri)
     }
-    val quoteName = contactName ?: stringResource(R.string.chat_them)
+    val them = stringResource(R.string.chat_them)
+    val quoteName = if (group != null) them else contactName ?: them
+    // In a group a quote names the original's sender ("them" when it's gone from this phone).
+    val quoteAuthor: (Message) -> String = { reply ->
+        if (group == null) {
+            quoteName
+        } else {
+            messages.firstOrNull { it.id == reply.replyTo?.messageId }?.let { group.nameOf(it.senderId) } ?: them
+        }
+    }
     val scope = rememberCoroutineScope()
     // The message a tapped quote led to, tinted for a moment.
     var highlighted by remember { mutableStateOf<String?>(null) }
@@ -782,6 +793,9 @@ fun ChatContent(
         Scaffold(
             containerColor = Color.Transparent,
             topBar = {
+                if (group != null) {
+                    GroupTopBar(group, onBack)
+                } else
                 ChatTopBar(
                     name = contactName ?: stringResource(R.string.chat_title_fallback),
                     avatarSeed = avatarSeed,
@@ -827,7 +841,8 @@ fun ChatContent(
                                 ChatRowItem(
                                     row = row,
                                     onRetry = onRetry,
-                                    contactName = quoteName,
+                                    contactName = (row as? ChatRow.Entry)?.message?.let(quoteAuthor) ?: quoteName,
+                                    group = group,
                                     onReply = onReply,
                                     onReact = onReact,
                                     onQuoteClick = { targetId ->
@@ -933,6 +948,9 @@ fun ChatContent(
                         }
                     }
 
+                    // A group's own notices: an invitation, joining, removed, ended...
+                    group?.notice?.invoke()
+
                     // Asking to reply opens the keyboard, as it would to write anything.
                     val composerFocus = remember { FocusRequester() }
                     val keyboard = LocalSoftwareKeyboardController.current
@@ -950,18 +968,19 @@ fun ChatContent(
                         // Keeps showing the last one while it animates out.
                         val shownReply = remember { arrayOfNulls<Message>(1) }
                         replyingTo?.let { shownReply[0] = it }
-                        shownReply[0]?.let { ReplyPreview(it, quoteName, onCancel = onCancelReply) }
+                        shownReply[0]?.let { ReplyPreview(it, if (group != null) group.nameOf(it.senderId) else quoteName, onCancel = onCancelReply) }
                     }
                     Composer(
                         modifier = Modifier.focusRequester(composerFocus),
                         text = composerText,
                         onTextChange = onComposerChange,
                         onSend = sendWithFlight,
-                        enabled = !needsSessionReset && !isBlocked,
-                        canSend = composerText.isNotBlank() && !needsSessionReset && !isBlocked,
+                        enabled = !needsSessionReset && !isBlocked && group?.canSend != false,
+                        canSend = composerText.isNotBlank() && !needsSessionReset && !isBlocked && group?.canSend != false,
                         placeholder = when {
                             // The text is still on its way out of the box.
                             flight != null -> ""
+                            group != null && !group.canSend -> group.composerHint ?: stringResource(R.string.group_composer_cant_send)
                             isBlocked -> stringResource(R.string.chat_composer_blocked)
                             peerDeleted -> stringResource(R.string.chat_composer_peer_deleted)
                             needsSessionReset -> stringResource(R.string.chat_composer_keys_rotated)
@@ -1293,6 +1312,7 @@ private sealed interface ChatRow {
             get() = when {
                 message.state.isKeyChangeEvent -> "key"
                 message.state.isCallEvent -> "call"
+                message.state.isGroupEvent -> "group"
                 else -> "bubble"
             }
     }
@@ -1318,6 +1338,8 @@ private fun buildChatRows(messages: List<Message>, showEncryptionNotice: Boolean
         val grouped = sameDay && previous != null &&
             previous.isBubble && message.isBubble &&
             previous.isOutgoing == message.isOutgoing &&
+            // In a group, one sender's run of messages (another member's starts anew).
+            previous.senderId == message.senderId &&
             message.timestamp - previous.timestamp <= 5.minutes
         rows += ChatRow.Entry(
             message = message,
@@ -1330,7 +1352,7 @@ private fun buildChatRows(messages: List<Message>, showEncryptionNotice: Boolean
     return rows
 }
 
-private val Message.isBubble get() = !state.isCallEvent && !state.isKeyChangeEvent
+private val Message.isBubble get() = !state.isCallEvent && !state.isKeyChangeEvent && !state.isGroupEvent
 
 @Composable
 private fun ChatRowItem(
@@ -1346,6 +1368,7 @@ private fun ChatRowItem(
     onAnimateInDone: () -> Unit = {},
     hidden: Boolean = false,
     onBubblePlaced: ((Rect) -> Unit)? = null,
+    group: GroupChatUi? = null,
 ) {
     when (row) {
         ChatRow.EncryptionNotice -> EncryptionNotice(modifier.padding(top = 4.dp, bottom = 6.dp))
@@ -1354,6 +1377,11 @@ private fun ChatRowItem(
             val message = row.message
             val time = remember(row.time) { row.time.clockTime() }
             when {
+                message.state.isGroupEvent -> GroupEventItem(
+                    message = message,
+                    timestamp = time,
+                    modifier = modifier.padding(vertical = 6.dp),
+                )
                 message.state.isKeyChangeEvent -> KeyChangeEventItem(
                     state = message.state,
                     timestamp = time,
@@ -1380,6 +1408,8 @@ private fun ChatRowItem(
                     picking = false
                     pickingMore = false
                 }
+                val groupReactions = group?.reactions?.get(message.id).orEmpty()
+                val myReaction = if (group != null) groupReactions.firstOrNull { it.isMine }?.emoji else message.myReaction
                 SwipeToReply(
                     enabled = message.canReply,
                     onReply = { onReply(message) },
@@ -1387,6 +1417,18 @@ private fun ChatRowItem(
                         .padding(top = if (row.groupedWithPrevious) 2.dp else 8.dp)
                         .replyHighlight(highlighted || picking),
                 ) {
+                    Column {
+                    // In a group, the sender's name over the first of their messages in a row.
+                    if (group != null && !message.isOutgoing && !row.groupedWithPrevious) {
+                        Text(
+                            text = group.nameOf(message.senderId),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 12.dp, bottom = 2.dp),
+                        )
+                    }
                     MessageBubble(
                         text = when {
                             message.state == MessageState.REJECTED -> stringResource(R.string.chat_message_rejected)
@@ -1402,8 +1444,11 @@ private fun ChatRowItem(
                         groupedWithPrevious = row.groupedWithPrevious,
                         quote = message.bubbleQuote(contactName),
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },
-                        // Failed sends (or a file that couldn't follow its message): tap to retry.
-                        onClick = if (message.isOutgoing && message.shownState == MessageState.FAILED) {
+                        // Failed sends (or a file that couldn't follow its message): tap to retry. In a
+                        // group, a tap on our message shows who has it (and retries from there).
+                        onClick = if (group != null && message.isOutgoing) {
+                            { group.onMessageInfo(message) }
+                        } else if (message.isOutgoing && message.shownState == MessageState.FAILED) {
                             { onRetry(message.id) }
                         } else {
                             null
@@ -1429,13 +1474,18 @@ private fun ChatRowItem(
                         } else {
                             null
                         },
-                        reactions = BubbleReactions(message.theirReaction, message.myReaction, contactName)
-                            .takeUnless { it.isEmpty },
+                        reactions = (
+                            if (group != null) {
+                                BubbleReactions(null, myReaction, others = groupReactions.filter { !it.isMine }.map { it.reactorName to it.emoji })
+                            } else {
+                                BubbleReactions(message.theirReaction, message.myReaction, contactName)
+                            }
+                            ).takeUnless { it.isEmpty },
                         onReactionsClick = if (message.canReact) ({ picking = true }) else null,
                         overlay = if (picking) {
                             {
                                 ReactionPicker(
-                                    current = message.myReaction,
+                                    current = myReaction,
                                     alignEnd = message.isOutgoing,
                                     expanded = pickingMore,
                                     onPick = react,
@@ -1450,6 +1500,7 @@ private fun ChatRowItem(
                             null
                         },
                     )
+                    }
                 }
                 }
             }
@@ -1486,7 +1537,7 @@ private fun EncryptionNotice(modifier: Modifier = Modifier) {
 
 /** A floating banner above the composer, tinted by what it's about. */
 @Composable
-private fun NoticeCard(
+internal fun NoticeCard(
     icon: ImageVector,
     tint: Color,
     title: String,

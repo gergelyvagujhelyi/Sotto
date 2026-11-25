@@ -83,7 +83,9 @@ services:
       APP_LINK_CERT_FINGERPRINTS: ${APP_LINK_CERT_FINGERPRINTS:-}
       APP_DOWNLOAD_URL: ${APP_DOWNLOAD_URL:-}
       METRICS_TOKEN: ${METRICS_TOKEN:-}
-      MAX_MESSAGES_PER_MINUTE: ${MAX_MESSAGES_PER_MINUTE:-60}
+      # Message sends per account: a burst of MESSAGE_BURST, refilled at MESSAGE_RATE_PER_MINUTE.
+      MESSAGE_BURST: ${MESSAGE_BURST:-160}
+      MESSAGE_RATE_PER_MINUTE: ${MESSAGE_RATE_PER_MINUTE:-240}
       # Accept each auth token once (refuse replays). Only with every phone on 0.7.3+:
       # older apps sometimes sent identical tokens. Off unless .env turns it on.
       AUTH_SINGLE_USE_TOKENS: ${AUTH_SINGLE_USE_TOKENS:-false}

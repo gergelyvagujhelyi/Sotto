@@ -155,6 +155,79 @@ class ChatNotificationManager @Inject constructor(
         postGroupSummary(visibility)
     }
 
+    /**
+     * A group message (or a reaction to the user's message in a group, or an invitation): the
+     * group's notification, titled with the group, each line with its sender. Lock screen
+     * previews follow the same setting as for 1:1 chats; there the group stands where a
+     * sender would.
+     */
+    suspend fun showGroupNotification(
+        groupId: String,
+        groupTitle: String,
+        senderId: String,
+        senderName: String,
+        messageBody: String,
+        isReaction: Boolean,
+        names: Map<String, String> = emptyMap(),
+    ) {
+        if (!hasNotificationPermission()) return
+        val settings = settingsRepository.getPrivacySettings().firstOrNull() ?: PrivacySettings()
+        val unread = messageDao.getUnseenGroupTexts(groupId, NotificationCompat.MessagingStyle.MAXIMUM_RETAINED_MESSAGES)
+        val lines = unread.map {
+            val kind = com.sotto.app.domain.model.MediaKind.fromWire(it.mediaKind)
+            it.senderId to NotifiedMessage(com.sotto.app.domain.model.previewUiText(kind, it.text, it.mediaName.orEmpty()).resolve(context), it.timestamp)
+        }
+        val content = messageNotificationContent(
+            mode = settings.lockScreenPreview,
+            senderName = groupTitle,
+            unread = lines.map { it.second },
+            unreadCount = messageDao.countUnseenIncoming(groupId),
+            latest = NotifiedMessage(messageBody, System.currentTimeMillis()),
+            latestIsReaction = isReaction,
+        )
+        val visibility = when (settings.lockScreenPreview) {
+            LockScreenPreviewMode.SHOW_ALL, LockScreenPreviewMode.SENDER_ONLY -> NotificationCompat.VISIBILITY_PUBLIC
+            LockScreenPreviewMode.HIDE_BODY -> NotificationCompat.VISIBILITY_PRIVATE
+            LockScreenPreviewMode.HIDE_ALL -> NotificationCompat.VISIBILITY_SECRET
+        }
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_GROUP_ID, groupId)
+        }
+        val notificationId = groupId.hashCode() and Int.MAX_VALUE
+        val pendingIntent = PendingIntent.getActivity(
+            context, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(content.title)
+            .setContentText(content.text.resolve(context))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setVisibility(visibility)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setGroup(GROUP_CHATS)
+        if (content.messages.isNotEmpty()) {
+            val style = NotificationCompat.MessagingStyle(Person.Builder().setName(context.getString(R.string.notification_you)).build())
+                .setConversationTitle(groupTitle)
+                .setGroupConversation(true)
+            val people = HashMap<String, Person>()
+            fun person(id: String, name: String) = people.getOrPut(id) { Person.Builder().setName(name).setKey(id).build() }
+            // The listed lines are the unread ones (and, for a reaction, the reaction last).
+            val senders = lines.map { it.first } + if (content.messages.size > lines.size) listOf(senderId) else emptyList()
+            content.messages.forEachIndexed { i, m ->
+                val id = senders.getOrNull(i) ?: senderId
+                val name = if (id == senderId) senderName else names[id] ?: id.take(8)
+                style.addMessage(m.text, m.timestamp, person(id, name))
+            }
+            builder.setStyle(style)
+        }
+        if (content.count > 1) builder.setNumber(content.count)
+        post(notificationId, builder.build())
+        postGroupSummary(visibility)
+    }
+
     suspend fun showMissedCallNotification(
         callerId: String,
         callerName: String,
@@ -309,6 +382,8 @@ class ChatNotificationManager @Inject constructor(
         const val CHANNEL_BACKGROUND_CONNECTION = "background_connection"
         const val EXTRA_CONVERSATION_ID = "conversation_id"
         const val EXTRA_CONTACT_ID = "contact_id"
+        /** Set on a group notification's intent: open that group's chat. */
+        const val EXTRA_GROUP_ID = "group_id"
         /** Set on the summary's intent: open the chat list. */
         const val EXTRA_OPEN_CHATS = "open_chats"
         private const val GROUP_CHATS = "com.sotto.app.CHATS"

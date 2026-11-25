@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.Flow
 /** A received message's text and time, for its chat's notification. */
 data class UnseenText(val text: String, val timestamp: Long, val mediaKind: String? = null, val mediaName: String? = null)
 
+/** A received group message not seen yet: whose it is, and the relay's id for our copy (for a read receipt). */
+data class UnseenGroupMessage(val id: String, val senderId: String, val relayId: String?)
+
+/** A received group message for a notification: who wrote it, and what. */
+data class UnseenGroupText(val senderId: String, val text: String, val timestamp: Long, val mediaKind: String? = null, val mediaName: String? = null)
+
 @Dao
 interface MessageDao {
 
@@ -58,6 +64,21 @@ interface MessageDao {
 
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED'")
     suspend fun countUnseenIncoming(conversationId: String): Int
+
+    /** A group's received messages not seen yet since [since], oldest first. */
+    @Query(
+        "SELECT id, senderId, relayId FROM messages WHERE conversationId = :groupId AND groupId IS NOT NULL " +
+            "AND isOutgoing = 0 AND state = 'DELIVERED' AND timestamp >= :since ORDER BY timestamp ASC LIMIT :limit"
+    )
+    suspend fun getRecentUnseenGroupMessages(groupId: String, since: Long, limit: Int): List<UnseenGroupMessage>
+
+    /** The newest [limit] received group messages not seen yet, oldest first, with their senders. */
+    @Query(
+        "SELECT senderId, plaintext AS text, timestamp, mediaKind, mediaName FROM (SELECT * FROM messages " +
+            "WHERE conversationId = :groupId AND isOutgoing = 0 AND state = 'DELIVERED' ORDER BY timestamp DESC LIMIT :limit) " +
+            "ORDER BY timestamp ASC"
+    )
+    suspend fun getUnseenGroupTexts(groupId: String, limit: Int): List<UnseenGroupText>
 
     /** Cheap trigger for marking a visible chat read. */
     @Query("SELECT COUNT(*) FROM messages WHERE conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED'")
@@ -112,6 +133,10 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE state = 'SENDING'")
     suspend fun getSendingMessages(): List<MessageEntity>
+
+    /** Our group messages still sending (a process death may have stopped them). */
+    @Query("SELECT * FROM messages WHERE state = 'SENDING' AND groupId IS NOT NULL AND isOutgoing = 1")
+    suspend fun getSendingGroupMessages(): List<MessageEntity>
 
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun delete(messageId: String)

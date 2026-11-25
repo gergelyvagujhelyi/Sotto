@@ -50,6 +50,17 @@ data class MessageEntity(
     val hdKey: ByteArray? = null,
     /** A file's preview (a few KB of JPEG), kept in the (encrypted) database. */
     val thumbnail: ByteArray? = null,
+    /**
+     * The group this message belongs to (ADR-32), or null for a one-to-one message. A group
+     * message's [conversationId] is the group's id too; our own has an empty [recipientId]
+     * (its copies, one per member, are in `group_outbox`), and its id is
+     * [com.sotto.app.group.GroupIds.rowId], the same on every member's phone.
+     */
+    val groupId: String? = null,
+    /** A group message's own id, the one its packet carries; with [senderId] it names the message for every member. */
+    val groupMessageId: String? = null,
+    /** For a group message received: the relay's id for our copy, which a read receipt names. */
+    val relayId: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true

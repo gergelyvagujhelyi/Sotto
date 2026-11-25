@@ -349,3 +349,54 @@
 
 **Tradeoff**: It trusts the voice: a convincing live voice fake defeats it, and between people who have never met it proves little. Hence the weaker level. Both phones need 0.7.10: an older Sotto ignores the signal, and the asking phone keeps waiting. The relay forwards `call_verify` like any in-call signal and never pushes for it.
 
+---
+
+## ADR-32: Group chats as pairwise copies, with an admin-signed roster
+
+**Decision**: A group (2 to 32 people) has no key of its own. Each message is stored once on the sender's phone and goes to every other member as its own copy, sealed on that member's ordinary 1:1 Double Ratchet session and signed like any message (Ed25519 + ML-DSA-65, ADR-15). Inside the encryption a copy is a group packet, `"\u0001sotto/group/v1:" + JSON` (`group/GroupPacket.kt`): the group's id, the message's own id, its sender and its one recipient, the epoch of the roster its sender held, its time, and the content a 1:1 message would carry (text, or a media or file payload; ADR-27 to ADR-29). Who is in the group is a **roster** (`group/GroupRoster.kt`): the members (each with the full 256-bit key fingerprint the admin has pinned for them, their name, invited or active, and how the admin verified them), the title, the disappearing-messages timer and the admin, at an epoch that only grows, signed by the admin over a length-prefixed canonical form (domain `Sotto-group-roster-v1`).
+
+- **Only the admin changes the group** (members, title, timer, deletion). A phone takes a roster only with a higher epoch, issued and sent by the admin it holds, or one reached from it by signed handovers (domain `Sotto-group-admin-v1`), each naming the new admin's fingerprint; the last 8 travel with every roster, so a phone that missed some can follow.
+- **Invitations** come only from an accepted, unblocked contact who is the roster's admin. An invited phone gets nothing from the group until the user accepts: the acceptance goes to the admin, whose next roster makes them active.
+- **What a phone takes**: content only from active members of the newest roster it holds, while it's active itself; the packet's sender and recipient must be the envelope's. Content from an older epoch is still taken from members who are in the newest roster (so a rename or a new member doesn't lose messages already on their way), never from one who left or was removed. A packet with a newer epoch than the phone holds, or from a member whose roster hasn't arrived, is kept (already decrypted, in `group_held`) for up to a week until that roster comes.
+- **Every member's phone stores a message under the same id**, `GroupIds.rowId(group, sender, message id)`, so replies and reactions name it the same way everywhere and a copy that comes twice is kept once. One member can't name another's message.
+- **The outbox** (`group_outbox`): each copy has its own relay client id (`GroupIds.copyClientId(message id, recipient)`), and is kept sealed until the relay has it. A retry sends the same bytes under the same id, never re-encrypting once the ratchet has moved, and only copies that failed go again. Control packets (rosters, invitations, answers, reactions) are retried in the background (`GroupOutboxWorker`); a message's failed copies wait for the user, who sees per member what happened.
+- **Receipts per member**: delivery receipts (the relay's) and read receipts (signed, mutual, as in 1:1 chats) name the relay id of each member's copy, so one member's receipt marks only their copy. A message shows delivered (or read) once every member's copy is.
+- **Reactions** are per member (`group_reactions`), sent as unstored packets to every member; replies carry the original's sender and id and a quote.
+- **Files** go up once for every member (ADR-35); there are no direct (phone to phone) transfers in groups.
+- **No group calls.** The chat has no call button.
+- Group packets are handled right after the envelope's signature checked out and it decrypted, before anything one-to-one: no packet ever opens a 1:1 chat or a message request.
+
+**Why**: The owner chose pairwise copies over a shared group key: every copy has the same forward secrecy, post-quantum protection and signatures as a 1:1 message, the relay needs nothing new to carry them, and for up to 32 people the extra copies are cheap. A signed roster with growing epochs makes the admin the only one who can change the group, lets every member check that without asking the relay, and gives removal a clear meaning: once a phone holds the roster without someone, it takes nothing more from them.
+
+**Tradeoff**: A message to 31 people is 31 sends (hence the relay's burst, ADR-34). Removal can't reach a phone that's offline: it learns of it once it's back, and until then keeps sending to the group; the admin sees which members the latest roster reached. A phone holding an older roster can't follow more than 8 handovers in a row. Sotto 0.7.25 and older show group packets as "needs a newer Sotto": everyone updates together.
+
+---
+
+## ADR-33: Members who aren't contacts: the admin vouches for them
+
+**Decision**: A member the user doesn't have as a contact is pinned by the fingerprint the admin put in the roster: the phone fetches their keys from the relay and keeps them only if they match it, as a contact row marked `groupOnly`. Those rows are never listed as contacts, never get a chat, a message request or a direct call; the user's own contacts keep their own pins, and a member whose pin differs from the admin's is shown as "keys don't match", and nothing goes to or comes from them in the group. Each member shows how they're verified: by the user, for their own contacts, otherwise "Verified in person / by phone / added by share code / not verified" by the admin. Adding them in person or accepting a message request from them makes them an ordinary contact. Their envelopes must be verified with exactly the vouched keys; an endorsed key rotation is followed as for contacts (SECURITY.md, "Key Authenticity"), and the admin's next roster vouches for the new keys.
+
+**Why**: The owner chose this ("vouched for by the creator is ok") over limiting groups to people who all know each other, and over trusting the relay's keys on first use. The vouch is as strong as the admin's own check of that member, and the screen says so.
+
+**Tradeoff**: Members trust the admin about people they don't know. The relay learns nothing new from a lookup a group makes, but it does see the lookups.
+
+---
+
+## ADR-34: The relay limits message sends with a token bucket
+
+**Decision**: Since the group chats, each account may send a burst of 160 messages, refilled at 240 a minute (`MESSAGE_BURST`, `MESSAGE_RATE_PER_MINUTE`), instead of 60 in a fixed one-minute window. The bucket's level and when it was last filled are kept in `rate_limits` (migration 013), read under the row's lock. The queue limits per recipient and sender are unchanged.
+
+**Why**: A group message is one send per member, up to 31, so the old window let through about two group messages a minute. The relay can't tell group copies from other sends, and shouldn't: so the limit itself grew, with a burst for a few group messages in a row and a sustained rate that still bounds a flood. A bucket also has no reset at which twice the limit gets through (PR #49).
+
+**Tradeoff**: One account can now queue more in a short time than before; the per-recipient queue caps still bound what lands on any one phone.
+
+---
+
+## ADR-35: A group's file goes up once, for every member
+
+**Decision**: A file (or HD photo copy) sent to a group is encrypted once with a fresh key (ADR-29) and uploaded once; the reservation names every member it's for (`recipient_ids`, up to 31; table `attachment_recipients`, migration 014). The key, the attachment's id and the file's size travel to each member inside their own copy of the message. Only a named recipient gets a download URL; a recipient's delete drops only its own claim, and the object goes with the last one, the sender's delete, or after 30 days. It counts once against the sender's allowance and the store.
+
+**Why**: The owner chose a fresh key for each group file, delivered to the members over their secure channels, rather than one upload per member. One upload instead of 31 keeps a phone's upload and the store's 4 GB (and Tigris's free tier) for what's worth it, and per-recipient claims keep the relay deciding who may fetch what.
+
+**Tradeoff**: The relay learns that these accounts got the same file. It could already guess they belong together from the copies sent at the same moment (ADR-32).
+

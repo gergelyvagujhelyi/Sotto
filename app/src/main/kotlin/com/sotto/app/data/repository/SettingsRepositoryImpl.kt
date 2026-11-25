@@ -92,7 +92,7 @@ class SettingsRepositoryImpl @Inject constructor(
         if (senderId != null) {
             // Notify contacts — best-effort
             try {
-                val contacts = contactDao.getAll().first()
+                val contacts = contactDao.getAllWithKeys()
                 for (contact in contacts) {
                     try {
                         sessionResetSender.send(contact.userId, SessionResetSender.CTRL_ACCOUNT_DELETED, waitForRateLimit = true)

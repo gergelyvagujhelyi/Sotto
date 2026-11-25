@@ -374,8 +374,14 @@ val LocalBubbleGestures = compositionLocalOf { BubbleGestures(null, null) }
  * The reactions on a bubble: the contact's emoji and the user's, each null when they gave none.
  * [theirName] null: "Them".
  */
-data class BubbleReactions(val theirs: String?, val mine: String?, val theirName: String? = null) {
-    val isEmpty: Boolean get() = theirs == null && mine == null
+data class BubbleReactions(
+    val theirs: String?,
+    val mine: String?,
+    val theirName: String? = null,
+    /** In a group: every other member's reaction, as (name, emoji). */
+    val others: List<Pair<String, String>> = emptyList(),
+) {
+    val isEmpty: Boolean get() = theirs == null && mine == null && others.isEmpty()
 }
 
 /** How far the reaction chip reaches up over the bubble. */
@@ -386,17 +392,27 @@ private val ReactionOverlap = 6.dp
 private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(12.dp)
-    val label = when {
+    val groupLabel = if (reactions.others.isNotEmpty()) {
+        // A group: the most given emoji (up to three), and how many reacted in all.
+        val all = reactions.others.map { it.second } + listOfNotNull(reactions.mine)
+        val top = all.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.take(3).joinToString(" ") { it.key }
+        if (all.size > 1) "$top ${all.size}" else top
+    } else {
+        null
+    }
+    val label = groupLabel ?: when {
         reactions.theirs != null && reactions.theirs == reactions.mine -> "${reactions.mine} 2"
         else -> listOfNotNull(reactions.theirs, reactions.mine).joinToString(" ")
     }
-    val description = listOfNotNull(
+    val description = (reactions.others.map { (name, emoji) ->
+        stringResource(R.string.chat_reaction_theirs_description, name, emoji)
+    } + listOfNotNull(
         reactions.theirs?.let { emoji ->
             reactions.theirName?.let { stringResource(R.string.chat_reaction_theirs_description, it, emoji) }
                 ?: stringResource(R.string.chat_reaction_theirs_description_unnamed, emoji)
         },
         reactions.mine?.let { stringResource(R.string.chat_reaction_mine_description, it) },
-    ).joinToString(", ")
+    )).joinToString(", ")
     Text(
         text = label,
         style = MaterialTheme.typography.bodyMedium,
@@ -597,7 +613,7 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
         // Call/key events are rendered by their own composables — but keep the when exhaustive
         MessageState.CALL_OUTGOING, MessageState.CALL_OUTGOING_MISSED, MessageState.CALL_INCOMING, MessageState.CALL_MISSED,
         MessageState.CALL_FAILED,
-        MessageState.KEY_ROTATED_LOCAL, MessageState.KEY_ROTATED_REMOTE, MessageState.ACCOUNT_DELETED ->
+        MessageState.KEY_ROTATED_LOCAL, MessageState.KEY_ROTATED_REMOTE, MessageState.ACCOUNT_DELETED, MessageState.GROUP_EVENT ->
             Icons.Rounded.Done to baseTint
     }
     Icon(

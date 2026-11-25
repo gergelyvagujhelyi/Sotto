@@ -9,7 +9,7 @@ load_dotenv()
 
 # The release this relay belongs to: the app's versionName in app/build.gradle.kts, so
 # /health tells which code a relay runs. tests/test_version.py keeps the two in step.
-RELAY_VERSION = "0.7.25"
+RELAY_VERSION = "0.7.26"
 
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL", "sqlite+aiosqlite:///./sotto.db"
@@ -18,7 +18,11 @@ FIREBASE_CREDENTIALS: Optional[str] = os.getenv("FIREBASE_CREDENTIALS")
 HOST: str = os.getenv("HOST", "0.0.0.0")
 PORT: int = int(os.getenv("PORT", "8000"))
 DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
-MAX_MESSAGES_PER_MINUTE: int = int(os.getenv("MAX_MESSAGES_PER_MINUTE", "60"))
+# Each account's message sends are a token bucket: up to MESSAGE_BURST at once, refilled at
+# MESSAGE_RATE_PER_MINUTE. A group message goes out as one envelope per member (up to 31),
+# so the burst has to cover a few of those; the relay can't tell them from other sends.
+MESSAGE_BURST: int = int(os.getenv("MESSAGE_BURST", "160"))
+MESSAGE_RATE_PER_MINUTE: int = int(os.getenv("MESSAGE_RATE_PER_MINUTE", "240"))
 MAX_PENDING_MESSAGES_PER_USER: int = int(
     os.getenv("MAX_PENDING_MESSAGES_PER_USER", "1000")
 )

@@ -1,5 +1,6 @@
 package com.sotto.app.ui.conversations
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.GroupAdd
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -47,6 +49,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.sotto.app.R
 import com.sotto.app.domain.model.Conversation
+import com.sotto.app.domain.model.Group
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle
 import com.sotto.app.ui.components.CollapsingTitleTopBar
@@ -69,11 +72,16 @@ fun ConversationsScreen(
     onConversationClick: (conversationId: String, contactId: String) -> Unit,
     onAddContact: () -> Unit,
     onSettings: () -> Unit,
+    onGroupClick: (groupId: String) -> Unit = {},
+    onNewGroup: () -> Unit = {},
+    onInvitationClick: (groupId: String) -> Unit = {},
     viewModel: ConversationsViewModel = hiltViewModel(),
 ) {
     val conversations by viewModel.conversations.collectAsState()
     val messageRequests by viewModel.messageRequests.collectAsState()
     val trust by viewModel.trust.collectAsState()
+    val groups by viewModel.groups.collectAsState()
+    val invitations by viewModel.groupInvitations.collectAsState()
     val pollLifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(pollLifecycleOwner) {
         pollLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -91,7 +99,30 @@ fun ConversationsScreen(
         onRejectRequest = viewModel::rejectMessageRequest,
         onBlockRequest = { request -> viewModel.blockRequest(request.contactId, request.contactDisplayName) },
         trust = trust,
+        groups = groups,
+        groupInvitations = invitations,
+        onGroupClick = onGroupClick,
+        onNewGroup = onNewGroup,
+        onInvitationClick = onInvitationClick,
+        onAcceptInvitation = viewModel::acceptInvitation,
+        onRejectInvitation = viewModel::rejectInvitation,
     )
+}
+
+/** A row of the chat list: a one-to-one chat or a group. */
+private sealed interface ChatListEntry {
+    val key: String
+    val time: kotlinx.datetime.Instant?
+
+    data class Direct(val conversation: Conversation) : ChatListEntry {
+        override val key get() = "c:${conversation.id}"
+        override val time get() = conversation.lastMessageTimestamp
+    }
+
+    data class InGroup(val group: Group) : ChatListEntry {
+        override val key get() = "g:${group.id}"
+        override val time get() = group.sortTime
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -107,11 +138,24 @@ fun ConversationsContent(
     onBlockRequest: (request: Conversation) -> Unit,
     /** Each contact's verification, by user id; a chat whose contact isn't listed shows the lock. */
     trust: Map<String, com.sotto.app.domain.model.ContactTrust> = emptyMap(),
+    groups: List<Group> = emptyList(),
+    groupInvitations: List<Group> = emptyList(),
+    onGroupClick: (groupId: String) -> Unit = {},
+    /** Null: no "new group" button (design previews). */
+    onNewGroup: (() -> Unit)? = null,
+    onInvitationClick: (groupId: String) -> Unit = {},
+    onAcceptInvitation: (groupId: String) -> Unit = {},
+    onRejectInvitation: (groupId: String) -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
     val fabExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
-    val isEmpty = conversations.isEmpty() && messageRequests.isEmpty()
+    val isEmpty = conversations.isEmpty() && messageRequests.isEmpty() && groups.isEmpty() && groupInvitations.isEmpty()
+    // Chats and groups in one list, newest first.
+    val entries = remember(conversations, groups) {
+        (conversations.map { ChatListEntry.Direct(it) } + groups.map { ChatListEntry.InGroup(it) })
+            .sortedByDescending { it.time?.toEpochMilliseconds() ?: 0L }
+    }
     val today = rememberToday()
     val dates = rememberDateFormats()
 
@@ -124,6 +168,10 @@ fun ConversationsContent(
                     title = stringResource(R.string.conversations_title),
                     scrollBehavior = scrollBehavior,
                     actions = {
+                        if (onNewGroup != null) {
+                            GlassIconButton(Icons.Rounded.GroupAdd, contentDescription = stringResource(R.string.group_new), onClick = onNewGroup)
+                            Spacer(Modifier.width(8.dp))
+                        }
                         GlassIconButton(Icons.Rounded.Settings, contentDescription = stringResource(R.string.common_settings), onClick = onSettings)
                         Spacer(Modifier.width(8.dp))
                     },
@@ -163,6 +211,31 @@ fun ConversationsContent(
                     // Keys are namespaced: conversation ids come from the relay, so a raw
                     // id must never be able to equal another row's key (duplicate keys
                     // crash the list).
+                    if (groupInvitations.isNotEmpty()) {
+                        item(key = "h:invitations") {
+                            SectionLabel(
+                                stringResource(R.string.group_invitations),
+                                modifier = Modifier.animateItem(),
+                                trailing = { TagChip(groupInvitations.size.toString(), highlighted = true) },
+                            )
+                        }
+                        items(groupInvitations, key = { "i:${it.id}" }) { invitation ->
+                            GroupInvitationCard(
+                                group = invitation,
+                                onOpen = { onInvitationClick(invitation.id) },
+                                onAccept = { onAcceptInvitation(invitation.id) },
+                                onReject = { onRejectInvitation(invitation.id) },
+                                modifier = Modifier
+                                    .animateItem()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                            )
+                        }
+                        if (entries.isNotEmpty() && messageRequests.isEmpty()) {
+                            item(key = "h:chats-after-invitations") {
+                                SectionLabel(stringResource(R.string.conversations_chats), modifier = Modifier.animateItem())
+                            }
+                        }
+                    }
                     if (messageRequests.isNotEmpty()) {
                         item(key = "h:requests") {
                             SectionLabel(
@@ -185,31 +258,111 @@ fun ConversationsContent(
                                     .padding(horizontal = 16.dp, vertical = 6.dp),
                             )
                         }
-                        if (conversations.isNotEmpty()) {
+                        if (entries.isNotEmpty()) {
                             item(key = "h:chats") {
                                 SectionLabel(stringResource(R.string.conversations_chats), modifier = Modifier.animateItem())
                             }
                         }
                     }
-                    items(conversations, key = { "c:${it.id}" }) { conversation ->
-                        ConversationItem(
-                            displayName = conversation.contactDisplayName,
-                            avatarSeed = conversation.contactId,
-                            lastMessage = conversation.lastMessagePreview,
-                            timestamp = conversation.lastMessageTimestamp?.let { listTimestamp(it, today, dates) },
-                            unreadCount = conversation.unreadCount,
-                            isEncrypted = conversation.isEncrypted,
-                            trust = trust[conversation.contactId],
-                            onClick = {
-                                onConversationClick(conversation.id, conversation.contactId)
-                            },
-                            modifier = Modifier
-                                .animateItem()
-                                .padding(vertical = 1.dp),
-                        )
+                    items(entries, key = { it.key }) { entry ->
+                        when (entry) {
+                            is ChatListEntry.Direct -> {
+                                val conversation = entry.conversation
+                                ConversationItem(
+                                    displayName = conversation.contactDisplayName,
+                                    avatarSeed = conversation.contactId,
+                                    lastMessage = conversation.lastMessagePreview,
+                                    timestamp = conversation.lastMessageTimestamp?.let { listTimestamp(it, today, dates) },
+                                    unreadCount = conversation.unreadCount,
+                                    isEncrypted = conversation.isEncrypted,
+                                    trust = trust[conversation.contactId],
+                                    onClick = {
+                                        onConversationClick(conversation.id, conversation.contactId)
+                                    },
+                                    modifier = Modifier
+                                        .animateItem()
+                                        .padding(vertical = 1.dp),
+                                )
+                            }
+                            is ChatListEntry.InGroup -> {
+                                val group = entry.group
+                                ConversationItem(
+                                    displayName = group.title,
+                                    avatarSeed = group.id,
+                                    lastMessage = group.lastMessagePreview ?: groupStatusLine(group),
+                                    timestamp = group.lastMessageTimestamp?.let { listTimestamp(it, today, dates) },
+                                    unreadCount = group.unreadCount,
+                                    isEncrypted = true,
+                                    groupMembers = group.memberCount,
+                                    onClick = { onGroupClick(group.id) },
+                                    modifier = Modifier
+                                        .animateItem()
+                                        .padding(vertical = 1.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+/** What a group without messages says in the list. */
+@Composable
+private fun groupStatusLine(group: Group): String = when (group.status) {
+    com.sotto.app.domain.model.GroupStatus.JOINING -> stringResource(R.string.group_status_joining)
+    com.sotto.app.domain.model.GroupStatus.LEFT -> stringResource(R.string.group_status_left)
+    com.sotto.app.domain.model.GroupStatus.REMOVED -> stringResource(R.string.group_status_removed)
+    com.sotto.app.domain.model.GroupStatus.ENDED -> stringResource(R.string.group_status_ended)
+    else -> stringResource(R.string.group_status_new)
+}
+
+/** An open invitation: who from, how many in it, accept or decline (or open it to see who's in). */
+@Composable
+private fun GroupInvitationCard(
+    group: Group,
+    onOpen: () -> Unit,
+    onAccept: () -> Unit,
+    onReject: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    GlassCard(modifier = modifier.fillMaxWidth()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.clickable(onClickLabel = stringResource(R.string.group_invitation_open), onClick = onOpen),
+        ) {
+            GradientAvatar(name = group.title, seed = group.id, size = 44.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = group.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(R.string.group_invitation_from, group.invitedByName ?: stringResource(R.string.chat_them)) +
+                        " · " + androidx.compose.ui.res.pluralStringResource(R.plurals.group_member_count, group.memberCount, group.memberCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+            com.sotto.app.ui.components.SoftButton(
+                text = stringResource(R.string.group_invitation_decline),
+                onClick = onReject,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
+            com.sotto.app.ui.components.GradientButton(
+                text = stringResource(R.string.group_invitation_accept),
+                onClick = onAccept,
+                compact = true,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

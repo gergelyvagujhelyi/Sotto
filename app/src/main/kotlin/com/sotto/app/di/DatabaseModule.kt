@@ -220,6 +220,47 @@ object DatabaseModule {
         }
     }
 
+    /**
+     * v16→v17: group chats (ADR-32). New tables only, and nullable or defaulted columns: every
+     * existing conversation, message and contact stays as it was.
+     */
+    private val MIGRATION_16_17 = object : Migration(16, 17) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE contacts ADD COLUMN groupOnly INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE messages ADD COLUMN groupId TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN groupMessageId TEXT")
+            db.execSQL("ALTER TABLE messages ADD COLUMN relayId TEXT")
+            for (sql in GROUP_TABLES_17) db.execSQL(sql)
+        }
+    }
+
+    /** The group tables as Room creates them at version 17 (schemas/17.json). */
+    internal val GROUP_TABLES_17 = listOf(
+        "CREATE TABLE IF NOT EXISTS `groups` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `adminId` TEXT NOT NULL, " +
+            "`epoch` INTEGER NOT NULL, `timerMs` INTEGER NOT NULL, `status` TEXT NOT NULL, `roster` TEXT NOT NULL, " +
+            "`invitedBy` TEXT, `frozen` INTEGER NOT NULL, `lastMessagePreview` TEXT, `lastMessageTimestamp` INTEGER, " +
+            "`unreadCount` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "CREATE TABLE IF NOT EXISTS `group_members` (`groupId` TEXT NOT NULL, `userId` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+            "`role` TEXT NOT NULL, `status` TEXT NOT NULL, `fingerprint` TEXT NOT NULL, `vouchedTrust` TEXT NOT NULL, " +
+            "`keyState` TEXT NOT NULL, PRIMARY KEY(`groupId`, `userId`))",
+        "CREATE INDEX IF NOT EXISTS `index_group_members_userId` ON `group_members` (`userId`)",
+        "CREATE TABLE IF NOT EXISTS `group_outbox` (`id` TEXT NOT NULL, `groupId` TEXT NOT NULL, `messageId` TEXT, " +
+            "`recipientId` TEXT NOT NULL, `kind` TEXT NOT NULL, `packet` TEXT, `ciphertext` BLOB, `nonce` BLOB, " +
+            "`signature` TEXT, `pqcSignature` TEXT, `relayId` TEXT NOT NULL, `state` TEXT NOT NULL, " +
+            "`attempts` INTEGER NOT NULL, `lastError` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, " +
+            "PRIMARY KEY(`id`))",
+        "CREATE INDEX IF NOT EXISTS `index_group_outbox_messageId` ON `group_outbox` (`messageId`)",
+        "CREATE INDEX IF NOT EXISTS `index_group_outbox_relayId` ON `group_outbox` (`relayId`)",
+        "CREATE INDEX IF NOT EXISTS `index_group_outbox_state` ON `group_outbox` (`state`)",
+        "CREATE INDEX IF NOT EXISTS `index_group_outbox_groupId` ON `group_outbox` (`groupId`)",
+        "CREATE TABLE IF NOT EXISTS `group_reactions` (`messageId` TEXT NOT NULL, `reactorId` TEXT NOT NULL, " +
+            "`emoji` TEXT NOT NULL, PRIMARY KEY(`messageId`, `reactorId`))",
+        "CREATE TABLE IF NOT EXISTS `group_held` (`relayId` TEXT NOT NULL, `groupId` TEXT NOT NULL, `senderId` TEXT NOT NULL, " +
+            "`senderFingerprint` TEXT NOT NULL, `packet` TEXT NOT NULL, `epoch` INTEGER NOT NULL, `receivedAt` INTEGER NOT NULL, " +
+            "PRIMARY KEY(`relayId`))",
+        "CREATE INDEX IF NOT EXISTS `index_group_held_groupId` ON `group_held` (`groupId`)",
+    )
+
     private val MIGRATION_5_6 = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             // Remove any duplicate contactId rows, keeping the one with the latest message.
@@ -255,7 +296,7 @@ object DatabaseModule {
         get() = arrayOf(
             MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
             MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11, MIGRATION_11_12,
-            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16,
+            MIGRATION_12_13, MIGRATION_13_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
         )
 
     @Provides
@@ -266,6 +307,9 @@ object DatabaseModule {
 
     @Provides
     fun provideContactDao(db: AppDatabase): ContactDao = db.contactDao()
+
+    @Provides
+    fun provideGroupDao(db: AppDatabase): com.sotto.app.data.local.dao.GroupDao = db.groupDao()
 
     @Provides
     fun provideBlockedUserDao(db: AppDatabase): com.sotto.app.data.local.dao.BlockedUserDao =
