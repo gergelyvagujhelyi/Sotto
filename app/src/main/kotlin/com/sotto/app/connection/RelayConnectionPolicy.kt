@@ -83,6 +83,20 @@ class RelayConnectionPolicy @Inject constructor(
                 if (keepNow() && !webSocketClient.connected.value) webSocketClient.connectUnlessWorking()
             }
         }
+        // On screen with the socket down: try every few seconds, not on the backoff's schedule
+        // (up to a minute), so the "Connecting…" bar goes soon after the relay is back. Only while
+        // on screen with a network, so it costs nothing in the background. A call moves the
+        // socket itself (CallManager).
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(ON_SCREEN_RETRY_MS)
+                if (startedActivities > 0 && !webSocketClient.connected.value &&
+                    networkMonitor.defaultNetwork.value != null && callManager.get().callState.value == null
+                ) {
+                    webSocketClient.connectUnlessWorking()
+                }
+            }
+        }
         scope.launch {
             val tracker = NetworkChangeTracker()
             networkMonitor.defaultNetwork.collect { network ->
@@ -141,6 +155,8 @@ class RelayConnectionPolicy @Inject constructor(
         const val AWAY_GRACE_MS = 2_000L
         /** After a push opened the socket in the background: time for buffered signals to arrive. */
         const val WAKE_LINGER_MS = 6_000L
+        /** On screen with the socket down, how often to try again. */
+        const val ON_SCREEN_RETRY_MS = 5_000L
     }
 }
 
