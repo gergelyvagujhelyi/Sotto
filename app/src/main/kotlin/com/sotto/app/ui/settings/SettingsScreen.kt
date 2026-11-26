@@ -388,6 +388,7 @@ fun SettingsScreen(
     var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by remember { mutableStateOf<List<DiagnosticsLine>?>(null) }
     LaunchedEffect(diagnosticsOpen) {
+        if (diagnosticsOpen) viewModel.clearConnectionTest()
         diagnostics = if (!diagnosticsOpen) null else try {
             viewModel.diagnostics(
                 googlePlay = !noGooglePush,
@@ -407,7 +408,7 @@ fun SettingsScreen(
         DiagnosticsDialog(
             lines = lines,
             test = connectionTest,
-            onTest = viewModel::runConnectionTest,
+            onTest = if (viewModel.canTestConnection) viewModel::runConnectionTest else null,
             onDismiss = {
                 diagnosticsOpen = false
                 viewModel.clearConnectionTest()
@@ -415,6 +416,7 @@ fun SettingsScreen(
         )
     }
     val warnScope = androidx.compose.runtime.rememberCoroutineScope()
+    var backgroundWanted by remember { mutableStateOf(false) }
 
     SettingsContent(
         settings = settings,
@@ -439,11 +441,17 @@ fun SettingsScreen(
         onWebRtcVoiceProcessingChange = viewModel::updateWebRtcVoiceProcessing,
         onReduceAnimationsChange = viewModel::updateReduceAnimations,
         onBackgroundConnectionChange = { on ->
+            backgroundWanted = on
             if (!on) {
                 viewModel.updateBackgroundConnection(false)
             } else {
-                // Asked only where push really works: registered with our relay.
-                warnScope.launch { if (!noGooglePush && viewModel.pushRegistered()) askingBackground = true else turnOnBackgroundConnection() }
+                // Asked only where push really works: registered with our relay. The switch may
+                // have gone off again while that was read: then nothing.
+                warnScope.launch {
+                    val ask = !noGooglePush && viewModel.pushRegistered()
+                    if (!backgroundWanted) return@launch
+                    if (ask) askingBackground = true else turnOnBackgroundConnection()
+                }
             }
         },
         onDiagnostics = { diagnosticsOpen = true },
@@ -1216,7 +1224,8 @@ private fun Footer() {
 private fun DiagnosticsDialog(
     lines: List<DiagnosticsLine>,
     test: ConnectionTestState,
-    onTest: () -> Unit,
+    /** Null without a relay: nothing to test. */
+    onTest: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1234,7 +1243,7 @@ private fun DiagnosticsDialog(
                         Text(line.value.asString(), style = MaterialTheme.typography.bodyMedium)
                     }
                 }
-                when (test) {
+                if (onTest != null) when (test) {
                     ConnectionTestState.Idle -> Column {
                         TextButton(onClick = onTest) { Text(stringResource(R.string.diag_test_run)) }
                         Text(

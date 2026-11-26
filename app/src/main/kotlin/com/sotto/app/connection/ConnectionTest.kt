@@ -1,7 +1,9 @@
 package com.sotto.app.connection
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -13,8 +15,8 @@ import java.net.URL
  * uneven tries, which the phone's Wi-Fi status never shows; comparing with other servers tells a
  * relay problem from the phone's own: the relay (TCP, and full requests to its /health), the
  * relay's name lookup, Google over IPv4 and over IPv6 (which one this network carries), and
- * GitHub (IPv4 only, like the relay). Google and GitHub only see a connection opened and closed.
- * Runs only when the user taps it.
+ * GitHub (IPv4 only). Google and GitHub only see a connection opened and closed. Runs only when
+ * the user taps it, and stops when the screen goes (cancellation is checked between tries).
  */
 object ConnectionTest {
     /** Connections to one place: [label] (a string resource), where, how many tries. */
@@ -23,8 +25,8 @@ object ConnectionTest {
     const val RELAY_TCP_TRIES = 20
     const val HTTP_TRIES = 5
     private const val OTHER_TRIES = 5
-    private const val TCP_TIMEOUT_MS = 3_000
-    private const val HTTP_TIMEOUT_MS = 10_000
+    private const val TCP_TIMEOUT_MS = 2_000
+    private const val HTTP_TIMEOUT_MS = 5_000
 
     /** The other places tried, for comparison. */
     val OTHERS = listOf(
@@ -39,7 +41,14 @@ object ConnectionTest {
     /** One kind of try: how many of [total] worked, and how long the ones that worked took. */
     data class Outcome(val total: Int, val millis: List<Long>) {
         val ok get() = millis.size
-        val median: Long? get() = millis.sorted().let { if (it.isEmpty()) null else it[it.size / 2] }
+        /** The middle time; for an even count the mean of the two middle ones. */
+        val median: Long? get() = millis.sorted().let {
+            when {
+                it.isEmpty() -> null
+                it.size % 2 == 1 -> it[it.size / 2]
+                else -> (it[it.size / 2 - 1] + it[it.size / 2]) / 2
+            }
+        }
         val slowest: Long? get() = millis.maxOrNull()
     }
 
@@ -54,13 +63,18 @@ object ConnectionTest {
     /** Runs the test against [baseUrl] (the relay's), telling [onProgress] tries done of all. */
     suspend fun run(baseUrl: String, onProgress: (done: Int, total: Int) -> Unit): Result = withContext(Dispatchers.IO) {
         var done = 0
-        fun step() = onProgress(++done, TOTAL_TRIES)
+        suspend fun step() {
+            onProgress(++done, TOTAL_TRIES)
+            coroutineContext.ensureActive()
+        }
         val url = URL(baseUrl.trimEnd('/'))
         val port = if (url.port != -1) url.port else url.defaultPort
 
-        val lookup = timed { InetAddress.getAllByName(url.host) }
+        // Looked up once: the connections below then measure only connecting, not the lookup.
+        var relayAddress: InetAddress? = null
+        val lookup = timed { relayAddress = InetAddress.getAllByName(url.host).first() }
         step()
-        val relayTcp = connections(url.host, port, RELAY_TCP_TRIES, ::step)
+        val relayTcp = connections(relayAddress, port, RELAY_TCP_TRIES, ::step)
         val http = ArrayList<Long>()
         repeat(HTTP_TRIES) {
             timed {
@@ -68,6 +82,9 @@ object ConnectionTest {
                 connection.connectTimeout = HTTP_TIMEOUT_MS
                 connection.readTimeout = HTTP_TIMEOUT_MS
                 connection.useCaches = false
+                // A new connection each time: each try includes the handshake, which is what
+                // fails on a lossy line (a reused one would hide it).
+                connection.setRequestProperty("Connection", "close")
                 try {
                     check(connection.responseCode == 200)
                     connection.inputStream.use { it.readBytes() }
@@ -77,14 +94,20 @@ object ConnectionTest {
             }?.let { http += it }
             step()
         }
-        val others = OTHERS.map { it to connections(it.host, it.port, it.tries, ::step) }
+        val others = OTHERS.map { target ->
+            val address = try { InetAddress.getAllByName(target.host).first() } catch (_: Exception) { null }
+            target to connections(address, target.port, target.tries, ::step)
+        }
         Result(lookup, relayTcp, Outcome(HTTP_TRIES, http), others)
     }
 
-    private fun connections(host: String, port: Int, tries: Int, step: () -> Unit): Outcome {
+    /** [tries] connections to [address] (none can work without one). */
+    private suspend fun connections(address: InetAddress?, port: Int, tries: Int, step: suspend () -> Unit): Outcome {
         val times = ArrayList<Long>()
         repeat(tries) {
-            timed { Socket().use { it.connect(InetSocketAddress(host, port), TCP_TIMEOUT_MS) } }?.let { times += it }
+            if (address != null) {
+                timed { Socket().use { it.connect(InetSocketAddress(address, port), TCP_TIMEOUT_MS) } }?.let { times += it }
+            }
             step()
         }
         return Outcome(tries, times)

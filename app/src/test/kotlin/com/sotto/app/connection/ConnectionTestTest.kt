@@ -14,6 +14,13 @@ class ConnectionTestTest {
     }
 
     @Test
+    fun `an even count's median is the mean of the two middle times`() {
+        val o = ConnectionTest.Outcome(total = 5, millis = listOf(100, 3_000))
+        assertEquals(1_550L, o.median)
+        assertEquals(3_000L, o.slowest)
+    }
+
+    @Test
     fun `nothing worked, no times`() {
         val o = ConnectionTest.Outcome(total = 20, millis = emptyList())
         assertEquals(0, o.ok)

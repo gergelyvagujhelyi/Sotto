@@ -52,8 +52,19 @@ class SettingsViewModel @Inject constructor(
         val base = relayConfig.baseUrl ?: return
         _connectionTest.value = ConnectionTestState.Running(0, com.sotto.app.connection.ConnectionTest.TOTAL_TRIES)
         viewModelScope.launch {
-            val result = com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
-                _connectionTest.value = ConnectionTestState.Running(done, total)
+            val result = try {
+                com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
+                    _connectionTest.value = ConnectionTestState.Running(done, total)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _connectionTest.value = ConnectionTestState.Idle
+                throw e
+            } catch (_: Exception) {
+                // An address that doesn't parse, say: no result rather than a crash.
+                _connectionTest.value = ConnectionTestState.Done(
+                    listOf(DiagnosticsLine(UiText.res(R.string.diag_test_title), UiText.res(R.string.diag_test_failed))),
+                )
+                return@launch
             }
             _connectionTest.value = ConnectionTestState.Done(
                 listOf(
@@ -72,6 +83,9 @@ class SettingsViewModel @Inject constructor(
     fun clearConnectionTest() {
         if (_connectionTest.value is ConnectionTestState.Done) _connectionTest.value = ConnectionTestState.Idle
     }
+
+    /** The test needs a relay to test. */
+    val canTestConnection: Boolean get() = relayConfig.baseUrl != null
 
     /** Push is registered with our relay: then the background connection isn't needed (the warning). */
     suspend fun pushRegistered(): Boolean =
