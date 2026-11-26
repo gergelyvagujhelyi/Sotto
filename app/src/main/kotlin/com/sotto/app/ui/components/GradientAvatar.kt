@@ -80,15 +80,15 @@ fun GradientAvatar(
             fontWeight = FontWeight.SemiBold,
             fontSize = fontSize,
             maxLines = 1,
-            // The line exactly as tall as the letters, without font padding: the app's line height
-            // (24 sp) around a 6 sp letter put it off centre in the small read circles.
-            style = androidx.compose.ui.text.TextStyle(
+            // The line exactly as tall as the letters: the inherited body line height (23 sp) around
+            // a 6 sp letter put it low in the small read circles. The rest of the inherited style
+            // (its letter spacing) stays.
+            style = androidx.compose.material3.LocalTextStyle.current.copy(
                 lineHeight = fontSize,
                 lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(
                     alignment = androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center,
                     trim = androidx.compose.ui.text.style.LineHeightStyle.Trim.Both,
                 ),
-                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
             ),
         )
     }
