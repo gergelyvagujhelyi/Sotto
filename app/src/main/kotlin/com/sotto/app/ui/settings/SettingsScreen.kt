@@ -402,7 +402,18 @@ fun SettingsScreen(
             null
         }
     }
-    diagnostics?.let { lines -> DiagnosticsDialog(lines, onDismiss = { diagnosticsOpen = false }) }
+    val connectionTest by viewModel.connectionTest.collectAsState()
+    diagnostics?.let { lines ->
+        DiagnosticsDialog(
+            lines = lines,
+            test = connectionTest,
+            onTest = viewModel::runConnectionTest,
+            onDismiss = {
+                diagnosticsOpen = false
+                viewModel.clearConnectionTest()
+            },
+        )
+    }
     val warnScope = androidx.compose.runtime.rememberCoroutineScope()
 
     SettingsContent(
@@ -1197,22 +1208,47 @@ private fun Footer() {
     }
 }
 
-/** Settings > Diagnostics: the lines, and Share (plain text, through Android's share sheet). */
+/**
+ * Settings > Diagnostics: the lines, the connection test (its result joins the lines), and Share
+ * (plain text, through Android's share sheet).
+ */
 @Composable
-private fun DiagnosticsDialog(lines: List<DiagnosticsLine>, onDismiss: () -> Unit) {
+private fun DiagnosticsDialog(
+    lines: List<DiagnosticsLine>,
+    test: ConnectionTestState,
+    onTest: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     val context = LocalContext.current
     val title = stringResource(R.string.diag_title)
+    val all = lines + ((test as? ConnectionTestState.Done)?.lines ?: emptyList())
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Rounded.MonitorHeart, contentDescription = null) },
         title = { Text(title) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (line in lines) {
+                for (line in all) {
                     Column {
                         Text(line.label.asString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(line.value.asString(), style = MaterialTheme.typography.bodyMedium)
                     }
+                }
+                when (test) {
+                    ConnectionTestState.Idle -> Column {
+                        TextButton(onClick = onTest) { Text(stringResource(R.string.diag_test_run)) }
+                        Text(
+                            stringResource(R.string.diag_test_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    is ConnectionTestState.Running -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(stringResource(R.string.diag_test_running, test.done, test.total), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    is ConnectionTestState.Done -> TextButton(onClick = onTest) { Text(stringResource(R.string.diag_test_again)) }
                 }
             }
         },
@@ -1220,7 +1256,7 @@ private fun DiagnosticsDialog(lines: List<DiagnosticsLine>, onDismiss: () -> Uni
             TextButton(onClick = {
                 val send = Intent(Intent.ACTION_SEND)
                     .setType("text/plain")
-                    .putExtra(Intent.EXTRA_TEXT, lines.shareText(context, title))
+                    .putExtra(Intent.EXTRA_TEXT, all.shareText(context, title))
                 runCatching { context.startActivity(Intent.createChooser(send, title)) }
             }) { Text(stringResource(R.string.diag_share)) }
         },

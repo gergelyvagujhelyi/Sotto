@@ -78,6 +78,25 @@
     <!-- %1$d minutes late, noticed at %2$s (date and time) -->
     <string name="diag_late_value">%1$d min late, %2$s</string>
     <string name="diag_none">None</string>
+    <!-- Diagnostics > connection test: 20 TCP connections, then 5 requests, to the relay -->
+    <string name="diag_test_run">Test the connection (about 30 s)</string>
+    <string name="diag_test_again">Test again</string>
+    <!-- %1$d tries done of %2$d -->
+    <string name="diag_test_running">Testing… %1$d of %2$d</string>
+    <string name="diag_test_tcp">TCP connections to the relay</string>
+    <string name="diag_test_http">Relay answers (HTTPS)</string>
+    <!-- %1$d worked of %2$d; median and slowest time in milliseconds -->
+    <string name="diag_test_value">%1$d of %2$d · median %3$d ms, slowest %4$d ms</string>
+    <!-- None of %1$d worked -->
+    <string name="diag_test_none">0 of %1$d</string>
+    <string name="diag_test_note">Opens connections to your relay, and for comparison to Google and GitHub; nothing is sent to them.</string>
+    <string name="diag_test_lookup">Looking up the relay\'s address</string>
+    <!-- %1$d milliseconds -->
+    <string name="diag_test_ms">%1$d ms</string>
+    <string name="diag_test_failed">Failed</string>
+    <string name="diag_test_google_v4">Google over IPv4</string>
+    <string name="diag_test_google_v6">Google over IPv6</string>
+    <string name="diag_test_github">GitHub (IPv4 only, like the relay)</string>
     <!-- Asked before turning the background connection on, on a phone that has Google push -->
     <string name="settings_background_not_needed_title">Not needed on this phone</string>
     <string name="settings_background_not_needed_text">Messages and calls already reach this phone through Google push. The background connection keeps a connection to your relay open all the time: it uses more battery, and on a Wi-Fi that keeps dropping it can get in the way of sending.</string>

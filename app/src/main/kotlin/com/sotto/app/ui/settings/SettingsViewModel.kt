@@ -42,6 +42,37 @@ class SettingsViewModel @Inject constructor(
     private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : ViewModel() {
 
+    private val _connectionTest = MutableStateFlow<ConnectionTestState>(ConnectionTestState.Idle)
+    /** Settings > Diagnostics > Test the connection. */
+    val connectionTest: StateFlow<ConnectionTestState> = _connectionTest.asStateFlow()
+
+    /** TCP connections and a few full requests to the relay (ConnectionTest), about 30 s. */
+    fun runConnectionTest() {
+        if (_connectionTest.value is ConnectionTestState.Running) return
+        val base = relayConfig.baseUrl ?: return
+        _connectionTest.value = ConnectionTestState.Running(0, com.sotto.app.connection.ConnectionTest.TOTAL_TRIES)
+        viewModelScope.launch {
+            val result = com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
+                _connectionTest.value = ConnectionTestState.Running(done, total)
+            }
+            _connectionTest.value = ConnectionTestState.Done(
+                listOf(
+                    DiagnosticsLine(
+                        UiText.res(R.string.diag_test_lookup),
+                        result.lookupMillis?.let { UiText.res(R.string.diag_test_ms, it) } ?: UiText.res(R.string.diag_test_failed),
+                    ),
+                    testLine(R.string.diag_test_tcp, result.relayTcp),
+                    testLine(R.string.diag_test_http, result.relayHttp),
+                ) + result.others.map { (target, outcome) -> testLine(target.label, outcome) },
+            )
+        }
+    }
+
+    /** A new Diagnostics window starts without an old result (one that's running goes on). */
+    fun clearConnectionTest() {
+        if (_connectionTest.value is ConnectionTestState.Done) _connectionTest.value = ConnectionTestState.Idle
+    }
+
     /** Push is registered with our relay: then the background connection isn't needed (the warning). */
     suspend fun pushRegistered(): Boolean =
         relayConfig.canPush && try {
