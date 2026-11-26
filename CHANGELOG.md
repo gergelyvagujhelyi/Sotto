@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+## 0.7.28 — 2026-11-26
+
 - **Failed messages go again by themselves** — A message that couldn't be sent (a network that dropped for a moment, the relay out of reach) is sent again automatically once the connection is back, trying again with growing pauses for up to a day after it was written; "Not delivered · Tap to resend" still sends it at once. In a group only the members who didn't get it get it, the same encrypted copy as before. A message older than a day, one to someone you've blocked since, and a group copy whose member's keys don't match the vouched ones still wait for a tap. A message is never sent twice: a tap and the automatic resend can't both send it, and the relay keeps a single copy of a resend.
 - **Sotto offers to run in the background** — While Android's battery optimisation (or a phone maker's battery saver, like Samsung's sleeping apps) can hold Sotto back, the chat list shows a card: "Let Sotto run in the background". Allow opens Android's own question (it sets Sotto to Unrestricted); Not now hides the card for good. Settings > Connection shows "Allow background activity" whenever it applies, not only with the background connection on.
 
