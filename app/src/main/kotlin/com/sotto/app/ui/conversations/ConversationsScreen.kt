@@ -92,13 +92,15 @@ fun ConversationsScreen(
             viewModel.pollWhileVisible()
         }
     }
-    // Offered until the user lets Sotto run in the background or says "Not now"; re-checked on
-    // coming back from Android's dialog.
+    // Offered while Android restricts Sotto (see backgroundOffer); re-checked on coming back
+    // from Android's dialog, or to the app after a while.
     val context = LocalContext.current
-    val offerDismissed by viewModel.backgroundOfferDismissed.collectAsState()
+    val offerState by viewModel.backgroundOfferState.collectAsState()
     var restricted by remember { mutableStateOf(BackgroundActivity.isRestricted(context)) }
+    var now by remember { androidx.compose.runtime.mutableLongStateOf(System.currentTimeMillis()) }
     androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
         restricted = BackgroundActivity.isRestricted(context)
+        now = System.currentTimeMillis()
         onPauseOrDispose { }
     }
 
@@ -119,7 +121,7 @@ fun ConversationsScreen(
         onInvitationClick = onInvitationClick,
         onAcceptInvitation = viewModel::acceptInvitation,
         onRejectInvitation = viewModel::rejectInvitation,
-        offerBackground = restricted && offerDismissed == false,
+        backgroundOffer = com.sotto.app.connection.backgroundOffer(restricted, offerState, now),
         onAllowBackground = { BackgroundActivity.requestUnrestricted(context) },
         onDismissBackgroundOffer = viewModel::dismissBackgroundOffer,
     )
@@ -162,8 +164,8 @@ fun ConversationsContent(
     onInvitationClick: (groupId: String) -> Unit = {},
     onAcceptInvitation: (groupId: String) -> Unit = {},
     onRejectInvitation: (groupId: String) -> Unit = {},
-    /** Android may hold Sotto back in the background: offer to let it run there. */
-    offerBackground: Boolean = false,
+    /** Android may hold Sotto back in the background: offer to let it run there (null: no card). */
+    backgroundOffer: com.sotto.app.connection.BackgroundOffer? = null,
     onAllowBackground: () -> Unit = {},
     onDismissBackgroundOffer: () -> Unit = {},
 ) {
@@ -210,8 +212,9 @@ fun ConversationsContent(
         ) { padding ->
             if (isEmpty) {
                 Column(Modifier.padding(padding)) {
-                    if (offerBackground) {
+                    if (backgroundOffer != null) {
                         BackgroundOfferCard(
+                            offer = backgroundOffer,
                             onAllow = onAllowBackground,
                             onDismiss = onDismissBackgroundOffer,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -238,9 +241,10 @@ fun ConversationsContent(
                     // Keys are namespaced: conversation ids come from the relay, so a raw
                     // id must never be able to equal another row's key (duplicate keys
                     // crash the list).
-                    if (offerBackground) {
+                    if (backgroundOffer != null) {
                         item(key = "h:background") {
                             BackgroundOfferCard(
+                                offer = backgroundOffer,
                                 onAllow = onAllowBackground,
                                 onDismiss = onDismissBackgroundOffer,
                                 modifier = Modifier
@@ -359,9 +363,11 @@ private fun groupStatusLine(group: Group): String = when (group.status) {
 /**
  * Android (or the phone maker's battery saver) may hold Sotto back in the background, so
  * messages and calls wait until it's opened: offer to let it run there (Android's own dialog).
+ * [offer] Late says how late a message was noticed to arrive.
  */
 @Composable
 private fun BackgroundOfferCard(
+    offer: com.sotto.app.connection.BackgroundOffer,
     onAllow: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
@@ -376,10 +382,16 @@ private fun BackgroundOfferCard(
             )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.conversations_background_title), style = MaterialTheme.typography.titleMedium)
+                val late = offer as? com.sotto.app.connection.BackgroundOffer.Late
+                val title = when {
+                    late == null -> stringResource(R.string.conversations_background_title)
+                    late.minutes >= 120 -> androidx.compose.ui.res.pluralStringResource(R.plurals.conversations_background_late_hours, late.minutes / 60, late.minutes / 60)
+                    else -> androidx.compose.ui.res.pluralStringResource(R.plurals.conversations_background_late_minutes, late.minutes, late.minutes)
+                }
+                Text(title, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    stringResource(R.string.conversations_background_body),
+                    stringResource(if (late == null) R.string.conversations_background_body else R.string.conversations_background_late_body),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

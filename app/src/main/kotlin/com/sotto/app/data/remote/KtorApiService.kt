@@ -237,11 +237,21 @@ class KtorApiService @Inject constructor(
         return response.body()
     }
 
+    @Volatile private var lastFetchRelayTime: Long? = null
+
+    override fun relayTimeOfLastFetch(): Long? = lastFetchRelayTime
+
     override suspend fun fetchPendingMessages(): List<PendingMessageDto> {
         val response: HttpResponse = client.get("/v1/messages/pending") {
             header("Authorization", "Bearer ${authToken()}")
         }
         check(response.status.isSuccess()) { "Fetch pending failed: ${response.status}" }
+        // The relay's clock, to tell how long the messages waited there (LateDelivery).
+        lastFetchRelayTime = response.headers[HttpHeaders.Date]?.let { date ->
+            runCatching {
+                java.time.ZonedDateTime.parse(date, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()
+            }.getOrNull()
+        }
         return response.body()
     }
 

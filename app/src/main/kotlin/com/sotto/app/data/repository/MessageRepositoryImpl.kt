@@ -76,6 +76,8 @@ class MessageRepositoryImpl @Inject constructor(
     private val groups: javax.inject.Provider<GroupRepositoryImpl>,
     /** Failed messages go again by themselves (AutoResend). */
     private val resend: com.sotto.app.worker.ResendScheduler,
+    /** Messages that waited long on the relay bring back the offer to run in the background. */
+    private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : MessageRepository, GroupTransport {
 
     override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
@@ -1113,6 +1115,7 @@ class MessageRepositoryImpl @Inject constructor(
         while (true) {
             val pending = apiService.fetchPendingMessages()
             if (pending.isEmpty()) return
+            noticeLateDelivery(pending, apiService.relayTimeOfLastFetch())
 
             val receivedIds = mutableListOf<String>()
             for (dto in pending) {
@@ -1131,6 +1134,14 @@ class MessageRepositoryImpl @Inject constructor(
             pages++
             if (pending.size < PENDING_PAGE_SIZE || receivedIds.isEmpty() || pages >= MAX_PAGES_PER_FETCH) return
         }
+    }
+
+    /** The oldest of [pending] waited on the relay past the threshold before [relayNow] (LateDelivery). */
+    private fun noticeLateDelivery(pending: List<com.sotto.app.data.remote.dto.PendingMessageDto>, relayNow: Long?) {
+        relayNow ?: return
+        val oldest = pending.minOf { it.timestamp }.takeIf { it > 0 } ?: return
+        val waited = relayNow - oldest
+        if (waited >= com.sotto.app.connection.LateDelivery.THRESHOLD_MS) backgroundOffers.noticedLate(waited)
     }
 
     /** Verify, decrypt and store one pending message; adds its id to [receivedIds] when it may be ACKed. */

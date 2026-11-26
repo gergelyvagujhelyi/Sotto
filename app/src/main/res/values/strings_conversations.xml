@@ -9,6 +9,16 @@
     <string name="conversations_background_body">Until you do, Android can hold back new messages and calls until you open Sotto.</string>
     <string name="conversations_background_allow">Allow</string>
     <string name="conversations_background_later">Not now</string>
+    <!-- The card again, after Sotto noticed a message that waited long on the relay -->
+    <plurals name="conversations_background_late_minutes">
+        <item quantity="one">A message arrived %d minute late</item>
+        <item quantity="other">A message arrived %d minutes late</item>
+    </plurals>
+    <plurals name="conversations_background_late_hours">
+        <item quantity="one">A message arrived %d hour late</item>
+        <item quantity="other">A message arrived %d hours late</item>
+    </plurals>
+    <string name="conversations_background_late_body">Android may have held Sotto back until you opened it. Let Sotto run in the background so messages arrive at once.</string>
     <string name="conversations_empty_body">Tap New chat and enter someone\'s share code to start a private, end-to-end encrypted conversation.</string>
     <string name="conversations_requests">Message requests</string>
     <string name="conversations_chats">Chats</string>

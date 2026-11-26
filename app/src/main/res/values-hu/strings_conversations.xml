@@ -8,6 +8,15 @@
     <string name="conversations_background_body">Addig az Android visszatarthatja az új üzeneteket és hívásokat, amíg meg nem nyitod a Sottót.</string>
     <string name="conversations_background_allow">Engedélyezés</string>
     <string name="conversations_background_later">Most nem</string>
+    <plurals name="conversations_background_late_minutes">
+        <item quantity="one">Egy üzenet %d perc késéssel érkezett</item>
+        <item quantity="other">Egy üzenet %d perc késéssel érkezett</item>
+    </plurals>
+    <plurals name="conversations_background_late_hours">
+        <item quantity="one">Egy üzenet %d óra késéssel érkezett</item>
+        <item quantity="other">Egy üzenet %d óra késéssel érkezett</item>
+    </plurals>
+    <string name="conversations_background_late_body">Lehet, hogy az Android visszatartotta a Sottót, amíg meg nem nyitottad. Engedd a háttérben futni, hogy az üzenetek azonnal megérkezzenek.</string>
     <string name="conversations_empty_body">Koppints az Új beszélgetés gombra, és add meg valakinek a megosztási kódját, hogy privát, végponttól végpontig titkosított beszélgetést indíts.</string>
     <string name="conversations_requests">Üzenetkérések</string>
     <string name="conversations_chats">Beszélgetések</string>

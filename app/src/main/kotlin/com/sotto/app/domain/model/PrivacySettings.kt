@@ -40,8 +40,6 @@ data class PrivacySettings(
      * vibrates), else the chosen sound's URI (CallRingtone).
      */
     val callRingtone: String? = null,
-    /** "Not now" on the chat list's card offering to let Sotto run in the background. */
-    val backgroundOfferDismissed: Boolean = false,
 )
 
 enum class LockScreenPreviewMode {

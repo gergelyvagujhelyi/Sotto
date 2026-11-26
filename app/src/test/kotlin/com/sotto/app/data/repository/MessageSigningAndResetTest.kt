@@ -28,6 +28,7 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.slot
 import io.mockk.unmockkAll
+import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -53,6 +54,7 @@ class MessageSigningAndResetTest {
     private val sessionResetSender = mockk<SessionResetSender>(relaxed = true)
     private val blockedUserDao = mockk<BlockedUserDao>(relaxed = true)
     private val resendScheduler = mockk<com.sotto.app.worker.ResendScheduler>(relaxed = true)
+    private val backgroundOffers = mockk<com.sotto.app.connection.BackgroundOfferStore>(relaxed = true)
     private lateinit var repo: MessageRepositoryImpl
 
     private val pqcContact = ContactEntity(
@@ -114,6 +116,7 @@ class MessageSigningAndResetTest {
             },
             groups = javax.inject.Provider { groupRepo },
             resend = resendScheduler,
+            backgroundOffers = backgroundOffers,
         )
     }
 
@@ -446,6 +449,37 @@ class MessageSigningAndResetTest {
     }
 
     // ── The pending queue ───────────────────────────────────────────────────
+
+    @Test
+    fun `a message that waited long on the relay is noticed as late, by the relay's clock`() = runTest {
+        coEvery { blockedUserDao.isBlocked("peer") } returns true // dropped and ACKed, the simplest way through
+        val arrived = 1_764_000_000_000L
+        coEvery { apiService.fetchPendingMessages() } returnsMany listOf(
+            listOf(chatDto("late").copy(timestamp = arrived), chatDto("later").copy(timestamp = arrived + 600_000)),
+            emptyList(),
+        )
+        every { apiService.relayTimeOfLastFetch() } returns arrived + 25 * 60_000
+
+        repo.fetchPendingAndWait()
+
+        // The oldest one counts: 25 minutes.
+        verify { backgroundOffers.noticedLate(25 * 60_000L, any()) }
+    }
+
+    @Test
+    fun `a message fetched soon after it arrived, or without the relay's clock, isn't late`() = runTest {
+        coEvery { blockedUserDao.isBlocked("peer") } returns true
+        val arrived = 1_764_000_000_000L
+        coEvery { apiService.fetchPendingMessages() } returnsMany listOf(listOf(chatDto("quick").copy(timestamp = arrived)), emptyList())
+        every { apiService.relayTimeOfLastFetch() } returns arrived + 2_000
+        repo.fetchPendingAndWait()
+
+        coEvery { apiService.fetchPendingMessages() } returnsMany listOf(listOf(chatDto("unknown").copy(timestamp = arrived)), emptyList())
+        every { apiService.relayTimeOfLastFetch() } returns null
+        repo.fetchPendingAndWait()
+
+        verify(exactly = 0) { backgroundOffers.noticedLate(any(), any()) }
+    }
 
     @Test
     fun `full pages that make progress stop after 10 pages`() = runTest {
