@@ -682,6 +682,7 @@ internal fun MicButton(
     val cancel by rememberUpdatedState(onCancel)
     val lock by rememberUpdatedState(onLock)
     val drag by rememberUpdatedState(onDrag)
+    val current by rememberUpdatedState(state)
     Box(
         modifier = Modifier
             .size(52.dp)
@@ -705,20 +706,38 @@ internal fun MicButton(
                     // Ended by letting go, sliding to cancel or lock, or the touch going away.
                     var ended = false
                     var stillDown = false
+                    // The recording started (the state shown has caught up with the press).
+                    var started = false
                     try {
                         while (!ended) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id }
                             if (change == null) {
-                                // The touch was taken away (another window, say): like letting go.
-                                release()
+                                // The touch was taken away (another window, say): nobody chose to
+                                // send, so the recording goes.
+                                cancel()
                                 ended = true
+                                break
+                            }
+                            if (current != RecordState.IDLE) {
+                                started = true
+                            } else if (started) {
+                                // It ended without the finger lifting (the length limit sent it, or
+                                // the app went to the background): the rest of this touch is nothing.
+                                ended = true
+                                stillDown = change.pressed
                                 break
                             }
                             val dx = change.position.x - down.position.x
                             val dy = change.position.y - down.position.y
+                            // Android cancelled the touch (the notification shade, a call): Compose
+                            // makes it an "up" someone already took. Not letting go: thrown away.
+                            val cancelled = !change.pressed && change.isConsumed
                             change.consume()
-                            if (!change.pressed) {
+                            if (cancelled) {
+                                cancel()
+                                ended = true
+                            } else if (!change.pressed) {
                                 release()
                                 ended = true
                             } else if (dx < -cancelAt) {

@@ -852,6 +852,7 @@ fun ChatContent(
                                     contactBlocked = isBlocked,
                                     now = now,
                                     contactName = (row as? ChatRow.Entry)?.message?.let(quoteAuthor) ?: quoteName,
+                                    contactSeed = avatarSeed,
                                     group = group,
                                     onReply = onReply,
                                     onReact = onReact,
@@ -1010,7 +1011,8 @@ fun ChatContent(
                         onRecordPress = startRecording,
                         onRecordRelease = { finishRecording(true) },
                         onRecordCancel = {
-                            recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // Only a recording that was going on buzzes (not the button merely going away).
+                            if (recordState != RecordState.IDLE) recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             finishRecording(false)
                         },
                         onRecordLock = {
@@ -1370,6 +1372,8 @@ private fun ChatRowItem(
     onRetry: (String) -> Unit,
     modifier: Modifier = Modifier,
     contactName: String = "",
+    /** The contact's avatar colours (their id), for the reactions sheet. */
+    contactSeed: String = contactName,
     onReply: (Message) -> Unit = {},
     onReact: (Message, String) -> Unit = { _, _ -> },
     onQuoteClick: (String) -> Unit = {},
@@ -1411,6 +1415,8 @@ private fun ChatRowItem(
                 else -> {
                 var picking by remember { mutableStateOf(false) }
                 var pickingMore by remember { mutableStateOf(false) }
+                // Who reacted: the sheet that tapping the reactions opens.
+                var showingReactions by remember { mutableStateOf(false) }
                 val haptics = LocalHapticFeedback.current
                 val react = { emoji: String ->
                     picking = false
@@ -1439,6 +1445,42 @@ private fun ChatRowItem(
                 // A group message partway delivered or read shows how far ("1/2").
                 val ticks = if (group != null && message.isOutgoing) groupTicks(message.shownState, group.progress[message.id]) else message.shownState to null
                 val myReaction = if (group != null) groupReactions.firstOrNull { it.isMine }?.emoji else message.myReaction
+                val youName = stringResource(R.string.chat_reactions_you)
+                if (showingReactions) {
+                    val entries = if (group != null) {
+                        groupReactions.map { ReactionEntry(it.reactorName, it.reactorId, it.emoji, it.isMine) }
+                    } else {
+                        listOfNotNull(
+                            message.theirReaction?.let { ReactionEntry(contactName, contactSeed, it, isMine = false) },
+                            message.myReaction?.let { ReactionEntry(youName, "", it, isMine = true) },
+                        )
+                    }
+                    // Nothing left (taken back meanwhile): the sheet goes.
+                    if (entries.isEmpty()) {
+                        showingReactions = false
+                    } else {
+                        ReactionsSheet(
+                            entries = entries,
+                            onRemoveMine = if (message.canReact && myReaction != null) {
+                                {
+                                    showingReactions = false
+                                    react(myReaction)
+                                }
+                            } else {
+                                null
+                            },
+                            onChange = if (message.canReact) {
+                                {
+                                    showingReactions = false
+                                    picking = true
+                                }
+                            } else {
+                                null
+                            },
+                            onDismiss = { showingReactions = false },
+                        )
+                    }
+                }
                 SwipeToReply(
                     enabled = message.canReply,
                     onReply = { onReply(message) },
@@ -1527,7 +1569,7 @@ private fun ChatRowItem(
                                 BubbleReactions(message.theirReaction, message.myReaction, contactName)
                             }
                             ).takeUnless { it.isEmpty },
-                        onReactionsClick = if (message.canReact) ({ picking = true }) else null,
+                        onReactionsClick = { showingReactions = true },
                         overlay = if (picking) {
                             {
                                 ReactionPicker(
