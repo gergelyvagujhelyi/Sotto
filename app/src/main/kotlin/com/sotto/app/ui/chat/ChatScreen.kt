@@ -379,9 +379,11 @@ fun ChatScreen(
         )
     }
 
+    val myself by viewModel.myself.collectAsState()
     ChatContent(
         contactName = conversation?.contactDisplayName,
         avatarSeed = viewModel.contactId,
+        myself = myself,
         isEncrypted = conversation?.isEncrypted == true,
         encryptionInfo = encryptionInfo,
         messages = history.orEmpty(),
@@ -554,6 +556,8 @@ internal fun NotVerifiedWarningDialog(
 fun ChatContent(
     contactName: String?,
     avatarSeed: String,
+    /** The user's own id and name: their row in the who-reacted sheet of a one-to-one chat. */
+    myself: Pair<String, String?>? = null,
     isEncrypted: Boolean,
     encryptionInfo: String,
     messages: List<Message>,
@@ -706,6 +710,33 @@ fun ChatContent(
     }
     val them = stringResource(R.string.chat_them)
     val quoteName = if (group != null) them else contactName ?: them
+    // Who reacted to which message: here, not in the row, so the list scrolling (a new message
+    // arriving) doesn't close it.
+    var reactionsFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var pickFor by remember { mutableStateOf<String?>(null) }
+    reactionsFor?.let { rid ->
+        val message = messages.firstOrNull { it.id == rid }
+        val youName = stringResource(R.string.chat_reactions_you)
+        val entries = when {
+            message == null -> emptyList()
+            group != null -> group.reactions[rid].orEmpty().map { ReactionEntry(it.reactorName, it.reactorId, it.emoji, it.isMine) }
+            else -> listOfNotNull(
+                message.theirReaction?.let { ReactionEntry(quoteName, avatarSeed, it, isMine = false) },
+                message.myReaction?.let { ReactionEntry(myself?.second ?: youName, myself?.first ?: "", it, isMine = true) },
+            )
+        }
+        // Nothing left to show (taken back, or the message deleted): closed.
+        LaunchedEffect(entries.isEmpty()) { if (entries.isEmpty()) reactionsFor = null }
+        if (message != null && entries.isNotEmpty()) {
+            val mine = entries.firstOrNull { it.isMine }?.emoji
+            ReactionsSheet(
+                entries = entries,
+                onRemoveMine = if (message.canReact && mine != null) ({ onReact(message, mine) }) else null,
+                onChange = if (message.canReact) ({ pickFor = rid }) else null,
+                onDismiss = { reactionsFor = null },
+            )
+        }
+    }
     // In a group a quote names the original's sender ("them" when it's gone from this phone).
     val quoteAuthor: (Message) -> String = { reply ->
         if (group == null) {
@@ -852,7 +883,9 @@ fun ChatContent(
                                     contactBlocked = isBlocked,
                                     now = now,
                                     contactName = (row as? ChatRow.Entry)?.message?.let(quoteAuthor) ?: quoteName,
-                                    contactSeed = avatarSeed,
+                                    onReactionsClick = { id?.let { reactionsFor = it } },
+                                    pickRequested = id != null && id == pickFor,
+                                    onPickHandled = { pickFor = null },
                                     group = group,
                                     onReply = onReply,
                                     onReact = onReact,
@@ -1016,8 +1049,11 @@ fun ChatContent(
                             finishRecording(false)
                         },
                         onRecordLock = {
-                            recordHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            recordState = RecordState.LOCKED
+                            // Only a recording going on locks (not one the limit already sent).
+                            if (recordState == RecordState.HOLDING) {
+                                recordHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                recordState = RecordState.LOCKED
+                            }
                             recordSlide = Offset.Zero
                         },
                         onRecordDrag = { dx, dy -> recordSlide = Offset(dx, dy) },
@@ -1372,8 +1408,11 @@ private fun ChatRowItem(
     onRetry: (String) -> Unit,
     modifier: Modifier = Modifier,
     contactName: String = "",
-    /** The contact's avatar colours (their id), for the reactions sheet. */
-    contactSeed: String = contactName,
+    /** Tapping the reactions under the message: who reacted (the sheet lives in ChatContent). */
+    onReactionsClick: () -> Unit = {},
+    /** The sheet's "Change your reaction" asked for the picker; [onPickHandled] once it's open. */
+    pickRequested: Boolean = false,
+    onPickHandled: () -> Unit = {},
     onReply: (Message) -> Unit = {},
     onReact: (Message, String) -> Unit = { _, _ -> },
     onQuoteClick: (String) -> Unit = {},
@@ -1415,8 +1454,13 @@ private fun ChatRowItem(
                 else -> {
                 var picking by remember { mutableStateOf(false) }
                 var pickingMore by remember { mutableStateOf(false) }
-                // Who reacted: the sheet that tapping the reactions opens.
-                var showingReactions by remember { mutableStateOf(false) }
+                // "Change your reaction" in the who-reacted sheet (kept in ChatContent) opens the picker here.
+                LaunchedEffect(pickRequested) {
+                    if (pickRequested) {
+                        picking = true
+                        onPickHandled()
+                    }
+                }
                 val haptics = LocalHapticFeedback.current
                 val react = { emoji: String ->
                     picking = false
@@ -1445,42 +1489,6 @@ private fun ChatRowItem(
                 // A group message partway delivered or read shows how far ("1/2").
                 val ticks = if (group != null && message.isOutgoing) groupTicks(message.shownState, group.progress[message.id]) else message.shownState to null
                 val myReaction = if (group != null) groupReactions.firstOrNull { it.isMine }?.emoji else message.myReaction
-                val youName = stringResource(R.string.chat_reactions_you)
-                if (showingReactions) {
-                    val entries = if (group != null) {
-                        groupReactions.map { ReactionEntry(it.reactorName, it.reactorId, it.emoji, it.isMine) }
-                    } else {
-                        listOfNotNull(
-                            message.theirReaction?.let { ReactionEntry(contactName, contactSeed, it, isMine = false) },
-                            message.myReaction?.let { ReactionEntry(youName, "", it, isMine = true) },
-                        )
-                    }
-                    // Nothing left (taken back meanwhile): the sheet goes.
-                    if (entries.isEmpty()) {
-                        showingReactions = false
-                    } else {
-                        ReactionsSheet(
-                            entries = entries,
-                            onRemoveMine = if (message.canReact && myReaction != null) {
-                                {
-                                    showingReactions = false
-                                    react(myReaction)
-                                }
-                            } else {
-                                null
-                            },
-                            onChange = if (message.canReact) {
-                                {
-                                    showingReactions = false
-                                    picking = true
-                                }
-                            } else {
-                                null
-                            },
-                            onDismiss = { showingReactions = false },
-                        )
-                    }
-                }
                 SwipeToReply(
                     enabled = message.canReply,
                     onReply = { onReply(message) },
@@ -1569,7 +1577,7 @@ private fun ChatRowItem(
                                 BubbleReactions(message.theirReaction, message.myReaction, contactName)
                             }
                             ).takeUnless { it.isEmpty },
-                        onReactionsClick = { showingReactions = true },
+                        onReactionsClick = onReactionsClick,
                         overlay = if (picking) {
                             {
                                 ReactionPicker(

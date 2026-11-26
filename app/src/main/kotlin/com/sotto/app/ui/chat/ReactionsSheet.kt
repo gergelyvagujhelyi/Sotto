@@ -15,8 +15,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.sotto.app.R
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.SoftButton
+import kotlinx.coroutines.launch
 
 /** One reaction in [ReactionsSheet]: who ([seed] picks their avatar colours) and which emoji. */
 data class ReactionEntry(val name: String, val seed: String, val emoji: String, val isMine: Boolean)
@@ -53,13 +56,23 @@ internal fun ReactionsSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    val sheetState = rememberModalBottomSheetState()
+    val scope = rememberCoroutineScope()
+    // Slides away first, then does [then].
+    fun close(then: () -> Unit) {
+        scope.launch { sheetState.hide() }.invokeOnCompletion {
+            onDismiss()
+            then()
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         Column(Modifier.padding(horizontal = 20.dp).navigationBarsPadding()) {
             Text(stringResource(R.string.chat_reactions_title, entries.size), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.size(12.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // Takes what's left, so the button below stays on the sheet with many reactions.
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f, fill = false)) {
                 items(sortedReactions(entries), key = { "${it.isMine}:${it.seed}" }) { entry ->
-                    val remove = if (entry.isMine) onRemoveMine else null
+                    val remove = if (entry.isMine) onRemoveMine?.let { r -> { close(r) } } else null
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
@@ -100,7 +113,7 @@ internal fun ReactionsSheet(
                     text = stringResource(
                         if (entries.any { it.isMine }) R.string.chat_reaction_change else R.string.chat_reactions_add,
                     ),
-                    onClick = onChange,
+                    onClick = { close(onChange) },
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

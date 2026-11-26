@@ -724,6 +724,7 @@ internal fun MicButton(
                             } else if (started) {
                                 // It ended without the finger lifting (the length limit sent it, or
                                 // the app went to the background): the rest of this touch is nothing.
+                                change.consume()
                                 ended = true
                                 stillDown = change.pressed
                                 break
