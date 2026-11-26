@@ -45,6 +45,43 @@
     <string name="settings_sound_unknown">Custom sound</string>
     <string name="settings_sound_no_picker">This phone has no sound picker</string>
 
+    <!-- Diagnostics: Settings row and its window. Stays on the phone; the user shares it. -->
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="settings_diagnostics_subtitle">How this phone reaches your relay, to share when something doesn\'t arrive</string>
+    <string name="diag_title">Sotto diagnostics</string>
+    <string name="diag_share">Share</string>
+    <string name="diag_version">Sotto</string>
+    <string name="diag_phone">Phone</string>
+    <string name="diag_relay">Relay</string>
+    <string name="diag_connection">Connection now</string>
+    <string name="diag_connected">Connected</string>
+    <string name="diag_connecting">Connecting…</string>
+    <string name="diag_no_internet">No internet</string>
+    <string name="diag_reconnects">Connection attempts, last hour</string>
+    <string name="diag_push">Google push</string>
+    <string name="diag_push_registered">Working</string>
+    <string name="diag_push_not_registered">Not registered</string>
+    <string name="diag_push_unavailable">Not on this phone</string>
+    <string name="diag_push_not_this_relay">Not with this relay</string>
+    <string name="diag_background_connection">Background connection</string>
+    <string name="diag_on">On</string>
+    <string name="diag_off">Off</string>
+    <string name="diag_battery">Battery</string>
+    <string name="diag_battery_unrestricted">Unrestricted</string>
+    <string name="diag_battery_restricted">Restricted by Android</string>
+    <string name="diag_notifications">Notifications</string>
+    <string name="diag_allowed">Allowed</string>
+    <string name="diag_not_allowed">Not allowed</string>
+    <string name="diag_unsent">Messages waiting to be sent</string>
+    <string name="diag_late">Last late message</string>
+    <!-- %1$d minutes late, noticed at %2$s (date and time) -->
+    <string name="diag_late_value">%1$d min late, %2$s</string>
+    <string name="diag_none">None</string>
+    <!-- Asked before turning the background connection on, on a phone that has Google push -->
+    <string name="settings_background_not_needed_title">Not needed on this phone</string>
+    <string name="settings_background_not_needed_text">Messages and calls already reach this phone through Google push. The background connection keeps a connection to your relay open all the time: it uses more battery, and on a Wi-Fi that keeps dropping it can get in the way of sending.</string>
+    <string name="settings_background_turn_on_anyway">Turn on anyway</string>
+
     <!-- Connection -->
     <string name="settings_section_connection">Connection</string>
     <string name="settings_background_connection">Background connection</string>

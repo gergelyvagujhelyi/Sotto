@@ -116,6 +116,20 @@ class WebSocketClient @Inject constructor(
     @Volatile
     var callActive = false
 
+    /** When connection attempts started (elapsedRealtime), the last hour's: Settings > Diagnostics. */
+    private val attempts = ArrayDeque<Long>()
+
+    private fun recordAttempt(now: Long = SystemClock.elapsedRealtime()) = synchronized(attempts) {
+        attempts.addLast(now)
+        while (attempts.isNotEmpty() && attempts.first() < now - 3_600_000L) attempts.removeFirst()
+    }
+
+    /** Connection attempts in the last hour: a few is normal, dozens means the line keeps dropping. */
+    fun attemptsInLastHour(): Int = synchronized(attempts) {
+        val since = SystemClock.elapsedRealtime() - 3_600_000L
+        attempts.count { it >= since }
+    }
+
     /** When the current loop's session signed in (elapsedRealtime); 0 if it didn't. */
     @Volatile
     private var sessionOpenedAt = 0L
@@ -139,6 +153,7 @@ class WebSocketClient @Inject constructor(
         connectionJob = scope.launch {
             while (isActive) {
                 if (generation == loopGeneration) sessionOpenedAt = 0L
+                recordAttempt()
                 try {
                     markState(generation, SocketState.CONNECTING)
                     connectWebSocket(generation)

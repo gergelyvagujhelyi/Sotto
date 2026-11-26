@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Hearing
@@ -131,6 +132,7 @@ import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.theme.Aurora
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -357,6 +359,45 @@ fun SettingsScreen(
     // maker's battery saver holds messages, calls or the background connection back.
     fun allowBackgroundActivity() = com.sotto.app.ui.components.BackgroundActivity.requestUnrestricted(context)
 
+    fun turnOnBackgroundConnection() {
+        viewModel.updateBackgroundConnection(true)
+        if (batteryOptimised) allowBackgroundActivity()
+    }
+
+    // Turning the background connection on where Google push works: asked first. It isn't needed
+    // there, costs battery, and on a Wi-Fi that keeps dropping it reconnects all the time.
+    var askingBackground by remember { mutableStateOf(false) }
+    if (askingBackground) {
+        AlertDialog(
+            onDismissRequest = { askingBackground = false },
+            title = { Text(stringResource(R.string.settings_background_not_needed_title)) },
+            text = { Text(stringResource(R.string.settings_background_not_needed_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    askingBackground = false
+                    turnOnBackgroundConnection()
+                }) { Text(stringResource(R.string.settings_background_turn_on_anyway)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { askingBackground = false }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
+    // Settings > Diagnostics: read when opened (fresh each time), shown with Share.
+    var diagnostics by remember { mutableStateOf<List<DiagnosticsLine>?>(null) }
+    val diagnosticsScope = androidx.compose.runtime.rememberCoroutineScope()
+    fun openDiagnostics() {
+        diagnosticsScope.launch {
+            diagnostics = viewModel.diagnostics(
+                googlePlay = !noGooglePush,
+                batteryRestricted = com.sotto.app.ui.components.BackgroundActivity.isRestricted(context),
+                notificationsAllowed = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled(),
+            )
+        }
+    }
+    diagnostics?.let { lines -> DiagnosticsDialog(lines, onDismiss = { diagnostics = null }) }
+
     SettingsContent(
         settings = settings,
         shareCode = shareCode,
@@ -380,9 +421,13 @@ fun SettingsScreen(
         onWebRtcVoiceProcessingChange = viewModel::updateWebRtcVoiceProcessing,
         onReduceAnimationsChange = viewModel::updateReduceAnimations,
         onBackgroundConnectionChange = { on ->
-            viewModel.updateBackgroundConnection(on)
-            if (on && batteryOptimised) allowBackgroundActivity()
+            when {
+                !on -> viewModel.updateBackgroundConnection(false)
+                !noGooglePush && viewModel.relayCanPush -> askingBackground = true
+                else -> turnOnBackgroundConnection()
+            }
         },
+        onDiagnostics = { openDiagnostics() },
         backgroundConnectionRecommended = noGooglePush,
         noRelayPush = !viewModel.relayCanPush,
         batteryOptimised = batteryOptimised,
@@ -435,6 +480,7 @@ fun SettingsContent(
     blockedUsers: List<BlockedUser>,
     onUnblock: (userId: String) -> Unit,
     onWipe: () -> Unit,
+    onDiagnostics: () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -706,6 +752,15 @@ fun SettingsContent(
                             onClick = onRotateKeys,
                         )
                     }
+                }
+
+                SettingsGroup {
+                    SettingsRow(
+                        icon = Icons.Rounded.MonitorHeart,
+                        title = stringResource(R.string.settings_diagnostics),
+                        subtitle = stringResource(R.string.settings_diagnostics_subtitle),
+                        onClick = onDiagnostics,
+                    )
                 }
 
                 // Danger zone
@@ -1132,4 +1187,35 @@ private fun Footer() {
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
         )
     }
+}
+
+/** Settings > Diagnostics: the lines, and Share (plain text, through Android's share sheet). */
+@Composable
+private fun DiagnosticsDialog(lines: List<DiagnosticsLine>, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val title = stringResource(R.string.diag_title)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.MonitorHeart, contentDescription = null) },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (line in lines) {
+                    Column {
+                        Text(line.label.asString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(line.value.asString(), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, lines.shareText(context, title))
+                runCatching { context.startActivity(Intent.createChooser(send, title)) }
+            }) { Text(stringResource(R.string.diag_share)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) } },
+    )
 }

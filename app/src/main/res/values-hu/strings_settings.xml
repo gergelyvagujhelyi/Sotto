@@ -40,6 +40,41 @@
     <string name="settings_sound_unknown">Egyéni hang</string>
     <string name="settings_sound_no_picker">Ezen a telefonon nincs hangválasztó</string>
 
+    <!-- Diagnostics -->
+    <string name="settings_diagnostics">Diagnosztika</string>
+    <string name="settings_diagnostics_subtitle">Hogyan éri el ez a telefon a szervert – megoszthatod, ha valami nem érkezik meg</string>
+    <string name="diag_title">Sotto diagnosztika</string>
+    <string name="diag_share">Megosztás</string>
+    <string name="diag_version">Sotto</string>
+    <string name="diag_phone">Telefon</string>
+    <string name="diag_relay">Szerver</string>
+    <string name="diag_connection">Kapcsolat most</string>
+    <string name="diag_connected">Kapcsolódva</string>
+    <string name="diag_connecting">Kapcsolódás…</string>
+    <string name="diag_no_internet">Nincs internet</string>
+    <string name="diag_reconnects">Kapcsolódási kísérletek, utolsó óra</string>
+    <string name="diag_push">Google push</string>
+    <string name="diag_push_registered">Működik</string>
+    <string name="diag_push_not_registered">Nincs regisztrálva</string>
+    <string name="diag_push_unavailable">Nincs ezen a telefonon</string>
+    <string name="diag_push_not_this_relay">Ezzel a szerverrel nem</string>
+    <string name="diag_background_connection">Háttérkapcsolat</string>
+    <string name="diag_on">Be</string>
+    <string name="diag_off">Ki</string>
+    <string name="diag_battery">Akkumulátor</string>
+    <string name="diag_battery_unrestricted">Korlátlan</string>
+    <string name="diag_battery_restricted">Az Android korlátozza</string>
+    <string name="diag_notifications">Értesítések</string>
+    <string name="diag_allowed">Engedélyezve</string>
+    <string name="diag_not_allowed">Nincs engedélyezve</string>
+    <string name="diag_unsent">Küldésre váró üzenetek</string>
+    <string name="diag_late">Utolsó késve érkezett üzenet</string>
+    <string name="diag_late_value">%1$d perc késés, %2$s</string>
+    <string name="diag_none">Nincs</string>
+    <string name="settings_background_not_needed_title">Ezen a telefonon nincs rá szükség</string>
+    <string name="settings_background_not_needed_text">Az üzenetek és a hívások már a Google push értesítéseken keresztül megérkeznek erre a telefonra. A háttérkapcsolat folyamatosan nyitva tart egy kapcsolatot a szerverrel: több akkut fogyaszt, és egy akadozó Wi-Fi-n akadályozhatja a küldést.</string>
+    <string name="settings_background_turn_on_anyway">Bekapcsolom mégis</string>
+
     <!-- Connection -->
     <string name="settings_section_connection">Kapcsolat</string>
     <string name="settings_background_connection">Háttérkapcsolat</string>

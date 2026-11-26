@@ -36,7 +36,71 @@ class SettingsViewModel @Inject constructor(
     private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
     private val chatNotifications: com.sotto.app.notification.ChatNotificationManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
+    private val networkMonitor: com.sotto.app.connection.DefaultNetworkMonitor,
+    private val pushTokens: com.sotto.app.domain.repository.PushTokenRepository,
+    private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : ViewModel() {
+
+    /**
+     * Settings > Diagnostics: how this phone reaches the relay, to screenshot or share when
+     * something doesn't arrive. What needs a Context the screen passes in.
+     */
+    suspend fun diagnostics(
+        googlePlay: Boolean,
+        batteryRestricted: Boolean,
+        notificationsAllowed: Boolean,
+    ): List<DiagnosticsLine> {
+        val settings = settingsRepository.getPrivacySettings().first()
+        val unsent = runCatching { messageRepository.countUnsent() }.getOrDefault(0)
+        val pushRegistered = runCatching { pushTokens.registeredWithRelay() }.getOrDefault(false)
+        val late = backgroundOffers.state.value
+        fun line(label: Int, value: UiText) = DiagnosticsLine(UiText.res(label), value)
+        fun onOff(on: Boolean) = UiText.res(if (on) R.string.diag_on else R.string.diag_off)
+        return listOf(
+            line(R.string.diag_version, UiText.Plain("${com.sotto.app.BuildConfig.VERSION_NAME} (${com.sotto.app.BuildConfig.VERSION_CODE})")),
+            line(R.string.diag_phone, UiText.Plain("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}")),
+            line(R.string.diag_relay, UiText.Plain(relayConfig.host ?: "–")),
+            line(
+                R.string.diag_connection,
+                UiText.res(
+                    when {
+                        webSocketClient.connected.value -> R.string.diag_connected
+                        networkMonitor.defaultNetwork.value == null && networkMonitor.watching -> R.string.diag_no_internet
+                        else -> R.string.diag_connecting
+                    },
+                ),
+            ),
+            line(R.string.diag_reconnects, UiText.Plain(webSocketClient.attemptsInLastHour().toString())),
+            line(
+                R.string.diag_push,
+                UiText.res(
+                    when {
+                        !relayConfig.canPush -> R.string.diag_push_not_this_relay
+                        !googlePlay -> R.string.diag_push_unavailable
+                        pushRegistered -> R.string.diag_push_registered
+                        else -> R.string.diag_push_not_registered
+                    },
+                ),
+            ),
+            line(R.string.diag_background_connection, onOff(settings.backgroundConnection)),
+            line(R.string.diag_battery, UiText.res(if (batteryRestricted) R.string.diag_battery_restricted else R.string.diag_battery_unrestricted)),
+            line(R.string.diag_notifications, UiText.res(if (notificationsAllowed) R.string.diag_allowed else R.string.diag_not_allowed)),
+            line(R.string.diag_unsent, UiText.Plain(unsent.toString())),
+            line(
+                R.string.diag_late,
+                if (late.lateAt > 0) {
+                    UiText.res(
+                        R.string.diag_late_value,
+                        late.lateMinutes,
+                        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(late.lateAt)),
+                    )
+                } else {
+                    UiText.res(R.string.diag_none)
+                },
+            ),
+        )
+    }
 
     private val _sounds = MutableStateFlow<Sounds?>(null)
     /** The sounds in Settings > Sounds; null until read. */

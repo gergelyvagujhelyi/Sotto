@@ -907,6 +907,8 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun countUnsent(): Int = messageDao.countUnsent()
+
     override suspend fun resendFailed(): Boolean {
         val now = System.currentTimeMillis()
         // The same rule the chat shows "Not sent yet · Sends when connected" by (AutoResend).
