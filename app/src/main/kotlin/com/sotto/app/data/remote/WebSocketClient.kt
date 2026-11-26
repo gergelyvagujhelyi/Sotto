@@ -124,7 +124,10 @@ class WebSocketClient @Inject constructor(
         while (attempts.isNotEmpty() && attempts.first() < now - 3_600_000L) attempts.removeFirst()
     }
 
-    /** Connection attempts in the last hour: a few is normal, dozens means the line keeps dropping. */
+    /**
+     * Connection attempts in the last hour, since Sotto last started: a few is normal, dozens
+     * means the line keeps dropping.
+     */
     fun attemptsInLastHour(): Int = synchronized(attempts) {
         val since = SystemClock.elapsedRealtime() - 3_600_000L
         attempts.count { it >= since }
@@ -153,7 +156,6 @@ class WebSocketClient @Inject constructor(
         connectionJob = scope.launch {
             while (isActive) {
                 if (generation == loopGeneration) sessionOpenedAt = 0L
-                recordAttempt()
                 try {
                     markState(generation, SocketState.CONNECTING)
                     connectWebSocket(generation)
@@ -244,6 +246,8 @@ class WebSocketClient @Inject constructor(
             "ws://" + relay.removePrefix("http://")
         }
 
+        // A real try (an account and a relay): counted for Settings > Diagnostics.
+        recordAttempt()
         client.webSocket("$baseUrl/v1/ws") {
             // Authenticate with signed token
             send(buildJsonObject {

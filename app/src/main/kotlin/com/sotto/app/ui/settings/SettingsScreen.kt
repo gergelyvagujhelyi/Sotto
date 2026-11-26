@@ -366,7 +366,7 @@ fun SettingsScreen(
 
     // Turning the background connection on where Google push works: asked first. It isn't needed
     // there, costs battery, and on a Wi-Fi that keeps dropping it reconnects all the time.
-    var askingBackground by remember { mutableStateOf(false) }
+    var askingBackground by rememberSaveable { mutableStateOf(false) }
     if (askingBackground) {
         AlertDialog(
             onDismissRequest = { askingBackground = false },
@@ -384,19 +384,26 @@ fun SettingsScreen(
         )
     }
 
-    // Settings > Diagnostics: read when opened (fresh each time), shown with Share.
+    // Settings > Diagnostics: read when opened (fresh each time, also after a rotation), with Share.
+    var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by remember { mutableStateOf<List<DiagnosticsLine>?>(null) }
-    val diagnosticsScope = androidx.compose.runtime.rememberCoroutineScope()
-    fun openDiagnostics() {
-        diagnosticsScope.launch {
-            diagnostics = viewModel.diagnostics(
+    LaunchedEffect(diagnosticsOpen) {
+        diagnostics = if (!diagnosticsOpen) null else try {
+            viewModel.diagnostics(
                 googlePlay = !noGooglePush,
                 batteryRestricted = com.sotto.app.ui.components.BackgroundActivity.isRestricted(context),
                 notificationsAllowed = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled(),
             )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Couldn't read (a database being wiped, say): no window rather than a crash.
+            diagnosticsOpen = false
+            null
         }
     }
-    diagnostics?.let { lines -> DiagnosticsDialog(lines, onDismiss = { diagnostics = null }) }
+    diagnostics?.let { lines -> DiagnosticsDialog(lines, onDismiss = { diagnosticsOpen = false }) }
+    val warnScope = androidx.compose.runtime.rememberCoroutineScope()
 
     SettingsContent(
         settings = settings,
@@ -421,13 +428,14 @@ fun SettingsScreen(
         onWebRtcVoiceProcessingChange = viewModel::updateWebRtcVoiceProcessing,
         onReduceAnimationsChange = viewModel::updateReduceAnimations,
         onBackgroundConnectionChange = { on ->
-            when {
-                !on -> viewModel.updateBackgroundConnection(false)
-                !noGooglePush && viewModel.relayCanPush -> askingBackground = true
-                else -> turnOnBackgroundConnection()
+            if (!on) {
+                viewModel.updateBackgroundConnection(false)
+            } else {
+                // Asked only where push really works: registered with our relay.
+                warnScope.launch { if (!noGooglePush && viewModel.pushRegistered()) askingBackground = true else turnOnBackgroundConnection() }
             }
         },
-        onDiagnostics = { openDiagnostics() },
+        onDiagnostics = { diagnosticsOpen = true },
         backgroundConnectionRecommended = noGooglePush,
         noRelayPush = !viewModel.relayCanPush,
         batteryOptimised = batteryOptimised,

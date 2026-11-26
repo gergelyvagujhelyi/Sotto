@@ -907,7 +907,8 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun countUnsent(): Int = messageDao.countUnsent()
+    // The last day's, as the automatic resend: older failures wait for a tap and aren't "waiting".
+    override suspend fun countUnsent(): Int = messageDao.countUnsent(System.currentTimeMillis() - AutoResend.WINDOW_MS)
 
     override suspend fun resendFailed(): Boolean {
         val now = System.currentTimeMillis()

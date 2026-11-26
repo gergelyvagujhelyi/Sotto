@@ -52,9 +52,10 @@
     <string name="diag_connected">Kapcsolódva</string>
     <string name="diag_connecting">Kapcsolódás…</string>
     <string name="diag_no_internet">Nincs internet</string>
-    <string name="diag_reconnects">Kapcsolódási kísérletek, utolsó óra</string>
+    <string name="diag_no_relay">Nincs beállítva szerver</string>
+    <string name="diag_reconnects">Kapcsolódási kísérletek, utolsó óra (a Sotto indulása óta)</string>
     <string name="diag_push">Google push</string>
-    <string name="diag_push_registered">Működik</string>
+    <string name="diag_push_registered">Regisztrálva</string>
     <string name="diag_push_not_registered">Nincs regisztrálva</string>
     <string name="diag_push_unavailable">Nincs ezen a telefonon</string>
     <string name="diag_push_not_this_relay">Ezzel a szerverrel nem</string>
@@ -67,8 +68,8 @@
     <string name="diag_notifications">Értesítések</string>
     <string name="diag_allowed">Engedélyezve</string>
     <string name="diag_not_allowed">Nincs engedélyezve</string>
-    <string name="diag_unsent">Küldésre váró üzenetek</string>
-    <string name="diag_late">Utolsó késve érkezett üzenet</string>
+    <string name="diag_unsent">Küldésre váró üzenetek (utolsó nap)</string>
+    <string name="diag_late">Utolsó késve érkezett üzenet (elmúlt hét)</string>
     <string name="diag_late_value">%1$d perc késés, %2$s</string>
     <string name="diag_none">Nincs</string>
     <string name="settings_background_not_needed_title">Ezen a telefonon nincs rá szükség</string>

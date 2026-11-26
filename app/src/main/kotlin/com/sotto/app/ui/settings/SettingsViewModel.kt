@@ -42,6 +42,16 @@ class SettingsViewModel @Inject constructor(
     private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : ViewModel() {
 
+    /** Push is registered with our relay: then the background connection isn't needed (the warning). */
+    suspend fun pushRegistered(): Boolean =
+        relayConfig.canPush && try {
+            pushTokens.registeredWithRelay()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+
     /**
      * Settings > Diagnostics: how this phone reaches the relay, to screenshot or share when
      * something doesn't arrive. What needs a Context the screen passes in.
@@ -52,9 +62,16 @@ class SettingsViewModel @Inject constructor(
         notificationsAllowed: Boolean,
     ): List<DiagnosticsLine> {
         val settings = settingsRepository.getPrivacySettings().first()
-        val unsent = runCatching { messageRepository.countUnsent() }.getOrDefault(0)
-        val pushRegistered = runCatching { pushTokens.registeredWithRelay() }.getOrDefault(false)
-        val late = backgroundOffers.state.value
+        val unsent = try {
+            messageRepository.countUnsent()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            0
+        }
+        val pushRegistered = pushRegistered()
+        // A delay from long ago isn't news: only the last week's.
+        val late = backgroundOffers.state.value.takeIf { System.currentTimeMillis() - it.lateAt <= 7L * 24 * 60 * 60 * 1000 }
         fun line(label: Int, value: UiText) = DiagnosticsLine(UiText.res(label), value)
         fun onOff(on: Boolean) = UiText.res(if (on) R.string.diag_on else R.string.diag_off)
         return listOf(
@@ -65,6 +82,7 @@ class SettingsViewModel @Inject constructor(
                 R.string.diag_connection,
                 UiText.res(
                     when {
+                        relayConfig.baseUrl == null -> R.string.diag_no_relay
                         webSocketClient.connected.value -> R.string.diag_connected
                         networkMonitor.defaultNetwork.value == null && networkMonitor.watching -> R.string.diag_no_internet
                         else -> R.string.diag_connecting
@@ -89,7 +107,7 @@ class SettingsViewModel @Inject constructor(
             line(R.string.diag_unsent, UiText.Plain(unsent.toString())),
             line(
                 R.string.diag_late,
-                if (late.lateAt > 0) {
+                if (late != null && late.lateAt > 0) {
                     UiText.res(
                         R.string.diag_late_value,
                         late.lateMinutes,

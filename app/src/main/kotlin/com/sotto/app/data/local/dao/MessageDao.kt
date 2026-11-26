@@ -134,9 +134,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE state = 'SENDING'")
     suspend fun getSendingMessages(): List<MessageEntity>
 
-    /** Our messages not out yet (sending or failed): Settings > Diagnostics. */
-    @Query("SELECT COUNT(*) FROM messages WHERE isOutgoing = 1 AND state IN ('SENDING', 'FAILED')")
-    suspend fun countUnsent(): Int
+    /** Our messages written since [since] and not out yet (sending or failed): Settings > Diagnostics. */
+    @Query("SELECT COUNT(*) FROM messages WHERE isOutgoing = 1 AND state IN ('SENDING', 'FAILED') AND timestamp >= :since")
+    suspend fun countUnsent(since: Long): Int
 
     /** Our failed one-to-one messages written since [since], oldest first, so they go in order (AutoResend; files and HD photos aren't resent by themselves). */
     @Query("SELECT * FROM messages WHERE isOutgoing = 1 AND state = 'FAILED' AND groupId IS NULL AND timestamp >= :since ORDER BY timestamp")
