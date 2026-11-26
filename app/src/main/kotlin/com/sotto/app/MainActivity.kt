@@ -246,7 +246,11 @@ class MainActivity : ComponentActivity() {
                 // The relay out of reach for a few seconds: a bar says so (messages wait, none come in).
                 val connected by webSocketClient.connected.collectAsState()
                 val network by networkMonitor.defaultNetwork.collectAsState()
-                val connectionProblem = com.sotto.app.ui.components.rememberConnectionProblem(connected, online = network != null)
+                // A phone whose network can't be watched counts as online: never a false "No internet".
+                val connectionProblem = com.sotto.app.ui.components.rememberConnectionProblem(
+                    connected,
+                    online = network != null || !networkMonitor.watching,
+                )
                     .takeIf { startDestination == Routes.CONVERSATIONS }
                 val anyBar = ongoingCall != null || update != com.sotto.app.update.AppUpdate.None || connectionProblem != null
                 Column(Modifier.fillMaxSize()) {

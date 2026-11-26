@@ -395,6 +395,27 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun `copies that never retry can't crowd out a fresh one`() = runTest {
+        val id = fika()
+        // 250 old copies whose member's keys don't match: failed for good, oldest in the outbox.
+        repeat(250) { i ->
+            astrid.groupDao.outbox["stuck$i"] = com.sotto.app.data.local.entity.GroupOutboxEntity(
+                id = "stuck$i", groupId = id, messageId = "old$i", recipientId = "cecilia", kind = "msg", packet = null,
+                relayId = "r-stuck$i", state = "failed", attempts = 1, lastError = GroupRepositoryImpl.ERROR_KEYS,
+                createdAt = relay.clock - 1_000, updatedAt = relay.clock - 1_000,
+            )
+        }
+        relay.failFor += "cecilia"
+        astrid.repo.sendText(id, "Fika?")
+        val row = astrid.messageDao.messagesIn(id).single()
+        relay.failFor.clear()
+        relay.posted.clear()
+        assertFalse(astrid.repo.flushOutbox())
+        assertEquals(MessageState.SENT.name, astrid.messageDao.getById(row.id)!!.state)
+        assertEquals(listOf("cecilia"), relay.posted.map { it.to })
+    }
+
+    @Test
     fun `a failed copy older than a day waits for a tap`() = runTest {
         val id = fika()
         relay.failFor += "cecilia"

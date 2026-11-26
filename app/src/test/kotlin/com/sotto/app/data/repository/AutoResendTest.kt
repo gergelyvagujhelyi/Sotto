@@ -16,6 +16,14 @@ class AutoResendTest {
     }
 
     @Test
+    fun `a one-to-one message to someone blocked, or a file, waits for a tap`() {
+        assertTrue(AutoResend.oneToOneDue(writtenAt = now - hour, now = now, blocked = false, storeBacked = false))
+        assertFalse(AutoResend.oneToOneDue(writtenAt = now - hour, now = now, blocked = true, storeBacked = false))
+        assertFalse(AutoResend.oneToOneDue(writtenAt = now - hour, now = now, blocked = false, storeBacked = true))
+        assertFalse(AutoResend.oneToOneDue(writtenAt = now - 25 * hour, now = now, blocked = false, storeBacked = false))
+    }
+
+    @Test
     fun `a group message's failed copy goes again, a few times, unless its keys don't match`() {
         assertTrue(AutoResend.copyDue("m", attempts = 1, lastError = "timeout", createdAt = now - hour, now = now))
         // Keys not fetched yet: the relay was out of reach, like any other failure.

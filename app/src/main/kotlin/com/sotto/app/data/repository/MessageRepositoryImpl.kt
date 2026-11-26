@@ -937,9 +937,12 @@ class MessageRepositoryImpl @Inject constructor(
     }
 
     override suspend fun resendFailed(): Boolean {
-        val since = System.currentTimeMillis() - AutoResend.WINDOW_MS
-        // Not to someone blocked since: that waits for a tap (or never goes).
-        suspend fun due() = messageDao.getFailedOutgoingSince(since).filterNot { blockedUserDao.isBlocked(it.recipientId) }
+        val now = System.currentTimeMillis()
+        // The same rule the chat shows "Not sent yet · Sends when connected" by (AutoResend).
+        suspend fun due() = messageDao.getFailedOutgoingSince(now - AutoResend.WINDOW_MS).filter {
+            it.plaintext != null &&
+                AutoResend.oneToOneDue(it.timestamp, now, blockedUserDao.isBlocked(it.recipientId), usesStore(it))
+        }
         for (message in due()) {
             try {
                 retryFailed(message.id)
@@ -1112,13 +1115,18 @@ class MessageRepositoryImpl @Inject constructor(
         // The server returns at most one page (oldest first); keep going while
         // full pages make progress so a backlog can't starve newer messages.
         var pages = 0
+        var pageSize = PENDING_PAGE_SIZE
+        // Each message is processed once per fetch: a held one (not ACKed) comes back on the next
+        // page too, and processing it again would count its hold twice.
+        val processed = HashSet<String>()
         while (true) {
-            val pending = apiService.fetchPendingMessages()
+            val pending = if (pageSize == PENDING_PAGE_SIZE) apiService.fetchPendingMessages() else apiService.fetchPendingMessages(pageSize)
             if (pending.isEmpty()) return
-            noticeLateDelivery(pending, apiService.relayTimeOfLastFetch())
+            val relayNow = apiService.relayTimeOfLastFetch()
 
             val receivedIds = mutableListOf<String>()
             for (dto in pending) {
+                if (!processed.add(dto.messageId)) continue
                 // Each message is processed without cancellation: once decrypt has
                 // consumed (and persisted) the message key, the plaintext must reach
                 // the database, or it is lost for good (re-delivery only yields a
@@ -1130,16 +1138,25 @@ class MessageRepositoryImpl @Inject constructor(
 
             if (receivedIds.isNotEmpty()) {
                 apiService.acknowledgeMessages(AckRequest(receivedIds))
+                // Late only for what arrived now: a held message, back on every sync, isn't news.
+                noticeLateDelivery(pending.filter { it.messageId in receivedIds }, relayNow)
             }
             pages++
-            if (pending.size < PENDING_PAGE_SIZE || receivedIds.isEmpty() || pages >= MAX_PAGES_PER_FETCH) return
+            // A full small page with nothing to ACK: held messages at the front of the queue (keys
+            // not fetched yet, a missing post-quantum signature) would block everything behind
+            // them. Look past them once, with a page as large as before small pages.
+            if (receivedIds.isEmpty() && pending.size >= pageSize && pageSize < WIDE_PAGE_SIZE) {
+                pageSize = WIDE_PAGE_SIZE
+                continue
+            }
+            if (pending.size < pageSize || receivedIds.isEmpty() || pages >= MAX_PAGES_PER_FETCH) return
         }
     }
 
     /** The oldest of [pending] waited on the relay past the threshold before [relayNow] (LateDelivery). */
     private fun noticeLateDelivery(pending: List<com.sotto.app.data.remote.dto.PendingMessageDto>, relayNow: Long?) {
         relayNow ?: return
-        val oldest = pending.minOf { it.timestamp }.takeIf { it > 0 } ?: return
+        val oldest = pending.minOfOrNull { it.timestamp }?.takeIf { it > 0 } ?: return
         val waited = relayNow - oldest
         if (waited >= com.sotto.app.connection.LateDelivery.THRESHOLD_MS) backgroundOffers.noticedLate(waited)
     }
@@ -1827,8 +1844,10 @@ class MessageRepositoryImpl @Inject constructor(
     }
 
     companion object {
-        /** Server default page size for GET /v1/messages/pending. */
+        /** Page size we ask the relay for (its `limit`; the relay's own default is 100). */
         private const val PENDING_PAGE_SIZE = com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE
+        /** One page this large when a small one held nothing to ACK (see fetchPendingInternal). */
+        private const val WIDE_PAGE_SIZE = 100
         private const val ROLE_SENDER = "s"
         private const val ROLE_RECEIVER = "r"
         private const val ROLE_DONE = "d"

@@ -97,7 +97,7 @@ class KtorApiService @Inject constructor(
             retryIf(MAX_RETRIES) { request, response ->
                 response.status.value in RETRY_STATUSES && safeToRepeat(request.method, request.url.encodedPath)
             }
-            // Not after a timeout: the relay may be slow, and three waits would hold a send for 30 s.
+            // Not after a timeout: the relay may be slow, and three waits (up to 30 s each) would hold a send for minutes.
             retryOnExceptionIf(MAX_RETRIES) { request, cause ->
                 cause is java.io.IOException && cause !is java.net.SocketTimeoutException &&
                     safeToRepeat(request.method, request.url.build().encodedPath)
@@ -147,6 +147,9 @@ class KtorApiService @Inject constructor(
         const val MAX_RETRIES = 2
         /** Relay errors that pass: a crash, or a restart behind the proxy. Not 507 (queue full). */
         val RETRY_STATUSES = setOf(500, 502, 503, 504)
+        /** How long a message send or fetch may go without progress before it counts as failed. */
+        const val SEND_SOCKET_TIMEOUT_MS = 30_000L
+
         /**
          * Requests that do no harm when the relay gets them twice: reads, acks, the push
          * token, and messages (the relay keeps one copy per client message id, and a
@@ -154,9 +157,6 @@ class KtorApiService @Inject constructor(
          * Not sign-up (it uses up an invite), invites, key rotation, deleting the
          * account, receipts or call signals.
          */
-        /** How long a message send or fetch may go without progress before it counts as failed. */
-        const val SEND_SOCKET_TIMEOUT_MS = 30_000L
-
         fun safeToRepeat(method: HttpMethod, path: String): Boolean =
             method == HttpMethod.Get || REPEATABLE_PATHS.any { path.endsWith(it) }
 
@@ -253,12 +253,14 @@ class KtorApiService @Inject constructor(
 
     override fun relayTimeOfLastFetch(): Long? = lastFetchRelayTime
 
-    override suspend fun fetchPendingMessages(): List<PendingMessageDto> {
+    override suspend fun fetchPendingMessages(): List<PendingMessageDto> = fetchPendingMessages(ApiService.PENDING_PAGE_SIZE)
+
+    override suspend fun fetchPendingMessages(limit: Int): List<PendingMessageDto> {
         val response: HttpResponse = client.get("/v1/messages/pending") {
             header("Authorization", "Bearer ${authToken()}")
             // Small pages: each message carries kilobytes of signatures, and a phone that was
             // away pulled hundreds of KB at once, which a poor line couldn't finish in time.
-            parameter("limit", ApiService.PENDING_PAGE_SIZE)
+            parameter("limit", limit)
             timeout { socketTimeoutMillis = SEND_SOCKET_TIMEOUT_MS }
         }
         check(response.status.isSuccess()) { "Fetch pending failed: ${response.status}" }

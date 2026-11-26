@@ -77,22 +77,11 @@ class RelayConnectionPolicy @Inject constructor(
             }
         }
         // The relay answered a request while the socket is down (waiting out its backoff after an
-        // outage): it's reachable, so connect now rather than when the backoff ends.
+        // outage): it's reachable, so connect now rather than when the backoff ends. Not during a
+        // call: CallManager retries the socket itself, faster.
         scope.launch {
             reachability.answered.collect {
-                if (keepNow() && !webSocketClient.connected.value) webSocketClient.connectUnlessWorking()
-            }
-        }
-        // On screen with the socket down: try every few seconds, not on the backoff's schedule
-        // (up to a minute), so the "Connecting…" bar goes soon after the relay is back. Only while
-        // on screen with a network, so it costs nothing in the background. A call moves the
-        // socket itself (CallManager).
-        scope.launch {
-            while (true) {
-                kotlinx.coroutines.delay(ON_SCREEN_RETRY_MS)
-                if (startedActivities > 0 && !webSocketClient.connected.value &&
-                    networkMonitor.defaultNetwork.value != null && callManager.get().callState.value == null
-                ) {
+                if (keepNow() && !webSocketClient.connected.value && callManager.get().callState.value == null) {
                     webSocketClient.connectUnlessWorking()
                 }
             }
@@ -133,14 +122,19 @@ class RelayConnectionPolicy @Inject constructor(
     override fun onActivityStarted(activity: Activity) {
         startedActivities++
         if (startedActivities == 1) {
+            webSocketClient.onScreen = true
             cancelClose()
-            webSocketClient.connect() // no-op while connected or connecting
+            // Connect, or cut short a long wait from the background (connected or connecting: no-op).
+            webSocketClient.connectUnlessWorking()
         }
     }
 
     override fun onActivityStopped(activity: Activity) {
         startedActivities = (startedActivities - 1).coerceAtLeast(0)
-        if (startedActivities == 0) scheduleClose(AWAY_GRACE_MS)
+        if (startedActivities == 0) {
+            webSocketClient.onScreen = false
+            scheduleClose(AWAY_GRACE_MS)
+        }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -155,8 +149,6 @@ class RelayConnectionPolicy @Inject constructor(
         const val AWAY_GRACE_MS = 2_000L
         /** After a push opened the socket in the background: time for buffered signals to arrive. */
         const val WAKE_LINGER_MS = 6_000L
-        /** On screen with the socket down, how often to try again. */
-        const val ON_SCREEN_RETRY_MS = 5_000L
     }
 }
 

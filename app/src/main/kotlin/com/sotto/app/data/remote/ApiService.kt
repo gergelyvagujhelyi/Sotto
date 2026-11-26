@@ -58,6 +58,9 @@ interface ApiService {
     suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse
     suspend fun fetchPendingMessages(): List<PendingMessageDto>
 
+    /** A page of [limit] instead of [PENDING_PAGE_SIZE] (to look past held messages). */
+    suspend fun fetchPendingMessages(limit: Int): List<PendingMessageDto> = fetchPendingMessages()
+
     /** The relay's clock (its Date header, ms) when the last [fetchPendingMessages] was answered; null if unknown. */
     fun relayTimeOfLastFetch(): Long? = null
     suspend fun acknowledgeMessages(request: AckRequest)

@@ -23,6 +23,11 @@ class DefaultNetworkMonitor @Inject constructor(@ApplicationContext context: Con
     private val _defaultNetwork = MutableStateFlow<Long?>(null)
     val defaultNetwork: StateFlow<Long?> = _defaultNetwork.asStateFlow()
 
+    /** False when Android wouldn't let us watch the network: then [defaultNetwork] says nothing. */
+    @Volatile
+    var watching = true
+        private set
+
     init {
         try {
             context.getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
@@ -38,6 +43,7 @@ class DefaultNetworkMonitor @Inject constructor(@ApplicationContext context: Con
                 Handler(Looper.getMainLooper()),
             )
         } catch (e: Exception) {
+            watching = false
             Log.w("DefaultNetworkMonitor", "Can't watch the default network: ${e.message}")
         }
     }

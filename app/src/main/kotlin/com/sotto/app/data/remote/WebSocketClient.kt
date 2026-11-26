@@ -63,6 +63,8 @@ class WebSocketClient @Inject constructor(
         /** During a call: the first retry after a failed reconnect (then doubling). */
         private const val URGENT_RECONNECT_DELAY = 250L
         private const val MAX_RECONNECT_DELAY = 60_000L
+        /** On screen, the longest wait between reconnect attempts. */
+        private const val ON_SCREEN_MAX_RECONNECT_DELAY = 10_000L
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -103,6 +105,10 @@ class WebSocketClient @Inject constructor(
     @Volatile
     private var loopGeneration = 0
 
+    /** Sotto is on screen (RelayConnectionPolicy): reconnect attempts wait at most ON_SCREEN_MAX_RECONNECT_DELAY. */
+    @Volatile
+    var onScreen = false
+
     private val _connected = MutableStateFlow(false)
     /** The socket is open and signed in: for the screens' "Connecting…" bar. */
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
@@ -131,7 +137,9 @@ class WebSocketClient @Inject constructor(
                 }
 
                 // Exponential backoff reconnect
-                delay(reconnectDelay)
+                // On screen the wait is capped, so "Connecting…" goes soon after the relay is back;
+                // off screen the backoff grows to a minute, as before.
+                delay(if (onScreen) reconnectDelay.coerceAtMost(ON_SCREEN_MAX_RECONNECT_DELAY) else reconnectDelay)
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
         }

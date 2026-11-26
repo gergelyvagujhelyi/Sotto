@@ -132,6 +132,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.sotto.app.R
 import com.sotto.app.domain.model.DisplayNames
 import com.sotto.app.domain.model.Message
+import com.sotto.app.domain.model.MediaKind
 import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.ui.components.AppSnackbarHost
@@ -605,6 +606,13 @@ fun ChatContent(
     group: GroupChatUi? = null,
 ) {
     val listState = rememberLazyListState()
+    // A clock for the rows: "Not sent yet" turns into tap-to-retry once a failed message is a day old.
+    val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
+        while (true) {
+            kotlinx.coroutines.delay(60_000)
+            value = System.currentTimeMillis()
+        }
+    }
     val context = LocalContext.current
     val voicePlayer = remember { com.sotto.app.media.VoicePlayer() }
     var viewingPhoto by rememberSaveable { mutableStateOf<String?>(null) }
@@ -841,6 +849,8 @@ fun ChatContent(
                                 ChatRowItem(
                                     row = row,
                                     onRetry = onRetry,
+                                    contactBlocked = isBlocked,
+                                    now = now,
                                     contactName = (row as? ChatRow.Entry)?.message?.let(quoteAuthor) ?: quoteName,
                                     group = group,
                                     onReply = onReply,
@@ -1369,6 +1379,10 @@ private fun ChatRowItem(
     hidden: Boolean = false,
     onBubblePlaced: ((Rect) -> Unit)? = null,
     group: GroupChatUi? = null,
+    /** The contact is blocked: a failed message to them doesn't go by itself. */
+    contactBlocked: Boolean = false,
+    /** The time, kept fresh so "Not sent yet" turns into the tap-to-retry when a day has passed. */
+    now: Long = System.currentTimeMillis(),
 ) {
     when (row) {
         ChatRow.EncryptionNotice -> EncryptionNotice(modifier.padding(top = 4.dp, bottom = 6.dp))
@@ -1409,10 +1423,19 @@ private fun ChatRowItem(
                     pickingMore = false
                 }
                 val groupReactions = group?.reactions?.get(message.id).orEmpty()
-                // Failed, but it goes again by itself once there's a connection (AutoResend): shown as
-                // waiting. Not a file that couldn't follow its message: that's a tap.
-                val waiting = message.isOutgoing && message.state == MessageState.FAILED &&
-                    com.sotto.app.data.repository.AutoResend.messageDue(message.timestamp.toEpochMilliseconds(), System.currentTimeMillis())
+                // Failed, but it goes again by itself once there's a connection: shown as waiting, by
+                // the same rules the resend goes by (AutoResend; in a group, the outbox's own count).
+                // Not a file that couldn't follow its message (shownState): that's a tap.
+                val waiting = message.isOutgoing && message.state == MessageState.FAILED && if (group != null) {
+                    (group.progress[message.id]?.retrying ?: 0) > 0
+                } else {
+                    com.sotto.app.data.repository.AutoResend.oneToOneDue(
+                        writtenAt = message.timestamp.toEpochMilliseconds(),
+                        now = now,
+                        blocked = contactBlocked,
+                        storeBacked = message.media?.let { it.kind == MediaKind.FILE || (it.kind == MediaKind.PHOTO && it.hd) } == true,
+                    )
+                }
                 // A group message partway delivered or read shows how far ("1/2").
                 val ticks = if (group != null && message.isOutgoing) groupTicks(message.shownState, group.progress[message.id]) else message.shownState to null
                 val myReaction = if (group != null) groupReactions.firstOrNull { it.isMine }?.emoji else message.myReaction
@@ -1449,15 +1472,21 @@ private fun ChatRowItem(
                         state = ticks.first,
                         stateNote = ticks.second,
                         waiting = waiting,
-                        // A group message some members got: say so, not a blanket "not sent".
-                        failedNote = group?.progress?.get(message.id)
-                            ?.takeIf { message.isOutgoing && message.state == MessageState.FAILED && it.sent > 0 }
-                            ?.let { p ->
-                                stringResource(
+                        // A group message some members got says so, not a blanket "not sent"; a tap on
+                        // our group message opens who has it (with a retry there), so it says "details".
+                        failedNote = if (group != null && message.isOutgoing && message.state == MessageState.FAILED) {
+                            val p = group.progress[message.id]
+                            when {
+                                p != null && p.sent > 0 -> stringResource(
                                     if (waiting) R.string.chat_group_partly_sent_waiting else R.string.chat_group_partly_sent,
                                     p.sent, p.total,
                                 )
-                            },
+                                waiting -> null
+                                else -> stringResource(R.string.chat_group_not_delivered)
+                            }
+                        } else {
+                            null
+                        },
                         groupedWithPrevious = row.groupedWithPrevious,
                         quote = message.bubbleQuote(contactName),
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },

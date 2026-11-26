@@ -6,6 +6,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -57,9 +58,15 @@ fun backgroundOffer(restricted: Boolean, state: BackgroundOfferState, now: Long)
 /** Keeps [BackgroundOfferState] on the phone (not secret: two times and a number). */
 @Singleton
 class BackgroundOfferStore @Inject constructor(@ApplicationContext context: Context) {
-    private val prefs = context.getSharedPreferences("background_offer", Context.MODE_PRIVATE)
-    private val _state = MutableStateFlow(read())
+    // Read off the main thread: this is made at app start (MessageRepositoryImpl), and the card
+    // needs it only once the chat list shows.
+    private val prefs by lazy { context.getSharedPreferences("background_offer", Context.MODE_PRIVATE) }
+    private val _state = MutableStateFlow(BackgroundOfferState())
     val state: StateFlow<BackgroundOfferState> = _state.asStateFlow()
+
+    init {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch { _state.value = read() }
+    }
 
     private fun read() = BackgroundOfferState(
         dismissedAt = prefs.getLong(DISMISSED_AT, 0),

@@ -134,7 +134,7 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE state = 'SENDING'")
     suspend fun getSendingMessages(): List<MessageEntity>
 
-    /** Our failed one-to-one messages written since [since], oldest first, so they go in order (AutoResend). */
+    /** Our failed one-to-one messages written since [since], oldest first, so they go in order (AutoResend; files and HD photos aren't resent by themselves). */
     @Query("SELECT * FROM messages WHERE isOutgoing = 1 AND state = 'FAILED' AND groupId IS NULL AND timestamp >= :since ORDER BY timestamp")
     suspend fun getFailedOutgoingSince(since: Long): List<MessageEntity>
 

@@ -166,8 +166,8 @@ class GroupRepositoryImpl @Inject constructor(
         }
 
     override fun observeProgress(groupId: String): Flow<Map<String, com.sotto.app.domain.model.GroupProgress>> =
-        groupDao.observeProgress(groupId).map { rows ->
-            rows.associate { it.messageId to com.sotto.app.domain.model.GroupProgress(it.total, it.delivered, it.seen, it.sent) }
+        groupDao.observeProgress(groupId, AutoResend.MAX_COPY_ATTEMPTS, env.now() - AutoResend.WINDOW_MS).map { rows ->
+            rows.associate { it.messageId to com.sotto.app.domain.model.GroupProgress(it.total, it.delivered, it.seen, it.sent, it.retrying) }
         }
 
     override fun observeReadUpTo(groupId: String): Flow<Map<String, List<String>>> =
@@ -501,7 +501,20 @@ class GroupRepositoryImpl @Inject constructor(
             .awaitAll()
     }
 
+    /** Copies being delivered right now: a flush beside a running one, or a tap during one, skips them. */
+    private val inFlight = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     private suspend fun deliverOne(start: GroupOutboxEntity) {
+        // Sealing twice would advance the ratchet twice and post two ciphertexts under one id.
+        if (!inFlight.add(start.id)) return
+        try {
+            deliverClaimed(start)
+        } finally {
+            inFlight.remove(start.id)
+        }
+    }
+
+    private suspend fun deliverClaimed(start: GroupOutboxEntity) {
         var copy = groupDao.getCopy(start.id) ?: return
         if (copy.state != COPY_QUEUED && copy.state != COPY_SEALED) return
         if (blockedUserDao.isBlocked(copy.recipientId)) {
@@ -595,7 +608,7 @@ class GroupRepositoryImpl @Inject constructor(
         val waiting = groupDao.getByStates(listOf(COPY_QUEUED, COPY_SEALED), OUTBOX_BATCH)
         // Failed copies go again by themselves: control packets and reactions, and a message's
         // copies while it's fresh (AutoResend; older ones wait for a tap).
-        val retrying = groupDao.getByStates(listOf(COPY_FAILED), OUTBOX_BATCH).filter { retriesItself(it) }
+        val retrying = retryableFailed()
         for (copy in retrying) {
             groupDao.setState(copy.id, if (copy.ciphertext != null) COPY_SEALED else COPY_QUEUED, env.now())
         }
@@ -604,8 +617,12 @@ class GroupRepositoryImpl @Inject constructor(
         all.mapNotNull { it.messageId }.distinct().forEach { refreshState(it) }
         groupDao.pruneControlCopies(env.now() - CONTROL_COPY_KEEP_MS)
         groupDao.getByStates(listOf(COPY_QUEUED, COPY_SEALED), 1).isNotEmpty() ||
-            groupDao.getByStates(listOf(COPY_FAILED), OUTBOX_BATCH).any { retriesItself(it) }
+            retryableFailed().isNotEmpty()
     }
+
+    /** Failed copies sent again without a tap, picked in SQL (see GroupDao.getRetryableFailed). */
+    private suspend fun retryableFailed(): List<GroupOutboxEntity> =
+        groupDao.getRetryableFailed(MAX_CONTROL_ATTEMPTS, env.now() - AutoResend.WINDOW_MS, OUTBOX_BATCH).filter { retriesItself(it) }
 
     /** A failed copy the outbox sends again without a tap. */
     private fun retriesItself(copy: GroupOutboxEntity): Boolean =
