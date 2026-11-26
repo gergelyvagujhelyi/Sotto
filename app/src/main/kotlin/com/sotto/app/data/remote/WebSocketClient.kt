@@ -103,10 +103,15 @@ class WebSocketClient @Inject constructor(
     @Volatile
     private var loopGeneration = 0
 
+    private val _connected = MutableStateFlow(false)
+    /** The socket is open and signed in: for the screens' "Connecting…" bar. */
+    val connected: StateFlow<Boolean> = _connected.asStateFlow()
+
     private fun markState(generation: Int, state: SocketState) {
         if (generation != loopGeneration) return
         socketState = state
         socketStateSince = SystemClock.elapsedRealtime()
+        _connected.value = state == SocketState.OPEN
     }
 
     @Synchronized
@@ -179,6 +184,7 @@ class WebSocketClient @Inject constructor(
         loopGeneration++
         socketState = SocketState.IDLE
         socketStateSince = SystemClock.elapsedRealtime()
+        _connected.value = false
     }
 
     private fun generateAuthToken(): String? {

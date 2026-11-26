@@ -77,6 +77,18 @@ class FakeGroupDao : GroupDao {
     override suspend fun getCopy(id: String) = outbox[id]
     override suspend fun getCopiesForMessage(messageId: String) = outbox.values.filter { it.messageId == messageId }
     override fun observeCopiesForMessage(messageId: String): Flow<List<GroupOutboxEntity>> = flow { emit(getCopiesForMessage(messageId)) }
+    override fun observeProgress(groupId: String): Flow<List<com.sotto.app.data.local.dao.GroupCopyProgressRow>> = flow {
+        emit(
+            outbox.values.filter { it.groupId == groupId && it.messageId != null && it.state != "skipped" }
+                .groupBy { it.messageId!! }
+                .map { (id, copies) ->
+                    com.sotto.app.data.local.dao.GroupCopyProgressRow(
+                        id, copies.size, copies.count { it.state in listOf("sent", "delivered", "read") },
+                        copies.count { it.state == "delivered" || it.state == "read" }, copies.count { it.state == "read" },
+                    )
+                },
+        )
+    }
     override fun observeControlCopies(groupId: String): Flow<List<GroupOutboxEntity>> =
         flow { emit(outbox.values.filter { it.groupId == groupId && it.messageId == null }.sortedByDescending { it.createdAt }) }
     override suspend fun getByStates(states: List<String>, limit: Int) = outbox.values.filter { it.state in states }.sortedBy { it.createdAt }.take(limit)

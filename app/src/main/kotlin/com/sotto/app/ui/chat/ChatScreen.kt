@@ -1409,6 +1409,12 @@ private fun ChatRowItem(
                     pickingMore = false
                 }
                 val groupReactions = group?.reactions?.get(message.id).orEmpty()
+                // Failed, but it goes again by itself once there's a connection (AutoResend): shown as
+                // waiting. Not a file that couldn't follow its message: that's a tap.
+                val waiting = message.isOutgoing && message.state == MessageState.FAILED &&
+                    com.sotto.app.data.repository.AutoResend.messageDue(message.timestamp.toEpochMilliseconds(), System.currentTimeMillis())
+                // A group message partway delivered or read shows how far ("1/2").
+                val ticks = if (group != null && message.isOutgoing) groupTicks(message.shownState, group.progress[message.id]) else message.shownState to null
                 val myReaction = if (group != null) groupReactions.firstOrNull { it.isMine }?.emoji else message.myReaction
                 SwipeToReply(
                     enabled = message.canReply,
@@ -1440,7 +1446,18 @@ private fun ChatRowItem(
                         media = message.media?.let { { color -> BubbleMedia(message, color) } },
                         timestamp = time,
                         isOutgoing = message.isOutgoing,
-                        state = message.shownState,
+                        state = ticks.first,
+                        stateNote = ticks.second,
+                        waiting = waiting,
+                        // A group message some members got: say so, not a blanket "not sent".
+                        failedNote = group?.progress?.get(message.id)
+                            ?.takeIf { message.isOutgoing && message.state == MessageState.FAILED && it.sent > 0 }
+                            ?.let { p ->
+                                stringResource(
+                                    if (waiting) R.string.chat_group_partly_sent_waiting else R.string.chat_group_partly_sent,
+                                    p.sent, p.total,
+                                )
+                            },
                         groupedWithPrevious = row.groupedWithPrevious,
                         quote = message.bubbleQuote(contactName),
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },

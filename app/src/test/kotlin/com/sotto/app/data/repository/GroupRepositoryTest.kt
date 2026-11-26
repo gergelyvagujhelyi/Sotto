@@ -413,6 +413,18 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun `how far our group message got, how many have it and how many read it`() = runTest {
+        val id = fika()
+        astrid.repo.sendText(id, "Fika?")
+        val row = astrid.messageDao.messagesIn(id).single()
+        assertEquals(com.sotto.app.domain.model.GroupProgress(total = 2, delivered = 0, seen = 0, sent = 2), astrid.repo.observeProgress(id).first()[row.id])
+
+        bjorn.fetch() // Bjorn's phone has it: the relay tells Astrid
+        astrid.repo.onDelivered("bjorn", listOf(astrid.groupDao.getCopiesForMessage(row.id).single { it.recipientId == "bjorn" }.relayId))
+        assertEquals(1, astrid.repo.observeProgress(id).first()[row.id]!!.delivered)
+    }
+
+    @Test
     fun `a copy the relay already took is kept once when it comes again`() = runTest {
         val id = fika()
         astrid.repo.sendText(id, "Hej")

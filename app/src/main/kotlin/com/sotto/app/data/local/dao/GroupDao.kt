@@ -122,6 +122,16 @@ interface GroupDao {
     @Query("SELECT * FROM group_outbox WHERE messageId = :messageId")
     fun observeCopiesForMessage(messageId: String): Flow<List<GroupOutboxEntity>>
 
+    /** For each of our messages in [groupId]: how many members it goes to, how many have it, how many read it. */
+    @Query(
+        "SELECT messageId, COUNT(*) AS total, " +
+            "SUM(CASE WHEN state IN ('sent', 'delivered', 'read') THEN 1 ELSE 0 END) AS sent, " +
+            "SUM(CASE WHEN state IN ('delivered', 'read') THEN 1 ELSE 0 END) AS delivered, " +
+            "SUM(CASE WHEN state = 'read' THEN 1 ELSE 0 END) AS seen " +
+            "FROM group_outbox WHERE groupId = :groupId AND messageId IS NOT NULL AND state != 'skipped' GROUP BY messageId"
+    )
+    fun observeProgress(groupId: String): Flow<List<GroupCopyProgressRow>>
+
     /** Copies of control packets (rosters, invitations, answers) for [groupId], newest first. */
     @Query("SELECT * FROM group_outbox WHERE groupId = :groupId AND messageId IS NULL ORDER BY createdAt DESC")
     fun observeControlCopies(groupId: String): Flow<List<GroupOutboxEntity>>
@@ -202,3 +212,6 @@ interface GroupDao {
     @Query("DELETE FROM group_held WHERE receivedAt < :before")
     suspend fun pruneHeld(before: Long)
 }
+
+/** One of our group messages: [total] members it goes to, [sent] whose copy the relay took, [delivered] whose phones have it, [seen] who read it. */
+data class GroupCopyProgressRow(val messageId: String, val total: Int, val sent: Int, val delivered: Int, val seen: Int)

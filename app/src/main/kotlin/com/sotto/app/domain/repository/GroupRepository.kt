@@ -23,6 +23,10 @@ interface GroupRepository {
     fun observeReactions(groupId: String): Flow<Map<String, List<GroupReaction>>>
     /** Where each member's copy of our message [messageId] is. */
     fun observeCopies(messageId: String): Flow<List<GroupCopy>>
+
+    /** How far each of our messages in [groupId] got, by message id (the ticks' "1/2"). */
+    fun observeProgress(groupId: String): Flow<Map<String, com.sotto.app.domain.model.GroupProgress>> =
+        kotlinx.coroutines.flow.flowOf(emptyMap())
     /** Where each member's copy of the latest roster or invitation is (for the admin). */
     fun observeRosterDelivery(groupId: String): Flow<List<GroupCopy>>
 

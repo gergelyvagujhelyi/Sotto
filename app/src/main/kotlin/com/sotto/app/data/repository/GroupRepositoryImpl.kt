@@ -165,6 +165,11 @@ class GroupRepositoryImpl @Inject constructor(
             }
         }
 
+    override fun observeProgress(groupId: String): Flow<Map<String, com.sotto.app.domain.model.GroupProgress>> =
+        groupDao.observeProgress(groupId).map { rows ->
+            rows.associate { it.messageId to com.sotto.app.domain.model.GroupProgress(it.total, it.delivered, it.seen, it.sent) }
+        }
+
     override fun observeCopies(messageId: String): Flow<List<GroupCopy>> =
         groupDao.observeCopiesForMessage(messageId).map { copies -> copies.map { toCopy(it) } }
 

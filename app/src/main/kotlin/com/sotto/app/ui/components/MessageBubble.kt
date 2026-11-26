@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -129,6 +130,15 @@ fun MessageBubble(
     overlay: (@Composable () -> Unit)? = null,
     /** A voice message or photo, shown above the text (its caption); gets the bubble's text colour. */
     media: (@Composable (Color) -> Unit)? = null,
+    /**
+     * Our failed message will go again by itself (AutoResend): shown as waiting, calmly, not as
+     * a red failure. A tap ([onClick]) still sends it at once.
+     */
+    waiting: Boolean = false,
+    /** After the ticks: how far a group message got, e.g. "1/2" (groupTicks). */
+    stateNote: String? = null,
+    /** Under a failed (or waiting) message instead of the usual words, e.g. "Sent to 1 of 2 · …". */
+    failedNote: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     // [rise] goes from 1 (low and small, as if coming up from below) to 0 (in place);
@@ -148,7 +158,18 @@ fun MessageBubble(
         scrambleMs = null
         onAnimateInDone()
     }
-    val failed = isOutgoing && state == MessageState.FAILED
+    val waitingToSend = waiting && isOutgoing && state == MessageState.FAILED
+    val failed = isOutgoing && state == MessageState.FAILED && !waitingToSend
+    // A send that takes a while says so (a slow or stalled connection), not only a small clock.
+    // Not for a file: its own progress shows.
+    var slowSend by remember { mutableStateOf(false) }
+    LaunchedEffect(state, isOutgoing) {
+        slowSend = false
+        if (isOutgoing && state == MessageState.SENDING && media == null) {
+            kotlinx.coroutines.delay(SLOW_SEND_MS)
+            slowSend = true
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -158,7 +179,8 @@ fun MessageBubble(
             text = text,
             timestamp = timestamp,
             isOutgoing = isOutgoing,
-            state = state,
+            state = if (waitingToSend) MessageState.SENDING else state,
+            stateNote = stateNote,
             groupedWithPrevious = groupedWithPrevious,
             onClick = onClick,
             onLongClick = onLongClick,
@@ -199,21 +221,41 @@ fun MessageBubble(
                     },
             )
         }
-        if (failed) {
-            // The label says "tap to retry", so it retries too, not just the bubble.
+        if (failed || waitingToSend) {
+            // The label says "tap to retry" (or offers to send now), so it does that too, not just the bubble.
             Text(
-                text = stringResource(R.string.chat_not_delivered),
+                text = failedNote ?: stringResource(if (waitingToSend) R.string.chat_waiting_to_send else R.string.chat_not_delivered),
                 style = MaterialTheme.typography.labelSmall,
-                color = colors.error,
+                color = if (waitingToSend) colors.onSurfaceVariant else colors.error,
                 modifier = Modifier
                     .padding(top = 2.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
+        } else if (slowSend && state == MessageState.SENDING) {
+            Row(
+                modifier = Modifier.padding(top = 4.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(10.dp),
+                    strokeWidth = 1.5.dp,
+                    color = colors.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = stringResource(R.string.chat_sending_slow),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
         }
     }
 }
+
+/** A send still going after this long shows "Sending…" under the bubble. */
+private const val SLOW_SEND_MS = 3_000L
 
 /** Runs the departure board for a text of [length]: [onFrame] gets the ms since it started, each frame until it settles. */
 internal suspend fun runScramble(length: Int, onFrame: (Long) -> Unit) {
@@ -252,6 +294,8 @@ internal fun BubbleSurface(
     quote: BubbleQuote? = null,
     onQuoteClick: (() -> Unit)? = null,
     media: (@Composable (Color) -> Unit)? = null,
+    /** After the ticks, e.g. a group message's "1/2". */
+    stateNote: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val aurora = Aurora.colors
@@ -358,6 +402,9 @@ internal fun BubbleSurface(
                     Text(text = timestamp, style = MaterialTheme.typography.labelSmall, color = metaColor)
                     // Ticks sit dimmer than the time so the bright read tick stands out.
                     if (isOutgoing) MessageStateIcon(state, if (failed) metaColor else aurora.bubbleOutgoingTick)
+                    if (isOutgoing && stateNote != null) {
+                        Text(text = stateNote, style = MaterialTheme.typography.labelSmall, color = metaColor)
+                    }
                 }
             }
             }

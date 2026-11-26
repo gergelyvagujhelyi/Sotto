@@ -60,6 +60,10 @@ class GroupChatViewModel @Inject constructor(
     val reactions: StateFlow<Map<String, List<GroupReaction>>> = groups.observeReactions(groupId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /** How far each of our messages got (the ticks' "1/2"), by message id. */
+    val progress: StateFlow<Map<String, com.sotto.app.domain.model.GroupProgress>> = groups.observeProgress(groupId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val composerText: StateFlow<String> = savedStateHandle.getStateFlow(KEY_DRAFT, "")
     private var draft: String
         get() = composerText.value

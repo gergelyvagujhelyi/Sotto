@@ -93,3 +93,9 @@ data class GroupCopy(
 
 /** A reaction to a group message: who, which emoji. */
 data class GroupReaction(val reactorId: String, val reactorName: String, val emoji: String, val isMine: Boolean)
+
+/**
+ * How far one of our group messages got: the relay took [sent] of [total] members' copies,
+ * [delivered] members' phones have it, [seen] read it.
+ */
+data class GroupProgress(val total: Int, val delivered: Int, val seen: Int, val sent: Int = delivered)

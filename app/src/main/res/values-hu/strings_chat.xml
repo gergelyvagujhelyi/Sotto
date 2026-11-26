@@ -75,6 +75,12 @@
     <string name="chat_message_rejected">⛔ Elutasított üzenet (aláíratlan vagy nem ellenőrizhető)</string>
     <string name="chat_message_undecryptable">⚠ Ezt az üzenetet nem sikerült visszafejteni</string>
     <string name="chat_not_delivered">Nincs kézbesítve · Koppints az újraküldéshez</string>
+    <string name="chat_waiting_to_send">Még nincs elküldve · Elküldi, amint van kapcsolat</string>
+    <string name="chat_sending_slow">Küldés…</string>
+    <string name="chat_group_partly_sent_waiting">Elküldve %1$d/%2$d tagnak · A többieknek, amint van kapcsolat</string>
+    <string name="chat_group_partly_sent">Elküldve %1$d/%2$d tagnak · Koppints az újraküldéshez</string>
+    <string name="connection_connecting">Kapcsolódás…</string>
+    <string name="connection_no_internet">Nincs internetkapcsolat</string>
     <string name="chat_unknown_payload">Ehhez az üzenethez újabb Sotto kell. Frissítsd a Sottót, hogy lásd.</string>
     <string name="chat_no_app_for_link">Egy alkalmazás sem tudja megnyitni ezt a linket</string>
     <string name="chat_you">Te</string>

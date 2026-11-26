@@ -46,6 +46,7 @@ import com.sotto.app.domain.model.GroupCopyState
 import com.sotto.app.domain.model.GroupEvent
 import com.sotto.app.domain.model.GroupReaction
 import com.sotto.app.domain.model.Message
+import com.sotto.app.domain.model.MessageState
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.components.SystemEventPill
@@ -63,6 +64,8 @@ class GroupChatUi(
     val names: Map<String, String>,
     /** Every reaction, by message id. */
     val reactions: Map<String, List<GroupReaction>>,
+    /** How far each of our messages got, by message id. */
+    val progress: Map<String, com.sotto.app.domain.model.GroupProgress> = emptyMap(),
     val canSend: Boolean,
     /** Shown above the composer, or null. */
     val notice: (@Composable () -> Unit)?,
@@ -241,5 +244,22 @@ internal fun CopyRow(copy: GroupCopy) {
         Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text(label, style = MaterialTheme.typography.labelMedium, color = tint)
+    }
+}
+
+/**
+ * The ticks on our group message, with how far it got while it's partway: [state] is all-or-
+ * nothing (delivered only when every member's phone has it), which looks stuck while one phone
+ * sleeps. Partway through delivery: double ticks with "delivered/total"; everyone has it and
+ * some read it: read ticks with "read/total". Otherwise the state as it is, without a count.
+ */
+internal fun groupTicks(state: MessageState, progress: com.sotto.app.domain.model.GroupProgress?): Pair<MessageState, String?> {
+    progress ?: return state to null
+    val total = progress.total
+    return when {
+        total < 2 -> state to null
+        state == MessageState.SENT && progress.delivered in 1 until total -> MessageState.DELIVERED to "${progress.delivered}/$total"
+        state == MessageState.DELIVERED && progress.seen in 1 until total -> MessageState.SEEN to "${progress.seen}/$total"
+        else -> state to null
     }
 }

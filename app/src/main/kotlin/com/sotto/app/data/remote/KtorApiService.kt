@@ -21,6 +21,7 @@ import com.sotto.app.data.remote.dto.SendMessageRequest
 import com.sotto.app.data.remote.dto.SendMessageResponse
 import com.sotto.app.update.AppUpdates
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.timeout
 import android.util.Base64
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -79,6 +80,8 @@ class KtorApiService @Inject constructor(
                 writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             }
         }
+        // Per request where a call needs longer than the engine's 10 s (sendMessage).
+        install(io.ktor.client.plugins.HttpTimeout)
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -148,6 +151,9 @@ class KtorApiService @Inject constructor(
          * Not sign-up (it uses up an invite), invites, key rotation, deleting the
          * account, receipts or call signals.
          */
+        /** How long a message send may go without progress before it counts as failed. */
+        const val SEND_SOCKET_TIMEOUT_MS = 30_000L
+
         fun safeToRepeat(method: HttpMethod, path: String): Boolean =
             method == HttpMethod.Get || REPEATABLE_PATHS.any { path.endsWith(it) }
 
@@ -228,6 +234,9 @@ class KtorApiService @Inject constructor(
         val response: HttpResponse = client.post("/v1/messages/send") {
             header("Authorization", "Bearer ${authToken()}")
             setBody(request)
+            // A send on a poor connection can stall for seconds and still arrive: giving up at
+            // 10 s marked such messages "not delivered" while the other side had them already.
+            timeout { socketTimeoutMillis = SEND_SOCKET_TIMEOUT_MS }
         }
         // The per-minute send limit (not the per-recipient queue cap, also a 429).
         if (response.status.value == 429 && response.bodyAsText().contains("Rate limit exceeded")) {
