@@ -18,7 +18,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -27,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import com.sotto.app.R
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.SoftButton
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /** One reaction in [ReactionsSheet]: who ([seed] picks their avatar colours) and which emoji. */
@@ -56,11 +62,22 @@ internal fun ReactionsSheet(
     onDismiss: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    val sheetState = rememberModalBottomSheetState()
+    // Opens all the way: with many reactions the button below is still on the screen.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
-    // Slides away first, then does [then].
+    var closing by remember { mutableStateOf(false) }
+    // Slides away first, then does [then]: once, however often it's tapped meanwhile.
     fun close(then: () -> Unit) {
-        scope.launch { sheetState.hide() }.invokeOnCompletion {
+        if (closing) return
+        closing = true
+        scope.launch {
+            try {
+                sheetState.hide()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // A touch on the sheet interrupts the slide: done anyway. Leaving the chat
+                // (this coroutine cancelled) does nothing.
+                if (!currentCoroutineContext().isActive) throw e
+            }
             onDismiss()
             then()
         }

@@ -725,8 +725,9 @@ fun ChatContent(
                 message.myReaction?.let { ReactionEntry(myself?.second ?: youName, myself?.first ?: "", it, isMine = true) },
             )
         }
-        // Nothing left to show (taken back, or the message deleted): closed.
-        LaunchedEffect(entries.isEmpty()) { if (entries.isEmpty()) reactionsFor = null }
+        // Nothing left to show (taken back, or the message deleted): closed. Not before the history
+        // has loaded (after Android restored the app, the sheet comes back once it has).
+        LaunchedEffect(entries.isEmpty(), historyLoaded) { if (historyLoaded && entries.isEmpty()) reactionsFor = null }
         if (message != null && entries.isNotEmpty()) {
             val mine = entries.firstOrNull { it.isMine }?.emoji
             ReactionsSheet(
@@ -774,6 +775,13 @@ fun ChatContent(
     // Newest first, for a list laid out from the bottom up: it stays anchored on the
     // newest message when the keyboard (or anything else) makes it shorter.
     val newestFirst = remember(rows) { rows.orEmpty().asReversed() }
+    // "Change your reaction": the message is scrolled into view, where its row opens the picker
+    // (it may have scrolled away while the sheet was open). Gone from the chat: nothing.
+    LaunchedEffect(pickFor) {
+        val id = pickFor ?: return@LaunchedEffect
+        val index = newestFirst.indexOfFirst { it.key == "m:$id" }
+        if (index < 0) pickFor = null else listState.animateScrollToItem(index)
+    }
 
     // A sent message's text flies from the composer to its bubble (SendFlightOverlay).
     var flight by remember { mutableStateOf<SendFlight?>(null) }
