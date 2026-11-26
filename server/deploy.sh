@@ -36,6 +36,21 @@ apply_nginx_conf() {
     fi
 }
 
+# Phones behind some home lines (PPPoE, VPNs) lose full-size packets on the way to the relay
+# without being told (a path MTU "black hole"): small requests work, but a message send stalls
+# for seconds or hangs (seen 2026-11-26 from a home Wi-Fi in Serbia; the same phones were fine
+# on mobile data). The relay tells phones to send at most MSS_CLAMP bytes per packet on its
+# HTTPS port, which fits under those lines. Every run, so it's back after a reboot.
+# MSS_CLAMP=0 in the environment leaves the firewall alone.
+apply_mss_clamp() {
+    local mss="${MSS_CLAMP:-1360}"
+    [ "$mss" != "0" ] || return 0
+    command -v iptables >/dev/null || return 0
+    local rule=(-p tcp --sport 443 --tcp-flags SYN,ACK SYN,ACK -j TCPMSS --set-mss "$mss")
+    iptables -t mangle -C POSTROUTING "${rule[@]}" 2>/dev/null && return 0
+    iptables -t mangle -A POSTROUTING "${rule[@]}" && echo "$(date): MSS clamp $mss set on port 443"
+}
+
 LAST_DEPLOY_FILE="/tmp/chatcontroll-last-deploy"
 git fetch origin develop --quiet
 LOCAL=$(cat "$LAST_DEPLOY_FILE" 2>/dev/null || echo "none")
@@ -47,6 +62,7 @@ git reset --hard origin/develop --quiet
 # Every run, also when nothing new arrived: the first run after this script changed, a
 # deploy that failed halfway, or a hand-made change all get the repo's nginx.conf applied.
 apply_nginx_conf
+apply_mss_clamp || echo "$(date): could not set the MSS clamp"
 
 if [ "$LOCAL" = "$REMOTE" ]; then
     exit 0
