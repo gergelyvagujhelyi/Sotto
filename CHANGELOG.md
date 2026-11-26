@@ -4,7 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
-- **Relay: messages from phones behind some home lines no longer stall** — On some home internet lines (PPPoE, VPNs) full-size packets from a phone to the relay vanished without a word, so a message send took 7 seconds or hung and showed "Not delivered", while the same phone on mobile data was fine. The relay now asks phones for packets of at most 1360 bytes on its HTTPS port (`server/deploy.sh` sets it on every run; `MSS_CLAMP=0` leaves the firewall alone, another number sets another size).
+- **Relay: messages from phones behind some home lines no longer stall** — On some home internet lines (PPPoE, VPNs) full-size packets from a phone to the relay vanished without a word, so a message send took 7 seconds or hung and showed "Not delivered", while the same phone on mobile data was fine. The same happened to messages coming in: fetching a few at once (with their post-quantum signatures, tens of kilobytes) stalled, the phone gave up after 10 seconds and got none of them. The relay now keeps packets to at most 1360 bytes both ways on its HTTPS port, and lets the kernel probe for such lines itself (`server/deploy.sh` sets both on every run; `MSS_CLAMP=0` leaves the firewall alone, another number sets another size).
 
 ## 0.7.28 — 2026-11-26
 
