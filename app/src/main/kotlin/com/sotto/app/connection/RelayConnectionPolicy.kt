@@ -80,9 +80,16 @@ class RelayConnectionPolicy @Inject constructor(
         // outage): it's reachable, so connect now rather than when the backoff ends. Not during a
         // call: CallManager retries the socket itself, faster.
         scope.launch {
+            var lastNudge = 0L
             reachability.answered.collect {
-                if (keepNow() && !webSocketClient.connected.value && callManager.get().callState.value == null) {
-                    webSocketClient.connectUnlessWorking()
+                val now = android.os.SystemClock.elapsedRealtime()
+                // At most every 30 s, and without starting the backoff over: on a poor line the
+                // answers keep coming while the socket keeps dropping.
+                if (keepNow() && !webSocketClient.connected.value && callManager.get().callState.value == null &&
+                    now - lastNudge >= NUDGE_INTERVAL_MS
+                ) {
+                    lastNudge = now
+                    webSocketClient.nudge()
                 }
             }
         }
@@ -149,6 +156,8 @@ class RelayConnectionPolicy @Inject constructor(
         const val AWAY_GRACE_MS = 2_000L
         /** After a push opened the socket in the background: time for buffered signals to arrive. */
         const val WAKE_LINGER_MS = 6_000L
+        /** The relay answering brings a reconnect attempt forward at most this often. */
+        const val NUDGE_INTERVAL_MS = 30_000L
     }
 }
 

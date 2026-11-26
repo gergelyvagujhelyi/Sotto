@@ -3,6 +3,7 @@ package com.sotto.app.connection
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,5 +20,27 @@ class RelayReachability @Inject constructor() {
 
     fun answered() {
         _answered.tryEmit(Unit)
+    }
+
+    private val uploads = java.util.concurrent.atomic.AtomicInteger(0)
+    private val _noUploads = kotlinx.coroutines.flow.MutableStateFlow(true)
+
+    /**
+     * Runs a message upload, marked as such: on a slow line (a few KB/s) the socket's reconnect
+     * attempts (TLS and a signed sign-in, kilobytes each) starved it, and a photo only went once
+     * the screen was locked and the socket closed. The socket waits for uploads (awaitNoUploads).
+     */
+    suspend fun <T> uploading(block: suspend () -> T): T {
+        if (uploads.incrementAndGet() == 1) _noUploads.value = false
+        try {
+            return block()
+        } finally {
+            if (uploads.decrementAndGet() == 0) _noUploads.value = true
+        }
+    }
+
+    /** Waits until no message upload is going on, at most [maxMs]. */
+    suspend fun awaitNoUploads(maxMs: Long) {
+        kotlinx.coroutines.withTimeoutOrNull(maxMs) { _noUploads.first { it } }
     }
 }

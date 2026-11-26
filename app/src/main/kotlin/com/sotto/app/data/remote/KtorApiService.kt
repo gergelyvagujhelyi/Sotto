@@ -234,13 +234,13 @@ class KtorApiService @Inject constructor(
     }
 
     override suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse {
-        val response: HttpResponse = client.post("/v1/messages/send") {
+        val response: HttpResponse = reachability.uploading { client.post("/v1/messages/send") {
             header("Authorization", "Bearer ${authToken()}")
             setBody(request)
             // A send on a poor connection can stall for seconds and still arrive: giving up at
             // 10 s marked such messages "not delivered" while the other side had them already.
             timeout { socketTimeoutMillis = SEND_SOCKET_TIMEOUT_MS }
-        }
+        } }
         // The per-minute send limit (not the per-recipient queue cap, also a 429).
         if (response.status.value == 429 && response.bodyAsText().contains("Rate limit exceeded")) {
             throw RateLimitedException()
