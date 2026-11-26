@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Initials sit in the middle of their circle** — In the small read circles under group messages the letters sat low and a little off. The line around the initials is now exactly as tall as the letters, so they're centred at every size (large avatars looked right before and still do).
+
 ## 0.7.29 — 2026-11-26
 
 - **A slow send no longer looks failed** — On a poor connection a message can take many seconds to reach the relay and still get there. Sotto gave up after 10 seconds and showed "Not delivered" while the other side already had it; it now waits up to 30 seconds without progress. A send that takes more than 3 seconds says "Sending…" under the message.
