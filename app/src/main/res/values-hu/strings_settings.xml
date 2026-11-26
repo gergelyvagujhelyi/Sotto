@@ -31,6 +31,15 @@
     <string name="settings_preview_hide_body">Üzenet szövegének elrejtése</string>
     <string name="settings_preview_hide_all">Nincs előnézet a lezárási képernyőn</string>
 
+    <!-- Sounds -->
+    <string name="settings_section_sounds">Hangok</string>
+    <string name="settings_sound_messages">Üzenethang</string>
+    <string name="settings_sound_groups">Csoporthang</string>
+    <string name="settings_sound_calls">Hívás csengőhangja</string>
+    <string name="settings_sound_none">Nincs</string>
+    <string name="settings_sound_unknown">Egyéni hang</string>
+    <string name="settings_sound_no_picker">Ezen a telefonon nincs hangválasztó</string>
+
     <!-- Connection -->
     <string name="settings_section_connection">Kapcsolat</string>
     <string name="settings_background_connection">Háttérkapcsolat</string>

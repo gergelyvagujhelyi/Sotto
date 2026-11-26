@@ -139,6 +139,11 @@ internal fun DesignSample(name: String) {
             onEditName = {},
             onRotateKeys = {},
             onLockScreenPreviewChange = {},
+            sounds = com.sotto.app.ui.settings.Sounds(
+                messages = com.sotto.app.ui.settings.Sound(null, com.sotto.app.ui.text.UiText.Plain("Default (Bubble)")),
+                groups = com.sotto.app.ui.settings.Sound(null, com.sotto.app.ui.text.UiText.Plain("Chime")),
+                calls = com.sotto.app.ui.settings.Sound(null, com.sotto.app.ui.text.UiText.Plain("Default (Orbit)")),
+            ),
             onReadReceiptsChange = {},
             onScreenSecurityChange = {},
             onDirectCallsChange = {},

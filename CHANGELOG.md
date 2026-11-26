@@ -4,6 +4,11 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+## 0.7.27 — 2026-11-26
+
+- **Choose your sounds** — Settings has a new Sounds section: Message sound, Group sound and Call ringtone. Each opens the phone's own sound list (with Default and None), and the row shows the sound chosen, also one changed in Android's own settings. With None as the ringtone, calls only vibrate.
+- **Group chats get their own notification channel** — "Group messages", so groups can sound different from 1:1 chats. It starts the way you had set Sotto's Messages channel in Android's settings, so a muted Messages channel doesn't turn into a loud group one.
+- **How a sound change works** — Android lets only the user change a channel's sound once it exists, so a new message or group sound replaces Sotto's channel with a new one. The new one keeps the importance, vibration, light and badge you set on the old one. "Override Do Not Disturb" isn't carried over (Sotto never turns that on by itself), and Android may drop a lock screen choice made in its settings: set those again if you had changed them. The 1:1 or group notifications showing at that moment are removed; missed calls stay.
 - **Relay: an unanswered call ends with a deleted account or a key change** — When an account was deleted, or changed its keys, in the 3 seconds before its app answered an incoming call, the relay still kept that call for the account's next connection. For a deleted account that was a few hundred bytes nobody could fetch, held until the signal buffer filled up. After a key change, the phone was woken by push and got the call's offer, made before the change. The relay now drops such a call along with the account's other buffered call signals, as it already did for a call that hadn't reached the phone yet.
 
 ## 0.7.26 — 2026-11-25
