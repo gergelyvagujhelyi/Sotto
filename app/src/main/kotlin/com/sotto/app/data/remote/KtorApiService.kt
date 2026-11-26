@@ -22,6 +22,7 @@ import com.sotto.app.data.remote.dto.SendMessageResponse
 import com.sotto.app.update.AppUpdates
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.timeout
+import io.ktor.client.request.parameter
 import android.util.Base64
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -70,6 +71,7 @@ class KtorApiService @Inject constructor(
     private val pqcProvider: PqcProvider,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
     private val appUpdates: com.sotto.app.update.AppUpdates,
+    private val reachability: com.sotto.app.connection.RelayReachability,
 ) : ApiService, java.io.Closeable {
 
     private val client = HttpClient(OkHttp) {
@@ -116,6 +118,7 @@ class KtorApiService @Inject constructor(
                 val version = response.headers[AppUpdates.RELAY_VERSION_HEADER] ?: return@onResponse
                 val relay = relayConfig.baseUrl?.trimEnd('/') ?: return@onResponse
                 if (!response.call.request.url.toString().startsWith("$relay/")) return@onResponse
+                if (response.status.isSuccess()) reachability.answered()
                 appUpdates.report(version, response.headers[AppUpdates.APP_READY_HEADER] == "true")
             }
         })
@@ -151,7 +154,7 @@ class KtorApiService @Inject constructor(
          * Not sign-up (it uses up an invite), invites, key rotation, deleting the
          * account, receipts or call signals.
          */
-        /** How long a message send may go without progress before it counts as failed. */
+        /** How long a message send or fetch may go without progress before it counts as failed. */
         const val SEND_SOCKET_TIMEOUT_MS = 30_000L
 
         fun safeToRepeat(method: HttpMethod, path: String): Boolean =
@@ -253,6 +256,10 @@ class KtorApiService @Inject constructor(
     override suspend fun fetchPendingMessages(): List<PendingMessageDto> {
         val response: HttpResponse = client.get("/v1/messages/pending") {
             header("Authorization", "Bearer ${authToken()}")
+            // Small pages: each message carries kilobytes of signatures, and a phone that was
+            // away pulled hundreds of KB at once, which a poor line couldn't finish in time.
+            parameter("limit", ApiService.PENDING_PAGE_SIZE)
+            timeout { socketTimeoutMillis = SEND_SOCKET_TIMEOUT_MS }
         }
         check(response.status.isSuccess()) { "Fetch pending failed: ${response.status}" }
         // The relay's clock, to tell how long the messages waited there (LateDelivery).

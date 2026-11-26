@@ -482,18 +482,18 @@ class MessageSigningAndResetTest {
     }
 
     @Test
-    fun `full pages that make progress stop after 10 pages`() = runTest {
+    fun `full pages that make progress stop after 25 pages, 500 messages`() = runTest {
         coEvery { blockedUserDao.isBlocked("peer") } returns true // dropped and ACKed: progress every page
         var page = 0
         coEvery { apiService.fetchPendingMessages() } answers {
             page++
-            (1..100).map { chatDto("p$page-$it") }
+            (1..com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE).map { chatDto("p$page-$it") }
         }
 
         repo.fetchPendingAndWait()
 
-        assertEquals(10, page)
-        coVerify(exactly = 10) { apiService.acknowledgeMessages(any()) }
+        assertEquals(25, page)
+        coVerify(exactly = 25) { apiService.acknowledgeMessages(any()) }
     }
 
     @Test
@@ -502,7 +502,7 @@ class MessageSigningAndResetTest {
         var page = 0
         coEvery { apiService.fetchPendingMessages() } answers {
             page++
-            (1..100).map { chatDto("q$it", pqcSignature = "") } // held, not ACKed
+            (1..com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE).map { chatDto("q$it", pqcSignature = "") } // held, not ACKed
         }
 
         repo.fetchPendingAndWait()

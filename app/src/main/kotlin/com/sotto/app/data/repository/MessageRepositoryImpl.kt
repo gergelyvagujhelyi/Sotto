@@ -1828,7 +1828,7 @@ class MessageRepositoryImpl @Inject constructor(
 
     companion object {
         /** Server default page size for GET /v1/messages/pending. */
-        private const val PENDING_PAGE_SIZE = 100
+        private const val PENDING_PAGE_SIZE = com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE
         private const val ROLE_SENDER = "s"
         private const val ROLE_RECEIVER = "r"
         private const val ROLE_DONE = "d"
@@ -1845,7 +1845,8 @@ class MessageRepositoryImpl @Inject constructor(
         /** How many of our own newest messages a received reply's original is looked for in. */
         private const val OWN_REPLY_SEARCH_LIMIT = 5_000
         private const val DAY_MS = 24L * 60 * 60 * 1000
-        private const val MAX_PAGES_PER_FETCH = 10
+        /** With [PENDING_PAGE_SIZE] 20: up to 500 messages per fetch, as before the pages got small. */
+        internal const val MAX_PAGES_PER_FETCH = 25
         /** After this many failed decrypt attempts, acknowledge the message to
          *  prevent it from poisoning the pending queue forever. */
         private const val MAX_DECRYPT_RETRIES = 3

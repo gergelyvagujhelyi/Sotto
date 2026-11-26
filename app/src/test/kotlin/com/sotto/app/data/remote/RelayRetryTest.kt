@@ -62,7 +62,7 @@ class RelayRetryTest {
             every { generateAuthToken(any()) } answers { "token-${++tokens}" }
         }
         val relay = mockk<RelayConfig> { every { baseUrl } returns "http://127.0.0.1:${server.localPort}" }
-        api = KtorApiService(keyManager, mockk(relaxed = true), relay, mockk(relaxed = true))
+        api = KtorApiService(keyManager, mockk(relaxed = true), relay, mockk(relaxed = true), com.sotto.app.connection.RelayReachability())
     }
 
     @After

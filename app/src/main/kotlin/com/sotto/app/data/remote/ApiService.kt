@@ -37,6 +37,11 @@ import com.sotto.app.data.remote.dto.SendMessageResponse
  * PUT    /v1/identity/me/keys            — rotate public keys
  */
 interface ApiService {
+    companion object {
+        /** Messages per fetch page (the relay's `limit`): small enough for a poor line to finish. */
+        const val PENDING_PAGE_SIZE = 20
+    }
+
     suspend fun bootstrapIdentity(request: BootstrapRequest): BootstrapResponse
 
     /** A one-time invite for someone to join this relay (any member may create one). */
