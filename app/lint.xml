@@ -4,10 +4,11 @@
     <!-- Release builds are ARM only (app/build.gradle.kts): x86_64's native code more than
          doubled the APK, for emulators and rare Intel devices. Debug builds keep every ABI. -->
     <issue id="ChromeOsAbiSupport" severity="ignore" />
-    <!-- Settings asks to stop battery optimisation for the background connection, which phones
-         without Google push rely on: what the exemption is for. Said here because lint ignored a
-         @SuppressLint on that request's function, a local function inside SettingsScreen. -->
+    <!-- Sotto asks to stop battery optimisation (Settings, and a card in the chat list): without
+         it Android and phone makers' battery savers hold messages and calls back until the app is
+         opened, and phones without Google push rely on the background connection. What the
+         exemption is for. Said here because lint once ignored a @SuppressLint on the request. -->
     <issue id="BatteryLife">
-        <ignore path="src/main/kotlin/com/sotto/app/ui/settings/SettingsScreen.kt" />
+        <ignore path="src/main/kotlin/com/sotto/app/ui/components/BackgroundActivity.kt" />
     </issue>
 </lint>

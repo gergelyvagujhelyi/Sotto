@@ -134,6 +134,14 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE state = 'SENDING'")
     suspend fun getSendingMessages(): List<MessageEntity>
 
+    /** Our failed one-to-one messages written since [since], oldest first, so they go in order (AutoResend). */
+    @Query("SELECT * FROM messages WHERE isOutgoing = 1 AND state = 'FAILED' AND groupId IS NULL AND timestamp >= :since ORDER BY timestamp")
+    suspend fun getFailedOutgoingSince(since: Long): List<MessageEntity>
+
+    /** Moves [messageId] from [from] to [to] only if it's still in [from]; 1 when it did. */
+    @Query("UPDATE messages SET state = :to WHERE id = :messageId AND state = :from")
+    suspend fun claimState(messageId: String, from: String, to: String): Int
+
     /** Our group messages still sending (a process death may have stopped them). */
     @Query("SELECT * FROM messages WHERE state = 'SENDING' AND groupId IS NOT NULL AND isOutgoing = 1")
     suspend fun getSendingGroupMessages(): List<MessageEntity>

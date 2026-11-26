@@ -369,6 +369,50 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun `a failed copy goes again by itself once the relay takes it, the same bytes, once`() = runTest {
+        val id = fika()
+        relay.failFor += "cecilia"
+        val scheduledBefore = astrid.outboxScheduled
+        astrid.repo.sendText(id, "Fika?")
+        val row = astrid.messageDao.messagesIn(id).single()
+        assertEquals(MessageState.FAILED.name, row.state)
+        // The outbox is asked to try again, without a tap.
+        assertTrue(astrid.outboxScheduled > scheduledBefore)
+        val sealedBefore = astrid.groupDao.getCopiesForMessage(row.id).single { it.recipientId == "cecilia" }.ciphertext!!.copyOf()
+
+        // Still down: it stays failed, and the outbox keeps waiting.
+        assertTrue(astrid.repo.flushOutbox())
+        assertEquals(MessageState.FAILED.name, astrid.messageDao.getById(row.id)!!.state)
+
+        relay.failFor.clear()
+        relay.posted.clear()
+        assertFalse(astrid.repo.flushOutbox())
+        assertEquals(MessageState.SENT.name, astrid.messageDao.getById(row.id)!!.state)
+        assertEquals(listOf("cecilia"), relay.posted.map { it.to })
+        assertEquals(String(sealedBefore), relay.posted.single().plaintext)
+        fetchAll()
+        assertEquals(1, cecilia.texts(id).size)
+    }
+
+    @Test
+    fun `a failed copy older than a day waits for a tap`() = runTest {
+        val id = fika()
+        relay.failFor += "cecilia"
+        astrid.repo.sendText(id, "Fika?")
+        val row = astrid.messageDao.messagesIn(id).single()
+        relay.failFor.clear()
+        relay.clock += AutoResend.WINDOW_MS + 60_000
+
+        relay.posted.clear()
+        assertFalse(astrid.repo.flushOutbox())
+        assertEquals(MessageState.FAILED.name, astrid.messageDao.getById(row.id)!!.state)
+        assertTrue(relay.posted.isEmpty())
+
+        astrid.repo.retry(row.id)
+        assertEquals(MessageState.SENT.name, astrid.messageDao.getById(row.id)!!.state)
+    }
+
+    @Test
     fun `a copy the relay already took is kept once when it comes again`() = runTest {
         val id = fika()
         astrid.repo.sendText(id, "Hej")

@@ -52,14 +52,22 @@ class GroupOutboxWorker @AssistedInject constructor(
 class GroupOutboxScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    fun schedule() {
+    /** A run that's waiting keeps its place; one already running gets a follow-up. */
+    fun schedule() = enqueue(ExistingWorkPolicy.APPEND_OR_REPLACE)
+
+    /**
+     * The relay is reachable again (a fresh socket session): run now. Appended, the run would
+     * wait out the backoff of one that kept failing while the relay was out of reach (minutes).
+     * A flush in progress isn't cut short by the replacement (it's NonCancellable); if both
+     * post the same copy, it's the same bytes under the same id, and the relay keeps one.
+     */
+    fun retryNow() = enqueue(ExistingWorkPolicy.REPLACE)
+
+    private fun enqueue(policy: ExistingWorkPolicy) {
         val request = OneTimeWorkRequestBuilder<GroupOutboxWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-        runCatching {
-            // A run that's waiting keeps its place; one already running gets a follow-up.
-            WorkManager.getInstance(context).enqueueUniqueWork(GroupOutboxWorker.WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
-        }
+        runCatching { WorkManager.getInstance(context).enqueueUniqueWork(GroupOutboxWorker.WORK_NAME, policy, request) }
     }
 }

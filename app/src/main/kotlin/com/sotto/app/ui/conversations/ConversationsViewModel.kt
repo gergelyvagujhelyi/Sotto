@@ -28,7 +28,13 @@ class ConversationsViewModel @Inject constructor(
     private val sendMyName: SendMyNameUseCase,
     private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
     private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
+    private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : ViewModel() {
+
+    /** "Not now" and the last delay noticed: with Android's restriction, whether the card shows. */
+    val backgroundOfferState: StateFlow<com.sotto.app.connection.BackgroundOfferState> = backgroundOffers.state
+
+    fun dismissBackgroundOffer() = backgroundOffers.dismiss()
 
     /** Groups the user is in (or was), for the chat list. */
     val groups: StateFlow<List<com.sotto.app.domain.model.Group>> =

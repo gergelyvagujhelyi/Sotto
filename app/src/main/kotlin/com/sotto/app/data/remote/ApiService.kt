@@ -52,6 +52,9 @@ interface ApiService {
     suspend fun resolveShareCode(shareCode: String): ResolveShareCodeResponse?
     suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse
     suspend fun fetchPendingMessages(): List<PendingMessageDto>
+
+    /** The relay's clock (its Date header, ms) when the last [fetchPendingMessages] was answered; null if unknown. */
+    fun relayTimeOfLastFetch(): Long? = null
     suspend fun acknowledgeMessages(request: AckRequest)
     suspend fun registerPushToken(request: PushTokenRequest)
     suspend fun sendCallSignal(request: CallSignalRequest): CallSignalResponse
