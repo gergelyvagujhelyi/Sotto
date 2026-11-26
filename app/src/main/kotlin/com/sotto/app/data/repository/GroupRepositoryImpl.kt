@@ -170,6 +170,9 @@ class GroupRepositoryImpl @Inject constructor(
             rows.associate { it.messageId to com.sotto.app.domain.model.GroupProgress(it.total, it.delivered, it.seen, it.sent) }
         }
 
+    override fun observeReadUpTo(groupId: String): Flow<Map<String, List<String>>> =
+        groupDao.observeReads(groupId).map { rows -> readUpTo(rows) }
+
     override fun observeCopies(messageId: String): Flow<List<GroupCopy>> =
         groupDao.observeCopiesForMessage(messageId).map { copies -> copies.map { toCopy(it) } }
 
@@ -1529,3 +1532,9 @@ class GroupRepositoryImpl @Inject constructor(
         }
     }
 }
+
+/** For each member, the latest of [reads] they read; by message id, the members whose latest it is. */
+internal fun readUpTo(reads: List<com.sotto.app.data.local.dao.GroupReadRow>): Map<String, List<String>> =
+    reads.groupBy { it.userId }
+        .mapValues { (_, theirs) -> theirs.maxBy { it.timestamp }.messageId }
+        .entries.groupBy({ it.value }, { it.key })

@@ -46,6 +46,7 @@ fun GroupChatScreen(
     val members by viewModel.members.collectAsState()
     val reactions by viewModel.reactions.collectAsState()
     val progress by viewModel.progress.collectAsState()
+    val readUpTo by viewModel.readUpTo.collectAsState()
     val composerText by viewModel.composerText.collectAsState()
     val replyingTo by viewModel.replyingTo.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -113,6 +114,7 @@ fun GroupChatScreen(
         names = members.associate { it.userId to it.name },
         reactions = reactions,
         progress = progress,
+        readUpTo = readUpTo,
         canSend = status == GroupStatus.ACTIVE,
         notice = group?.let { g -> { GroupNotice(g, onAccept = viewModel::accept, onDecline = { viewModel.decline(onBack) }) } },
         composerHint = when (status) {

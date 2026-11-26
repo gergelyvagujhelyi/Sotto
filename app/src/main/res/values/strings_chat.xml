@@ -80,6 +80,8 @@
     <!-- Under our group message that some members got and others not yet: %1$d got it, of %2$d -->
     <string name="chat_group_partly_sent_waiting">Sent to %1$d of %2$d · The rest when connected</string>
     <string name="chat_group_partly_sent">Sent to %1$d of %2$d · Tap to retry</string>
+    <!-- For screen readers: the little circles under our group message; %1$s is the names -->
+    <string name="group_read_by">Read by %1$s</string>
     <!-- Bar above every screen while the relay can't be reached -->
     <string name="connection_connecting">Connecting…</string>
     <string name="connection_no_internet">No internet connection</string>

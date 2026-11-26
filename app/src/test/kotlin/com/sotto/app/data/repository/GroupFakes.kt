@@ -77,6 +77,14 @@ class FakeGroupDao : GroupDao {
     override suspend fun getCopy(id: String) = outbox[id]
     override suspend fun getCopiesForMessage(messageId: String) = outbox.values.filter { it.messageId == messageId }
     override fun observeCopiesForMessage(messageId: String): Flow<List<GroupOutboxEntity>> = flow { emit(getCopiesForMessage(messageId)) }
+    /** Message times for the read rows; the fake has no join with messages, so tests set them. */
+    val messageTimes = HashMap<String, Long>()
+    override fun observeReads(groupId: String): Flow<List<com.sotto.app.data.local.dao.GroupReadRow>> = flow {
+        emit(
+            outbox.values.filter { it.groupId == groupId && it.messageId != null && it.state == "read" }
+                .map { com.sotto.app.data.local.dao.GroupReadRow(it.recipientId, it.messageId!!, messageTimes[it.messageId] ?: it.createdAt) },
+        )
+    }
     override fun observeProgress(groupId: String): Flow<List<com.sotto.app.data.local.dao.GroupCopyProgressRow>> = flow {
         emit(
             outbox.values.filter { it.groupId == groupId && it.messageId != null && it.state != "skipped" }

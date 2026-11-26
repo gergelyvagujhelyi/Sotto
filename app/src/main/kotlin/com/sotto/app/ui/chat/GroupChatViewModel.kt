@@ -64,6 +64,10 @@ class GroupChatViewModel @Inject constructor(
     val progress: StateFlow<Map<String, com.sotto.app.domain.model.GroupProgress>> = groups.observeProgress(groupId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
 
+    /** By message id, the members whose latest read message of ours it is (their read circles). */
+    val readUpTo: StateFlow<Map<String, List<String>>> = groups.observeReadUpTo(groupId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+
     val composerText: StateFlow<String> = savedStateHandle.getStateFlow(KEY_DRAFT, "")
     private var draft: String
         get() = composerText.value

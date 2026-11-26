@@ -132,6 +132,14 @@ interface GroupDao {
     )
     fun observeProgress(groupId: String): Flow<List<GroupCopyProgressRow>>
 
+    /** Each of our messages in [groupId] a member read, with its time: who read how far. */
+    @Query(
+        "SELECT o.recipientId AS userId, o.messageId AS messageId, m.timestamp AS timestamp " +
+            "FROM group_outbox o JOIN messages m ON m.id = o.messageId " +
+            "WHERE o.groupId = :groupId AND o.messageId IS NOT NULL AND o.state = 'read'"
+    )
+    fun observeReads(groupId: String): Flow<List<GroupReadRow>>
+
     /** Copies of control packets (rosters, invitations, answers) for [groupId], newest first. */
     @Query("SELECT * FROM group_outbox WHERE groupId = :groupId AND messageId IS NULL ORDER BY createdAt DESC")
     fun observeControlCopies(groupId: String): Flow<List<GroupOutboxEntity>>
@@ -215,3 +223,6 @@ interface GroupDao {
 
 /** One of our group messages: [total] members it goes to, [sent] whose copy the relay took, [delivered] whose phones have it, [seen] who read it. */
 data class GroupCopyProgressRow(val messageId: String, val total: Int, val sent: Int, val delivered: Int, val seen: Int)
+
+/** Member [userId] read our message [messageId], written at [timestamp]. */
+data class GroupReadRow(val userId: String, val messageId: String, val timestamp: Long)

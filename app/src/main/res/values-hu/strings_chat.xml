@@ -79,6 +79,7 @@
     <string name="chat_sending_slow">Küldés…</string>
     <string name="chat_group_partly_sent_waiting">Elküldve %1$d/%2$d tagnak · A többieknek, amint van kapcsolat</string>
     <string name="chat_group_partly_sent">Elküldve %1$d/%2$d tagnak · Koppints az újraküldéshez</string>
+    <string name="group_read_by">Olvasta: %1$s</string>
     <string name="connection_connecting">Kapcsolódás…</string>
     <string name="connection_no_internet">Nincs internetkapcsolat</string>
     <string name="chat_unknown_payload">Ehhez az üzenethez újabb Sotto kell. Frissítsd a Sottót, hogy lásd.</string>

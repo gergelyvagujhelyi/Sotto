@@ -1517,6 +1517,12 @@ private fun ChatRowItem(
                             null
                         },
                     )
+                    // Who read up to here (Messenger's little circles), under our group message.
+                    if (group != null && message.isOutgoing) {
+                        group.readUpTo[message.id]?.let { ids ->
+                            ReadCircles(ids.map { group.nameOf(it) to it }, Modifier.align(Alignment.End))
+                        }
+                    }
                     }
                 }
                 }

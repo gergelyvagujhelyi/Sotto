@@ -14,8 +14,11 @@ class GroupTicksTest {
     }
 
     @Test
-    fun `everyone has it and some read it shows read ticks with how many read it`() {
-        assertEquals(MessageState.SEEN to "1/2", groupTicks(MessageState.DELIVERED, GroupProgress(total = 2, delivered = 2, seen = 1)))
+    fun `who read it isn't in the ticks, the read circles show it`() {
+        // Everyone has it, one read it: double ticks, no count (the reader's circle sits under it).
+        assertEquals(MessageState.DELIVERED to null, groupTicks(MessageState.DELIVERED, GroupProgress(total = 2, delivered = 2, seen = 1)))
+        // One read it, the other hasn't got it: delivery is what's partway.
+        assertEquals(MessageState.DELIVERED to "1/2", groupTicks(MessageState.SENT, GroupProgress(total = 2, delivered = 1, seen = 1)))
     }
 
     @Test
