@@ -30,7 +30,9 @@ class ReceiveRetries private constructor(private val prefsSource: (() -> SharedP
     fun bump(key: String, now: Long = System.currentTimeMillis()): Int {
         val n = count(key) + 1
         memory[key] = n
-        prefs?.edit { putString(key, "$n|$now") }
+        // Written at once (commit), not later: a process stopped right after the sync is the case
+        // this is for, and an apply() still in flight would be lost with it.
+        prefs?.edit(commit = true) { putString(key, "$n|$now") }
         return n
     }
 
@@ -40,7 +42,7 @@ class ReceiveRetries private constructor(private val prefsSource: (() -> SharedP
     @Synchronized
     fun clear(key: String) {
         memory.remove(key)
-        prefs?.edit { remove(key) }
+        prefs?.edit(commit = true) { remove(key) }
     }
 
     /** Forgets tries last counted more than a week ago (the relay keeps a message 28 days). */
@@ -58,5 +60,8 @@ class ReceiveRetries private constructor(private val prefsSource: (() -> SharedP
 
         /** Without storage, for tests. */
         fun inMemory() = ReceiveRetries(null)
+
+        /** Over [prefs] (a new instance is a new process: memory empty, storage kept), for tests. */
+        internal fun over(prefs: SharedPreferences) = ReceiveRetries { prefs }
     }
 }

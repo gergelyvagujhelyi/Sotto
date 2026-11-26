@@ -197,7 +197,8 @@ android {
         }
         // Native code (WebRTC, SQLCipher: about 80 % of the APK) compressed in the APK. Stored
         // uncompressed it can run from the APK as it is, but Sotto is downloaded from GitHub, not
-        // from Play: compressed, the APK is 14.5 MB smaller (about 36 to 22 MB). Android unpacks
+        // from Play: compressed, the APK is about 15.7 MB smaller (36.3 to 20.6 MB, together with the
+        // Picnic tables above). Android unpacks
         // it once when installing, which takes that much more room on the phone.
         jniLibs {
             useLegacyPackaging = true

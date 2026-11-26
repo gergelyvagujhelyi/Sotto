@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.JsonObject
@@ -57,7 +56,6 @@ class WebSocketClient @Inject constructor(
     private val messageRepository: dagger.Lazy<MessageRepository>,
     private val receiptManager: dagger.Lazy<com.sotto.app.data.repository.ReceiptManager>,
     private val appUpdates: com.sotto.app.update.AppUpdates,
-    private val reachability: com.sotto.app.connection.RelayReachability,
 ) {
     private companion object {
         private const val TAG = "WebSocketClient"
@@ -67,10 +65,6 @@ class WebSocketClient @Inject constructor(
         private const val MAX_RECONNECT_DELAY = 60_000L
         /** On screen, the longest wait between reconnect attempts. */
         private const val ON_SCREEN_MAX_RECONNECT_DELAY = 20_000L
-        /** A session this long counts as working: the next drop starts the backoff over. */
-        private const val STABLE_SESSION_MS = 30_000L
-        /** The longest a reconnect waits for a message upload to finish (they go first). */
-        private const val UPLOAD_PRIORITY_MAX_MS = 30_000L
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -111,28 +105,20 @@ class WebSocketClient @Inject constructor(
     @Volatile
     private var loopGeneration = 0
 
-    /** When the current session signed in (elapsedRealtime); 0 before it did. */
-    @Volatile
-    private var sessionOpenedAt = 0L
-
-    /** The next attempt is for a call: it doesn't wait for uploads. */
-    @Volatile
-    private var urgentNext = false
-
-    /** Ends the wait between reconnect attempts early (nudge), without starting the backoff over. */
-    private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
-
-    /**
-     * The relay answered a request: if the socket is waiting to retry, try now, but keep the
-     * backoff (a line that drops the socket still gets fewer attempts, not more).
-     */
-    fun nudge() {
-        if (socketState == SocketState.IDLE) wake.trySend(Unit)
-    }
-
     /** Sotto is on screen (RelayConnectionPolicy): reconnect attempts wait at most ON_SCREEN_MAX_RECONNECT_DELAY. */
     @Volatile
     var onScreen = false
+
+    /**
+     * A call is going on (RelayConnectionPolicy): every session that signed in starts the
+     * backoff over, as always, so the call's signals get quick retries (CallManager).
+     */
+    @Volatile
+    var callActive = false
+
+    /** When the current loop's session signed in (elapsedRealtime); 0 if it didn't. */
+    @Volatile
+    private var sessionOpenedAt = 0L
 
     private val _connected = MutableStateFlow(false)
     /** The socket is open and signed in: for the screens' "Connecting…" bar. */
@@ -152,31 +138,27 @@ class WebSocketClient @Inject constructor(
         val generation = ++loopGeneration
         connectionJob = scope.launch {
             while (isActive) {
-                // A message upload goes first: on a slow line the socket's handshake would starve
-                // it. Not when a call needs the socket now.
-                if (!urgentNext) reachability.awaitNoUploads(UPLOAD_PRIORITY_MAX_MS)
-                urgentNext = false
-                sessionOpenedAt = 0L
+                if (generation == loopGeneration) sessionOpenedAt = 0L
                 try {
                     markState(generation, SocketState.CONNECTING)
                     connectWebSocket(generation)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     if (BuildConfig.DEBUG) Log.w(TAG, "WebSocket connection failed: ${e.message}")
                 } finally {
                     markState(generation, SocketState.IDLE)
                 }
-                // Only a session that lasted starts the backoff over: one that drops after a few
-                // seconds (a line too poor to keep it) must not bring a reconnect every few seconds.
-                if (sessionOpenedAt > 0 && SystemClock.elapsedRealtime() - sessionOpenedAt >= STABLE_SESSION_MS) {
+                // A loop that was replaced (ensureConnected, disconnect) leaves the backoff alone.
+                if (generation != loopGeneration) return@launch
+                if (backoffStartsOver(sessionOpenedAt, SystemClock.elapsedRealtime(), callActive)) {
                     reconnectDelay = INITIAL_RECONNECT_DELAY
                 }
 
                 // Exponential backoff reconnect
                 // On screen the wait is capped, so "Connecting…" goes soon after the relay is back;
-                // off screen the backoff grows to a minute, as before. nudge() can end it early.
-                withTimeoutOrNull(if (onScreen) reconnectDelay.coerceAtMost(ON_SCREEN_MAX_RECONNECT_DELAY) else reconnectDelay) {
-                    wake.receive()
-                }
+                // off screen the backoff grows to a minute, as before.
+                delay(if (onScreen) reconnectDelay.coerceAtMost(ON_SCREEN_MAX_RECONNECT_DELAY) else reconnectDelay)
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
         }
@@ -218,7 +200,6 @@ class WebSocketClient @Inject constructor(
         }
         // [urgent]: a call is waiting for this socket, so retry quickly if the first attempt fails.
         reconnectDelay = if (urgent) URGENT_RECONNECT_DELAY else INITIAL_RECONNECT_DELAY
-        urgentNext = urgent
         connect()
     }
 
@@ -264,8 +245,10 @@ class WebSocketClient @Inject constructor(
 
             relayReport(authMsg)?.let { (version, ready) -> appUpdates.report(version, ready) }
             if (BuildConfig.DEBUG) Log.d(TAG, "WebSocket connected and authenticated")
-            // The backoff starts over only once the session has lasted (see the loop).
-            sessionOpenedAt = SystemClock.elapsedRealtime()
+            // The backoff starts over once the session has lasted (backoffStartsOver), not at
+            // sign-in: a line that drops the socket after a few seconds got a reconnect every
+            // few seconds, and the messages being sent were stuck behind the handshakes.
+            if (generation == loopGeneration) sessionOpenedAt = SystemClock.elapsedRealtime()
             lastFrameAt = SystemClock.elapsedRealtime()
             markState(generation, SocketState.OPEN)
             _sessionEpoch.value += 1
@@ -410,3 +393,12 @@ internal val CALL_SIGNAL_TYPES = setOf(
     "call_hangup", "call_busy", "call_reject", "call_ringing", "call_ice_restart",
     "call_verify",
 )
+
+/**
+ * Whether the reconnect backoff starts over after a session ends: only one that signed in and
+ * lasted [stableMs] (30 s), or any during a call (its signals need quick retries). Before, every
+ * sign-in started it over, so a socket that dropped after a few seconds reconnected every few
+ * seconds (0.7.29, a shaky Wi-Fi).
+ */
+internal fun backoffStartsOver(signedInAt: Long, now: Long, callActive: Boolean, stableMs: Long = 30_000L): Boolean =
+    signedInAt > 0 && (callActive || now - signedInAt >= stableMs)

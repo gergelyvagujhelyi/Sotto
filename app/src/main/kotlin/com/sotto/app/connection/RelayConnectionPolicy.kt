@@ -43,7 +43,6 @@ class RelayConnectionPolicy @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val callManager: Lazy<CallManager>,
     private val networkMonitor: DefaultNetworkMonitor,
-    private val reachability: RelayReachability,
 ) : Application.ActivityLifecycleCallbacks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var startedActivities = 0
@@ -73,24 +72,8 @@ class RelayConnectionPolicy @Inject constructor(
         }
         scope.launch {
             callManager.get().callState.collect { call ->
+                webSocketClient.callActive = call != null
                 if (call != null) cancelClose() else scheduleClose(AWAY_GRACE_MS)
-            }
-        }
-        // The relay answered a request while the socket is down (waiting out its backoff after an
-        // outage): it's reachable, so connect now rather than when the backoff ends. Not during a
-        // call: CallManager retries the socket itself, faster.
-        scope.launch {
-            var lastNudge = 0L
-            reachability.answered.collect {
-                val now = android.os.SystemClock.elapsedRealtime()
-                // At most every 30 s, and without starting the backoff over: on a poor line the
-                // answers keep coming while the socket keeps dropping.
-                if (keepNow() && !webSocketClient.connected.value && callManager.get().callState.value == null &&
-                    now - lastNudge >= NUDGE_INTERVAL_MS
-                ) {
-                    lastNudge = now
-                    webSocketClient.nudge()
-                }
             }
         }
         scope.launch {
@@ -156,8 +139,6 @@ class RelayConnectionPolicy @Inject constructor(
         const val AWAY_GRACE_MS = 2_000L
         /** After a push opened the socket in the background: time for buffered signals to arrive. */
         const val WAKE_LINGER_MS = 6_000L
-        /** The relay answering brings a reconnect attempt forward at most this often. */
-        const val NUDGE_INTERVAL_MS = 30_000L
     }
 }
 
