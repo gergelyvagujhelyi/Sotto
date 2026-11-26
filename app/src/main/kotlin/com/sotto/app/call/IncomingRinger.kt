@@ -12,7 +12,16 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.util.Log
+import com.sotto.app.domain.repository.SettingsRepository
+import com.sotto.app.notification.CallRingtone
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,9 +32,36 @@ import javax.inject.Singleton
  * the background), and some phones stayed silent.
  */
 @Singleton
-class IncomingRinger @Inject constructor(@ApplicationContext private val context: Context) {
+class IncomingRinger @Inject constructor(
+    @ApplicationContext private val context: Context,
+    settingsRepository: SettingsRepository,
+) {
     private var ringtone: Ringtone? = null
     private var vibrating = false
+
+    /** The ringtone setting (PrivacySettings.callRingtone), kept at hand for [start] once [settingRead]. */
+    @Volatile private var ringtoneSetting: String? = null
+    @Volatile private var settingRead = false
+    private val settings = settingsRepository.getPrivacySettings()
+
+    init {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            settings.collect {
+                ringtoneSetting = it.callRingtone
+                settingRead = true
+            }
+        }
+    }
+
+    /**
+     * The setting, read now if it hasn't come yet: a call can wake a cold app, and ringing
+     * with the phone's ringtone when the user chose None (or another sound) would be wrong.
+     * Reading the settings file takes milliseconds; after a second the phone's ringtone rings.
+     */
+    private fun currentRingtoneSetting(): String? {
+        if (settingRead) return ringtoneSetting
+        return runBlocking { withTimeoutOrNull(1_000) { settings.first().callRingtone } }
+    }
 
     private val vibrator: Vibrator? by lazy {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -46,12 +82,17 @@ class IncomingRinger @Inject constructor(@ApplicationContext private val context
             ringerMode = audio?.ringerMode ?: AudioManager.RINGER_MODE_NORMAL,
             interruptionFilter = notifications?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_ALL,
         )
-        Log.i(TAG, "Incoming call: ring=${plan.sound} vibrate=${plan.vibrate}")
-        if (plan.sound) {
+        // A ringtone chosen in Settings, or none there: no sound, but still the vibration.
+        val sound = CallRingtone.uri(currentRingtoneSetting())
+        Log.i(TAG, "Incoming call: ring=${plan.sound && sound != null} vibrate=${plan.vibrate}")
+        if (plan.sound && sound != null) {
             try {
-                ringtone = RingtoneManager.getRingtone(
-                    context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-                )?.apply {
+                // Null only when Android has no player for it at all. A chosen sound whose file is
+                // gone still gives a Ringtone, which plays Android's built-in fallback ring.
+                ringtone = (
+                    RingtoneManager.getRingtone(context, sound)
+                        ?: RingtoneManager.getRingtone(context, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE))
+                    )?.apply {
                     audioAttributes = AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)

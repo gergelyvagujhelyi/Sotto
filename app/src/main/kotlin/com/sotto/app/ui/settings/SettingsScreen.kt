@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import androidx.annotation.RequiresApi
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,11 +50,14 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Hearing
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PersonAdd
+import androidx.compose.material.icons.rounded.RingVolume
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.SwapCalls
 import androidx.compose.material.icons.rounded.Tune
@@ -112,6 +116,9 @@ import com.sotto.app.domain.model.DisappearingDuration
 import com.sotto.app.domain.model.DisplayNames
 import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
+import com.sotto.app.notification.PickSound
+import com.sotto.app.notification.SoundKind
+import com.sotto.app.notification.SoundPickerRequest
 import com.sotto.app.ui.components.AppSnackbarHost
 import com.sotto.app.ui.components.AuroraBackground
 import com.sotto.app.ui.components.AuroraStyle
@@ -317,7 +324,33 @@ fun SettingsScreen(
     // Re-checked when coming back from Android's dialog or its settings.
     LifecycleResumeEffect(Unit) {
         batteryOptimised = isBatteryOptimised()
+        // A sound may have been changed in Android's settings meanwhile.
+        viewModel.refreshSounds()
         onPauseOrDispose { }
+    }
+    val sounds by viewModel.sounds.collectAsState()
+    // Which sound the picker is open for; saved, as the app may be recreated meanwhile.
+    var pickingSound by rememberSaveable { mutableStateOf<SoundKind?>(null) }
+    val soundPicker = rememberLauncherForActivityResult(PickSound()) { picked ->
+        val kind = pickingSound
+        pickingSound = null
+        if (picked != null && kind != null) viewModel.setSound(kind, picked.uri)
+    }
+    fun pickSound(kind: SoundKind) {
+        val title = context.getString(
+            when (kind) {
+                SoundKind.MESSAGES -> R.string.settings_sound_messages
+                SoundKind.GROUPS -> R.string.settings_sound_groups
+                SoundKind.CALLS -> R.string.settings_sound_calls
+            },
+        )
+        pickingSound = kind
+        try {
+            soundPicker.launch(SoundPickerRequest(kind, sounds?.get(kind)?.uri, title))
+        } catch (_: ActivityNotFoundException) {
+            pickingSound = null
+            android.widget.Toast.makeText(context, R.string.settings_sound_no_picker, android.widget.Toast.LENGTH_LONG).show()
+        }
     }
     val noGooglePush = remember {
         GoogleApiAvailabilityLight.getInstance().isGooglePlayServicesAvailable(context) != ConnectionResult.SUCCESS
@@ -354,6 +387,8 @@ fun SettingsScreen(
         relayHost = viewModel.relayHost,
         onRotateKeys = viewModel::requestRotateKeys,
         onLockScreenPreviewChange = viewModel::updateLockScreenPreview,
+        sounds = sounds,
+        onPickSound = ::pickSound,
         onReadReceiptsChange = viewModel::updateReadReceipts,
         onScreenSecurityChange = viewModel::updateScreenSecurity,
         onDirectCallsChange = viewModel::updateDirectCalls,
@@ -394,6 +429,9 @@ fun SettingsContent(
     relayHost: String? = null,
     onRotateKeys: () -> Unit,
     onLockScreenPreviewChange: (LockScreenPreviewMode) -> Unit,
+    /** The sounds to show in Settings > Sounds; null hides the section until they're read. */
+    sounds: Sounds? = null,
+    onPickSound: (SoundKind) -> Unit = {},
     onReadReceiptsChange: (Boolean) -> Unit,
     onScreenSecurityChange: (Boolean) -> Unit,
     onDirectCallsChange: (Boolean) -> Unit,
@@ -483,6 +521,32 @@ fun SettingsContent(
                             title = previewLabels[mode] ?: mode.name,
                             selected = settings.lockScreenPreview == mode,
                             onClick = { onLockScreenPreviewChange(mode) },
+                        )
+                    }
+                }
+
+                sounds?.let { sounds ->
+                    SectionLabel(stringResource(R.string.settings_section_sounds), Modifier.padding(start = 4.dp))
+                    SettingsGroup {
+                        SettingsRow(
+                            icon = Icons.Rounded.Notifications,
+                            title = stringResource(R.string.settings_sound_messages),
+                            subtitle = sounds.messages.name.asString(),
+                            onClick = { onPickSound(SoundKind.MESSAGES) },
+                        )
+                        RowDivider()
+                        SettingsRow(
+                            icon = Icons.Rounded.Groups,
+                            title = stringResource(R.string.settings_sound_groups),
+                            subtitle = sounds.groups.name.asString(),
+                            onClick = { onPickSound(SoundKind.GROUPS) },
+                        )
+                        RowDivider()
+                        SettingsRow(
+                            icon = Icons.Rounded.RingVolume,
+                            title = stringResource(R.string.settings_sound_calls),
+                            subtitle = sounds.calls.name.asString(),
+                            onClick = { onPickSound(SoundKind.CALLS) },
                         )
                     }
                 }

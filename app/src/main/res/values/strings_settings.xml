@@ -34,6 +34,17 @@
     <string name="settings_preview_hide_body">Hide message body</string>
     <string name="settings_preview_hide_all">No lock screen preview</string>
 
+    <!-- Sounds -->
+    <string name="settings_section_sounds">Sounds</string>
+    <string name="settings_sound_messages">Message sound</string>
+    <string name="settings_sound_groups">Group sound</string>
+    <string name="settings_sound_calls">Call ringtone</string>
+    <!-- Subtitle of a sound row when no sound is chosen -->
+    <string name="settings_sound_none">None</string>
+    <!-- Subtitle of a sound row whose sound's name can't be read -->
+    <string name="settings_sound_unknown">Custom sound</string>
+    <string name="settings_sound_no_picker">This phone has no sound picker</string>
+
     <!-- Connection -->
     <string name="settings_section_connection">Connection</string>
     <string name="settings_background_connection">Background connection</string>

@@ -8,6 +8,9 @@ import com.sotto.app.domain.model.LockScreenPreviewMode
 import com.sotto.app.domain.model.PrivacySettings
 import com.sotto.app.domain.repository.IdentityRepository
 import com.sotto.app.domain.repository.SettingsRepository
+import com.sotto.app.notification.CallRingtone
+import com.sotto.app.notification.SoundKind
+import com.sotto.app.notification.soundTitle
 import com.sotto.app.ui.text.UiText
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,7 +34,67 @@ class SettingsViewModel @Inject constructor(
     private val relayConfig: com.sotto.app.connection.RelayConfig,
     private val inPersonVerifier: com.sotto.app.crypto.InPersonVerifier,
     private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
+    private val chatNotifications: com.sotto.app.notification.ChatNotificationManager,
+    @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
 ) : ViewModel() {
+
+    private val _sounds = MutableStateFlow<Sounds?>(null)
+    /** The sounds in Settings > Sounds; null until read. */
+    val sounds: StateFlow<Sounds?> = _sounds.asStateFlow()
+
+    /**
+     * Reads and changes of the sounds, one after another: a read started on coming back from
+     * the picker must not finish after the change and show the old sound.
+     */
+    private var soundWork: kotlinx.coroutines.Job? = null
+
+    private fun soundWork(block: suspend () -> Unit) {
+        val previous = soundWork
+        soundWork = viewModelScope.launch {
+            previous?.join()
+            block()
+        }
+    }
+
+    /** Read the sounds again: also on coming back to Settings, as one may have changed in Android's settings. */
+    fun refreshSounds() = soundWork { _sounds.value = readSounds() }
+
+    private suspend fun readSounds(): Sounds {
+        val ringtone = settingsRepository.getPrivacySettings().first().callRingtone
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            fun channel(kind: SoundKind): Sound {
+                val uri = chatNotifications.messageSound(kind)
+                return Sound(uri, soundName(uri))
+            }
+            val callUri = CallRingtone.uri(ringtone)
+            Sounds(
+                messages = channel(SoundKind.MESSAGES),
+                groups = channel(SoundKind.GROUPS),
+                calls = Sound(callUri, soundName(callUri)),
+            )
+        }
+    }
+
+    private fun soundName(uri: android.net.Uri?): UiText = when (uri) {
+        null -> UiText.res(R.string.settings_sound_none)
+        else -> soundTitle(appContext, uri)?.let { UiText.Plain(it) } ?: UiText.res(R.string.settings_sound_unknown)
+    }
+
+    /** The user picked [uri] (null: none) for [kind] in Android's sound list. */
+    fun setSound(kind: SoundKind, uri: android.net.Uri?) {
+        soundWork {
+            when (kind) {
+                SoundKind.CALLS -> settingsMutex.withLock {
+                    val current = settingsRepository.getPrivacySettings().first()
+                    settingsRepository.updatePrivacySettings(current.copy(callRingtone = CallRingtone.fromPicked(uri)))
+                }
+                else -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    chatNotifications.setMessageSound(kind, uri)
+                }
+            }
+            _sounds.value = readSounds()
+        }
+    }
 
     /** Groups the user runs (with other members), offered a handover before the account goes. */
     private val _groupsToHandOver = MutableStateFlow(0)
@@ -363,5 +426,16 @@ class SettingsViewModel @Inject constructor(
 
     fun dismissRotationError() {
         _rotationError.value = null
+    }
+}
+
+/** A sound in Settings > Sounds: [uri] (null for none) to open the picker on, [name] to show. */
+data class Sound(val uri: android.net.Uri?, val name: UiText)
+
+data class Sounds(val messages: Sound, val groups: Sound, val calls: Sound) {
+    operator fun get(kind: SoundKind) = when (kind) {
+        SoundKind.MESSAGES -> messages
+        SoundKind.GROUPS -> groups
+        SoundKind.CALLS -> calls
     }
 }

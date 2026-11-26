@@ -31,27 +31,32 @@ class ChatNotificationManager @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val messageDao: MessageDao,
 ) {
+    /**
+     * The channels in use for 1:1 and group messages; see [SoundChannelIds]. Declared before
+     * init, which sets them.
+     */
+    @Volatile private var messagesChannel = SoundChannelIds.MESSAGES.current(emptyList())
+    @Volatile private var groupsChannel = SoundChannelIds.GROUPS.current(emptyList())
+
     init {
         createNotificationChannels()
     }
 
     /** Makes the channels, or renames them into the current language (MainActivity, after a language switch). */
+    @Synchronized
     fun createNotificationChannels() {
         val manager = context.getSystemService(NotificationManager::class.java)
 
         // Delete legacy channel whose VISIBILITY_SECRET default caps per-notification visibility
         manager.deleteNotificationChannel(CHANNEL_MESSAGES_LEGACY)
 
-        val messageChannel = NotificationChannel(
-            CHANNEL_MESSAGES,
-            context.getString(R.string.notification_channel_messages),
-            NotificationManager.IMPORTANCE_HIGH,
-        ).apply {
-            description = context.getString(R.string.notification_channel_messages_description)
-            // Leave lockscreenVisibility at default (VISIBILITY_PRIVATE) so
-            // per-notification visibility set dynamically from privacy settings
-            // is not capped by the channel.
-        }
+        val existing = manager.notificationChannels.map { it.id }
+        messagesChannel = SoundChannelIds.MESSAGES.current(existing)
+        groupsChannel = SoundChannelIds.GROUPS.current(existing)
+        // Older generations left by a sound change that stopped halfway.
+        val stale = SoundChannelIds.MESSAGES.stale(existing, messagesChannel) + SoundChannelIds.GROUPS.stale(existing, groupsChannel)
+        stale.forEach { manager.deleteNotificationChannel(it) }
+        if (stale.isNotEmpty()) cancelEmptyGroupSummary()
 
         val missedCallChannel = NotificationChannel(
             CHANNEL_MISSED_CALLS,
@@ -75,9 +80,89 @@ class ChatNotificationManager @Inject constructor(
             setShowBadge(false)
         }
 
-        manager.createNotificationChannel(messageChannel)
+        // For a channel that already exists, Android takes only the new name and description.
+        manager.createNotificationChannel(messageChannel(SoundKind.MESSAGES, messagesChannel))
+        // Up to 0.7.26 group messages came on the messages channel: their own starts as the user
+        // had set that one (silenced or off, say), not with Sotto's defaults.
+        val groupsFrom = if (groupsChannel in existing) null else manager.getNotificationChannel(messagesChannel)
+        manager.createNotificationChannel(
+            messageChannel(SoundKind.GROUPS, groupsChannel).apply { groupsFrom?.let { carryOver(it, it.sound) } },
+        )
         manager.createNotificationChannel(missedCallChannel)
         manager.createNotificationChannel(backgroundConnectionChannel)
+    }
+
+    /** A new channel for 1:1 or group messages, as Sotto makes it (the phone's notification sound). */
+    private fun messageChannel(kind: SoundKind, id: String) = NotificationChannel(
+        id,
+        context.getString(if (kind == SoundKind.GROUPS) R.string.notification_channel_groups else R.string.notification_channel_messages),
+        NotificationManager.IMPORTANCE_HIGH,
+    ).apply {
+        description = context.getString(
+            if (kind == SoundKind.GROUPS) R.string.notification_channel_groups_description
+            else R.string.notification_channel_messages_description,
+        )
+        // Leave lockscreenVisibility at default (VISIBILITY_PRIVATE) so
+        // per-notification visibility set dynamically from privacy settings
+        // is not capped by the channel.
+    }
+
+    private fun channelIds(kind: SoundKind) = when (kind) {
+        SoundKind.GROUPS -> SoundChannelIds.GROUPS
+        else -> SoundChannelIds.MESSAGES
+    }
+
+    private fun channelId(kind: SoundKind) = if (kind == SoundKind.GROUPS) groupsChannel else messagesChannel
+
+    /**
+     * The sound 1:1 or group messages make now, null for none. Read from the channel, so a
+     * sound the user chose in Android's settings shows too.
+     */
+    fun messageSound(kind: SoundKind): android.net.Uri? =
+        context.getSystemService(NotificationManager::class.java)
+            ?.getNotificationChannel(channelId(kind))
+            ?.sound
+
+    /**
+     * Give 1:1 or group messages the sound [uri] (null: none). Android doesn't let an app change
+     * a channel's sound, so this makes the channel anew (see [SoundChannelIds]) with whatever
+     * else the user set on the old one, and deletes the old one. Its notifications go with it.
+     */
+    @Synchronized
+    fun setMessageSound(kind: SoundKind, uri: android.net.Uri?) {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        val ids = channelIds(kind)
+        val oldId = channelId(kind)
+        val old = manager.getNotificationChannel(oldId)
+        // The sound it has already: a new channel would only drop the notifications showing.
+        if (old != null && old.sound == uri) return
+        val newId = ids.next(oldId)
+        val replacement = messageChannel(kind, newId).apply {
+            if (old != null) carryOver(old, uri) else setSound(uri, android.app.Notification.AUDIO_ATTRIBUTES_DEFAULT)
+        }
+        manager.createNotificationChannel(replacement)
+        if (kind == SoundKind.GROUPS) groupsChannel = newId else messagesChannel = newId
+        ids.stale(manager.notificationChannels.map { it.id }, keep = newId)
+            .forEach { manager.deleteNotificationChannel(it) }
+        // The deleted channel's notifications went with it; the summary over them may be all that's left.
+        cancelEmptyGroupSummary()
+    }
+
+    /**
+     * What the user set on [from], on this channel not yet made, with the sound [sound].
+     * "Override Do Not Disturb" stays the user's to turn on, never Sotto's; Android may also
+     * drop a lock screen choice made in its settings.
+     */
+    private fun NotificationChannel.carryOver(from: NotificationChannel, sound: android.net.Uri?) {
+        setSound(sound, from.audioAttributes ?: android.app.Notification.AUDIO_ATTRIBUTES_DEFAULT)
+        importance = from.importance
+        lockscreenVisibility = from.lockscreenVisibility
+        setShowBadge(from.canShowBadge())
+        enableVibration(from.shouldVibrate())
+        vibrationPattern = from.vibrationPattern
+        enableLights(from.shouldShowLights())
+        lightColor = from.lightColor
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) setAllowBubbles(from.canBubble())
     }
 
     suspend fun showMessageNotification(
@@ -133,7 +218,7 @@ class ChatNotificationManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        val builder = NotificationCompat.Builder(context, messagesChannel) // the channel: postOn
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(content.title)
             .setContentText(content.text.resolve(context))
@@ -151,7 +236,7 @@ class ChatNotificationManager @Inject constructor(
         }
         if (content.count > 1) builder.setNumber(content.count)
 
-        post(notificationId, builder.build())
+        postOn(SoundKind.MESSAGES, notificationId, builder)
         postGroupSummary(visibility)
     }
 
@@ -198,7 +283,7 @@ class ChatNotificationManager @Inject constructor(
         val pendingIntent = PendingIntent.getActivity(
             context, notificationId, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val builder = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        val builder = NotificationCompat.Builder(context, groupsChannel) // the channel: postOn
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(content.title)
             .setContentText(content.text.resolve(context))
@@ -224,7 +309,7 @@ class ChatNotificationManager @Inject constructor(
             builder.setStyle(style)
         }
         if (content.count > 1) builder.setNumber(content.count)
-        post(notificationId, builder.build())
+        postOn(SoundKind.GROUPS, notificationId, builder)
         postGroupSummary(visibility)
     }
 
@@ -307,7 +392,10 @@ class ChatNotificationManager @Inject constructor(
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val summary = NotificationCompat.Builder(context, CHANNEL_MESSAGES)
+        // On the missed-calls channel: it's never replaced. On a messages channel, a sound change
+        // would delete the summary, and Android takes the group's other notifications (group
+        // chats, missed calls) with a summary. It never sounds (GROUP_ALERT_CHILDREN).
+        val summary = NotificationCompat.Builder(context, CHANNEL_MISSED_CALLS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Sotto")
             .setContentText(context.getString(R.string.notification_new_messages_summary))
@@ -322,6 +410,15 @@ class ChatNotificationManager @Inject constructor(
             .build()
         post(GROUP_SUMMARY_ID, summary)
     }
+
+    /**
+     * Post a 1:1 or group message notification on the channel in use at this moment: a sound
+     * change (on another thread) replaces the channel and deletes the old one, and a
+     * notification for a deleted channel is dropped.
+     */
+    @Synchronized
+    private fun postOn(kind: SoundKind, id: Int, builder: NotificationCompat.Builder) =
+        post(id, builder.setChannelId(channelId(kind)).build())
 
     /**
      * Post [notification] if notifications are allowed. The callers check first too, but the
@@ -376,7 +473,6 @@ class ChatNotificationManager @Inject constructor(
     companion object {
         /** Legacy channel ID — had VISIBILITY_SECRET that capped per-notification visibility. */
         private const val CHANNEL_MESSAGES_LEGACY = "messages"
-        const val CHANNEL_MESSAGES = "messages_v2"
         const val CHANNEL_MISSED_CALLS = "missed_calls"
         private const val CHANNEL_SERVICE_LEGACY = "background_service"
         const val CHANNEL_BACKGROUND_CONNECTION = "background_connection"

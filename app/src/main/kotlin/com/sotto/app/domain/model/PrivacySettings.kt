@@ -35,6 +35,11 @@ data class PrivacySettings(
     val webRtcVoiceProcessing: Boolean = false,
     /** No send animation, and still backgrounds and call screen (see LocalReduceMotion). */
     val reduceAnimations: Boolean = false,
+    /**
+     * What incoming calls ring with: null for the phone's ringtone, "" for no sound (it still
+     * vibrates), else the chosen sound's URI (CallRingtone).
+     */
+    val callRingtone: String? = null,
 )
 
 enum class LockScreenPreviewMode {

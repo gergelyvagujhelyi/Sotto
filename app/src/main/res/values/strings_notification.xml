@@ -3,6 +3,8 @@
 <resources>
     <string name="notification_channel_messages">Messages</string>
     <string name="notification_channel_messages_description">New message notifications</string>
+    <string name="notification_channel_groups">Group messages</string>
+    <string name="notification_channel_groups_description">New messages in group chats</string>
     <string name="notification_channel_missed_calls">Missed Calls</string>
     <string name="notification_channel_missed_calls_description">Missed call notifications</string>
     <string name="notification_channel_background">Background connection</string>

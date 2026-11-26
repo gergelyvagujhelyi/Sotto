@@ -62,6 +62,7 @@ class SettingsRepositoryImpl @Inject constructor(
                 levelVoices = prefs[LEVEL_VOICES] ?: false,
                 webRtcVoiceProcessing = prefs[WEBRTC_VOICE_PROCESSING] ?: false,
                 reduceAnimations = prefs[REDUCE_ANIMATIONS] ?: false,
+                callRingtone = prefs[CALL_RINGTONE],
             )
         }
     }
@@ -79,6 +80,7 @@ class SettingsRepositoryImpl @Inject constructor(
             prefs[LEVEL_VOICES] = settings.levelVoices
             prefs[WEBRTC_VOICE_PROCESSING] = settings.webRtcVoiceProcessing
             prefs[REDUCE_ANIMATIONS] = settings.reduceAnimations
+            settings.callRingtone?.let { prefs[CALL_RINGTONE] = it } ?: prefs.remove(CALL_RINGTONE)
         }
     }
 
@@ -170,5 +172,6 @@ class SettingsRepositoryImpl @Inject constructor(
         private val LEVEL_VOICES = booleanPreferencesKey("level_voices")
         private val WEBRTC_VOICE_PROCESSING = booleanPreferencesKey("webrtc_voice_processing")
         private val REDUCE_ANIMATIONS = booleanPreferencesKey("reduce_animations")
+        private val CALL_RINGTONE = stringPreferencesKey("call_ringtone")
     }
 }

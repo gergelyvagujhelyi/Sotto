@@ -3,6 +3,8 @@
 <resources>
     <string name="notification_channel_messages">Üzenetek</string>
     <string name="notification_channel_messages_description">Értesítések új üzenetekről</string>
+    <string name="notification_channel_groups">Csoportüzenetek</string>
+    <string name="notification_channel_groups_description">Új üzenetek a csoportos csevegésekben</string>
     <string name="notification_channel_missed_calls">Nem fogadott hívások</string>
     <string name="notification_channel_missed_calls_description">Értesítések nem fogadott hívásokról</string>
     <string name="notification_channel_background">Háttérkapcsolat</string>
