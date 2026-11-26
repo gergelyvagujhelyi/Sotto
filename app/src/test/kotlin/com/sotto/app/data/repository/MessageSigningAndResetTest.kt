@@ -55,6 +55,7 @@ class MessageSigningAndResetTest {
     private val blockedUserDao = mockk<BlockedUserDao>(relaxed = true)
     private val resendScheduler = mockk<com.sotto.app.worker.ResendScheduler>(relaxed = true)
     private val backgroundOffers = mockk<com.sotto.app.connection.BackgroundOfferStore>(relaxed = true)
+    private val receiveRetries = ReceiveRetries.inMemory()
     private lateinit var repo: MessageRepositoryImpl
 
     private val pqcContact = ContactEntity(
@@ -90,7 +91,11 @@ class MessageSigningAndResetTest {
         every { pqcProvider.verify(any(), any(), any()) } returns true
         coEvery { cryptoEngine.sessionInfo(any()) } returns null
 
-        repo = MessageRepositoryImpl(
+        repo = newRepo()
+    }
+
+    /** A repository as a new process gets it: fresh memory, the same phone storage ([receiveRetries]). */
+    private fun newRepo() = MessageRepositoryImpl(
             messageDao = messageDao,
             conversationDao = conversationDao,
             contactDao = contactDao,
@@ -117,8 +122,8 @@ class MessageSigningAndResetTest {
             groups = javax.inject.Provider { groupRepo },
             resend = resendScheduler,
             backgroundOffers = backgroundOffers,
+            receiveRetries = receiveRetries,
         )
-    }
 
     @After
     fun tearDown() = unmockkAll()
@@ -286,6 +291,21 @@ class MessageSigningAndResetTest {
         coEvery { cryptoEngine.decrypt(any(), any(), any()) } throws SecurityException("No session could decrypt the message")
         coEvery { apiService.fetchPendingMessages() } returns listOf(chatDto(id))
         repeat(3) { repo.fetchPendingAndWait() }
+    }
+
+    @Test
+    fun `tries count across processes, so a phone that stops Sotto between syncs still gives up and asks for a reset`() = runTest {
+        // Samsung stopped Sotto after each push: a new process every sync. The count used to
+        // start again each time, so the message (and all after it) was held for good.
+        coEvery { contactDao.getByUserId("peer") } returns classicalContact
+        coEvery { cryptoEngine.decrypt(any(), any(), any()) } throws SecurityException("No session could decrypt the message")
+        coEvery { apiService.fetchPendingMessages() } returns listOf(chatDto("lost"))
+
+        repeat(3) { newRepo().fetchPendingAndWait() }
+
+        coVerify(exactly = 1) { messageDao.insert(match<MessageEntity> { it.id == "lost" && it.state == MessageState.DECRYPT_FAILED.name }) }
+        coVerify(exactly = 1) { apiService.acknowledgeMessages(AckRequest(listOf("lost"))) }
+        coVerify(exactly = 1) { sessionResetSender.send("peer", any(), any()) }
     }
 
     @Test

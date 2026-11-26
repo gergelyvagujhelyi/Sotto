@@ -4,6 +4,7 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **A broken session can't block a contact for good** — When messages from someone couldn't be decrypted, Sotto tried three times, then showed "Couldn't decrypt" and asked their phone for a new session. It counted those tries in memory only, and a phone whose battery saver stops Sotto between pushes (Samsung) started at one every time: it never got to three and held every later message from that person unread. The tries are now kept on the phone.
 - **Initials sit in the middle of their circle** — In the small read circles under group messages the letters sat low and a little off. The line around the initials is now exactly as tall as the letters, so they're centred at every size (large avatars looked right before and still do).
 
 ## 0.7.29 — 2026-11-26
