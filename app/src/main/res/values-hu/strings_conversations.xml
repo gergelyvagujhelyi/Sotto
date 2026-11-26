@@ -4,6 +4,10 @@
     <string name="conversations_title">Beszélgetések</string>
     <string name="conversations_new_chat">Új beszélgetés</string>
     <string name="conversations_empty_title">Még nincs beszélgetésed</string>
+    <string name="conversations_background_title">Engedd a Sottót a háttérben futni</string>
+    <string name="conversations_background_body">Addig az Android visszatarthatja az új üzeneteket és hívásokat, amíg meg nem nyitod a Sottót.</string>
+    <string name="conversations_background_allow">Engedélyezés</string>
+    <string name="conversations_background_later">Most nem</string>
     <string name="conversations_empty_body">Koppints az Új beszélgetés gombra, és add meg valakinek a megosztási kódját, hogy privát, végponttól végpontig titkosított beszélgetést indíts.</string>
     <string name="conversations_requests">Üzenetkérések</string>
     <string name="conversations_chats">Beszélgetések</string>

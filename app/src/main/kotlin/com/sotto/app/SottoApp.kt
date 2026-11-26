@@ -41,6 +41,8 @@ class SottoApp : Application(), Configuration.Provider {
     @Inject lateinit var identityRepository: IdentityRepositoryImpl
     @Inject lateinit var pushTokenRepository: com.sotto.app.domain.repository.PushTokenRepository
     @Inject lateinit var messageRepository: com.sotto.app.domain.repository.MessageRepository
+    @Inject lateinit var resendScheduler: com.sotto.app.worker.ResendScheduler
+    @Inject lateinit var groupOutbox: com.sotto.app.worker.GroupOutboxScheduler
     /**
      * Created eagerly: it is the only collector of call signals from the WebSocket.
      * When an FCM push starts the process for an incoming call, the server flushes
@@ -105,6 +107,15 @@ class SottoApp : Application(), Configuration.Provider {
             // Sends interrupted by a process death can't complete; make them retryable.
             try { messageRepository.failInterruptedSends() } catch (_: Exception) {}
             pushTokenRepository.syncPushRegistration()
+        }
+
+        // Failed messages go again by themselves (AutoResend): now, and whenever the relay is
+        // reachable again (each new socket session), rather than after the workers' backoff.
+        appScope.launch {
+            webSocketClient.sessionEpoch.collect {
+                resendScheduler.retryNow()
+                groupOutbox.retryNow()
+            }
         }
 
         // Disappearing messages: delete expired rows while the app is alive

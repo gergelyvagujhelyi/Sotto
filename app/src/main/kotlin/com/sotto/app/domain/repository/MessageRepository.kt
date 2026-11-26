@@ -36,6 +36,9 @@ interface MessageRepository {
     suspend fun markDelivered(messageId: String)
     suspend fun markSeen(messageId: String)
     suspend fun retryFailed(messageId: String)
+
+    /** Sends our fresh failed one-to-one messages again (AutoResend); true while some still wait. */
+    suspend fun resendFailed(): Boolean = false
     suspend fun deleteMessage(messageId: String)
 
     /** Sends any file through the relay's object store (ADR-29), with an optional [caption]. */

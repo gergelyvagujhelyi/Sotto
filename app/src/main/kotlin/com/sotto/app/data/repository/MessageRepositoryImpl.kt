@@ -74,6 +74,8 @@ class MessageRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     /** Group packets go there, before anything one-to-one happens with them (ADR-32). */
     private val groups: javax.inject.Provider<GroupRepositoryImpl>,
+    /** Failed messages go again by themselves (AutoResend). */
+    private val resend: com.sotto.app.worker.ResendScheduler,
 ) : MessageRepository, GroupTransport {
 
     override val fileProgress: kotlinx.coroutines.flow.StateFlow<Map<String, Float>> get() = fileDrop.progress
@@ -725,6 +727,7 @@ class MessageRepositoryImpl @Inject constructor(
             encryptFor(recipientId, wirePayload(entity, senderId).toByteArray(Charsets.UTF_8))
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
+            resend.schedule()
             throw e
         }
 
@@ -759,6 +762,7 @@ class MessageRepositoryImpl @Inject constructor(
             )
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
+            resend.schedule()
             throw e
         }
     }
@@ -889,11 +893,10 @@ class MessageRepositoryImpl @Inject constructor(
             retryFile(messageId)
             return
         }
-        // Only our own failed messages (a double tap must not resend a message
-        // that the first tap already got through).
-        if (!entity.isOutgoing || entity.state != MessageState.FAILED.name) return
-        val plaintext = entity.plaintext ?: return // Cannot retry without plaintext
-        messageDao.updateState(messageId, MessageState.SENDING.name)
+        // Only our own failed messages, claimed in one step: a double tap, or a tap while the
+        // automatic resend has it, must not send a message twice at once.
+        if (!entity.isOutgoing || entity.plaintext == null) return // Cannot retry without plaintext
+        if (messageDao.claimState(messageId, MessageState.FAILED.name, MessageState.SENDING.name) == 0) return
         if (usesStore(entity)) {
             // Its upload resumes in the background, then the message goes.
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.UPLOADING.wire)
@@ -926,8 +929,23 @@ class MessageRepositoryImpl @Inject constructor(
             updateConversationPreview(entity.conversationId, entity.recipientId, entity.preview(context), response.timestamp)
         } catch (e: Exception) {
             messageDao.updateState(messageId, MessageState.FAILED.name)
+            resend.schedule()
             throw e
         }
+    }
+
+    override suspend fun resendFailed(): Boolean {
+        val since = System.currentTimeMillis() - AutoResend.WINDOW_MS
+        // Not to someone blocked since: that waits for a tap (or never goes).
+        suspend fun due() = messageDao.getFailedOutgoingSince(since).filterNot { blockedUserDao.isBlocked(it.recipientId) }
+        for (message in due()) {
+            try {
+                retryFailed(message.id)
+            } catch (_: Exception) {
+                // Still failed; the worker tries again later.
+            }
+        }
+        return due().isNotEmpty()
     }
 
     /**

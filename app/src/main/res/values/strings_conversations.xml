@@ -4,6 +4,11 @@
     <string name="conversations_title">Chats</string>
     <string name="conversations_new_chat">New chat</string>
     <string name="conversations_empty_title">No conversations yet</string>
+    <!-- Card in the chat list while Android may hold Sotto back in the background -->
+    <string name="conversations_background_title">Let Sotto run in the background</string>
+    <string name="conversations_background_body">Until you do, Android can hold back new messages and calls until you open Sotto.</string>
+    <string name="conversations_background_allow">Allow</string>
+    <string name="conversations_background_later">Not now</string>
     <string name="conversations_empty_body">Tap New chat and enter someone\'s share code to start a private, end-to-end encrypted conversation.</string>
     <string name="conversations_requests">Message requests</string>
     <string name="conversations_chats">Chats</string>

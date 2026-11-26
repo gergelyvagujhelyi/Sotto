@@ -52,6 +52,7 @@ class MessageSigningAndResetTest {
     private val pqcProvider = mockk<PqcProvider>(relaxed = true)
     private val sessionResetSender = mockk<SessionResetSender>(relaxed = true)
     private val blockedUserDao = mockk<BlockedUserDao>(relaxed = true)
+    private val resendScheduler = mockk<com.sotto.app.worker.ResendScheduler>(relaxed = true)
     private lateinit var repo: MessageRepositoryImpl
 
     private val pqcContact = ContactEntity(
@@ -112,6 +113,7 @@ class MessageSigningAndResetTest {
                 }
             },
             groups = javax.inject.Provider { groupRepo },
+            resend = resendScheduler,
         )
     }
 
@@ -153,6 +155,57 @@ class MessageSigningAndResetTest {
 
         coVerify(exactly = 0) { apiService.sendMessage(any()) }
         coVerify { messageDao.updateState(any(), MessageState.FAILED.name) }
+    }
+
+    // ── Automatic resend ────────────────────────────────────────────────────
+
+    private fun failedText(id: String, to: String = "peer", writtenAt: Long = System.currentTimeMillis()) = MessageEntity(
+        id = id, conversationId = "c", senderId = "me", recipientId = to,
+        encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "Hej", state = MessageState.FAILED.name,
+        timestamp = writtenAt, expiresAt = null, isOutgoing = true,
+    )
+
+    @Test
+    fun `a message that fails to send is handed to the automatic resend`() = runTest {
+        stubSendableSession()
+        coEvery { apiService.sendMessage(any()) } throws java.io.IOException("timeout")
+
+        runCatching { repo.sendMessage("conv", "peer", "Hej", null) }
+
+        coVerify { messageDao.updateState(any(), MessageState.FAILED.name) }
+        coVerify { resendScheduler.schedule() }
+    }
+
+    @Test
+    fun `a message the automatic resend already took isn't sent again by a tap`() = runTest {
+        stubSendableSession()
+        every { keyManager.getUserId() } returns "me"
+        coEvery { messageDao.getById("m1") } returns failedText("m1")
+        coEvery { messageDao.claimState("m1", MessageState.FAILED.name, MessageState.SENDING.name) } returns 0
+
+        repo.retryFailed("m1")
+
+        coVerify(exactly = 0) { apiService.sendMessage(any()) }
+    }
+
+    @Test
+    fun `the automatic resend sends fresh failed messages, with their own id, but not to someone blocked`() = runTest {
+        stubSendableSession()
+        every { keyManager.getUserId() } returns "me"
+        val fresh = failedText("m2")
+        val toBlocked = failedText("m3", to = "blocked")
+        coEvery { messageDao.getFailedOutgoingSince(any()) } returnsMany listOf(listOf(fresh, toBlocked), listOf(toBlocked))
+        coEvery { messageDao.getById("m2") } returns fresh
+        coEvery { messageDao.claimState("m2", MessageState.FAILED.name, MessageState.SENDING.name) } returns 1
+        coEvery { blockedUserDao.isBlocked("blocked") } returns true
+        coEvery { apiService.sendMessage(any()) } returns mockk(relaxed = true)
+
+        val waiting = repo.resendFailed()
+
+        coVerify { apiService.sendMessage(match { it.clientMessageId == "m2" }) }
+        coVerify(exactly = 0) { apiService.sendMessage(match { it.recipientId == "blocked" }) }
+        // Only the blocked one is left, and it doesn't count as waiting.
+        assertEquals(false, waiting)
     }
 
     @Test

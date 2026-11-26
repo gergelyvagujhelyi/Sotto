@@ -452,6 +452,12 @@ class GroupRepositoryImpl @Inject constructor(
         if (row.mediaKind == MediaKind.FILE.wire) messageDao.setMediaState(row.id, FileState.READY.wire)
         deliver(groupDao.getCopiesForMessage(row.id))
         refreshState(row.id)
+        scheduleIfFailed(row.id)
+    }
+
+    /** Some copy of message [messageId] failed: the outbox sends it again by itself (AutoResend). */
+    private suspend fun scheduleIfFailed(messageId: String) {
+        if (groupDao.getCopiesForMessage(messageId).any { it.state == COPY_FAILED }) env.scheduleOutbox()
     }
 
     /** A queued copy of [packet] for [recipient]; skipped for someone blocked, failed for someone without matching keys. */
@@ -574,23 +580,29 @@ class GroupRepositoryImpl @Inject constructor(
         messageDao.updateState(messageId, MessageState.SENDING.name)
         deliver(groupDao.getCopiesForMessage(messageId))
         refreshState(messageId)
+        scheduleIfFailed(messageId)
     }
 
     override suspend fun flushOutbox(): Boolean = withContext(NonCancellable) {
         val waiting = groupDao.getByStates(listOf(COPY_QUEUED, COPY_SEALED), OUTBOX_BATCH)
-        // Control packets and reactions are retried by themselves; a message's failed copies wait for a tap.
-        val failedControl = groupDao.getByStates(listOf(COPY_FAILED), OUTBOX_BATCH)
-            .filter { it.messageId == null && it.attempts < MAX_CONTROL_ATTEMPTS && it.lastError != ERROR_KEYS }
-        for (copy in failedControl) {
+        // Failed copies go again by themselves: control packets and reactions, and a message's
+        // copies while it's fresh (AutoResend; older ones wait for a tap).
+        val retrying = groupDao.getByStates(listOf(COPY_FAILED), OUTBOX_BATCH).filter { retriesItself(it) }
+        for (copy in retrying) {
             groupDao.setState(copy.id, if (copy.ciphertext != null) COPY_SEALED else COPY_QUEUED, env.now())
         }
-        val all = waiting + failedControl
+        val all = waiting + retrying
         deliver(all.mapNotNull { groupDao.getCopy(it.id) })
         all.mapNotNull { it.messageId }.distinct().forEach { refreshState(it) }
         groupDao.pruneControlCopies(env.now() - CONTROL_COPY_KEEP_MS)
         groupDao.getByStates(listOf(COPY_QUEUED, COPY_SEALED), 1).isNotEmpty() ||
-            groupDao.getByStates(listOf(COPY_FAILED), OUTBOX_BATCH).any { it.messageId == null && it.attempts < MAX_CONTROL_ATTEMPTS && it.lastError != ERROR_KEYS }
+            groupDao.getByStates(listOf(COPY_FAILED), OUTBOX_BATCH).any { retriesItself(it) }
     }
+
+    /** A failed copy the outbox sends again without a tap. */
+    private fun retriesItself(copy: GroupOutboxEntity): Boolean =
+        if (copy.messageId == null) copy.attempts < MAX_CONTROL_ATTEMPTS && copy.lastError != ERROR_KEYS
+        else AutoResend.copyDue(copy.messageId, copy.attempts, copy.lastError, copy.createdAt, env.now())
 
     /** Our messages left SENDING by a process death: their copies are sent again (the same bytes). */
     suspend fun resumeInterrupted() {

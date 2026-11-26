@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import android.os.PowerManager
 import androidx.annotation.RequiresApi
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
@@ -102,7 +101,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -318,8 +316,7 @@ fun SettingsScreen(
 
     val context = LocalContext.current
     // Whether Android may still stop the app in the background (battery optimisation on).
-    fun isBatteryOptimised() =
-        context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == false
+    fun isBatteryOptimised() = com.sotto.app.ui.components.BackgroundActivity.isRestricted(context)
     var batteryOptimised by remember { mutableStateOf(isBatteryOptimised()) }
     // Re-checked when coming back from Android's dialog or its settings.
     LifecycleResumeEffect(Unit) {
@@ -356,23 +353,9 @@ fun SettingsScreen(
         GoogleApiAvailabilityLight.getInstance().isGooglePlayServicesAvailable(context) != ConnectionResult.SUCCESS
     }
 
-    // Asks Android to stop optimising the app's battery use, so Doze doesn't cut the
-    // background connection off. Lint flags this request (BatteryLife); a chat app keeping its
-    // own connection on phones without Google push is what the exemption is meant for.
-    // app/lint.xml says so to lint: it ignored a @SuppressLint on this local function.
-    fun allowBackgroundActivity() {
-        val request = Intent(
-            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            "package:${context.packageName}".toUri(),
-        )
-        try {
-            context.startActivity(request)
-        } catch (e: ActivityNotFoundException) {
-            runCatching {
-                context.startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-            }
-        }
-    }
+    // Asks Android to stop optimising the app's battery use, so neither Doze nor a phone
+    // maker's battery saver holds messages, calls or the background connection back.
+    fun allowBackgroundActivity() = com.sotto.app.ui.components.BackgroundActivity.requestUnrestricted(context)
 
     SettingsContent(
         settings = settings,
@@ -568,7 +551,9 @@ fun SettingsContent(
                         checked = settings.backgroundConnection,
                         onCheckedChange = onBackgroundConnectionChange,
                     )
-                    if (settings.backgroundConnection && batteryOptimised) {
+                    // Not only for the background connection: push-woken messages wait too while
+                        // Android (or a phone maker's battery saver) holds Sotto back.
+                    if (batteryOptimised) {
                         RowDivider()
                         SettingsRow(
                             icon = Icons.Rounded.BatteryAlert,

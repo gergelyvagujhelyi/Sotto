@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.stateIn
 import com.sotto.app.domain.model.trust
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 @HiltViewModel
@@ -28,7 +30,25 @@ class ConversationsViewModel @Inject constructor(
     private val sendMyName: SendMyNameUseCase,
     private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
     private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
+    private val settingsRepository: com.sotto.app.domain.repository.SettingsRepository,
 ) : ViewModel() {
+
+    /** The user said "Not now" to letting Sotto run in the background; null until read. */
+    val backgroundOfferDismissed: StateFlow<Boolean?> =
+        settingsRepository.getPrivacySettings()
+            .map { it.backgroundOfferDismissed }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    private val settingsMutex = Mutex()
+
+    fun dismissBackgroundOffer() {
+        viewModelScope.launch {
+            settingsMutex.withLock {
+                val current = settingsRepository.getPrivacySettings().first()
+                settingsRepository.updatePrivacySettings(current.copy(backgroundOfferDismissed = true))
+            }
+        }
+    }
 
     /** Groups the user is in (or was), for the chat list. */
     val groups: StateFlow<List<com.sotto.app.domain.model.Group>> =
