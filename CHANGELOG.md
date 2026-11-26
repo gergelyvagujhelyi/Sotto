@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+- **Relay: messages from phones behind some home lines no longer stall** — On some home internet lines (PPPoE, VPNs) full-size packets from a phone to the relay vanished without a word, so a message send took 7 seconds or hung and showed "Not delivered", while the same phone on mobile data was fine. The relay now asks phones for packets of at most 1360 bytes on its HTTPS port (`server/deploy.sh` sets it on every run; `MSS_CLAMP=0` leaves the firewall alone, another number sets another size).
+
 ## 0.7.28 — 2026-11-26
 
 - **Failed messages go again by themselves** — A message that couldn't be sent (a network that dropped for a moment, the relay out of reach) is sent again automatically once the connection is back, trying again with growing pauses for up to a day after it was written; "Not delivered · Tap to resend" still sends it at once. In a group only the members who didn't get it get it, the same encrypted copy as before. A message older than a day, one to someone you've blocked since, and a group copy whose member's keys don't match the vouched ones still wait for a tap. A message is never sent twice: a tap and the automatic resend can't both send it, and the relay keeps a single copy of a resend.
