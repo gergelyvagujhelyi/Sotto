@@ -73,6 +73,20 @@
     <string name="chat_message_rejected">⛔ Message rejected (unsigned or unverifiable)</string>
     <string name="chat_message_undecryptable">⚠ Could not decrypt this message</string>
     <string name="chat_not_delivered">Not delivered · Tap to retry</string>
+    <!-- Under our message that failed but goes again by itself once there's a connection; a tap sends it now -->
+    <string name="chat_waiting_to_send">Not sent yet · Sends when connected</string>
+    <!-- Under our message while its send takes more than a few seconds -->
+    <string name="chat_sending_slow">Sending…</string>
+    <!-- Under our group message that some members got and others not yet: %1$d got it, of %2$d -->
+    <string name="chat_group_partly_sent_waiting">Sent to %1$d of %2$d · The rest when connected</string>
+    <string name="chat_group_partly_sent">Sent to %1$d of %2$d · Tap for details</string>
+    <!-- Under our group message nobody got and that won't go by itself; a tap shows who has it, with a retry -->
+    <string name="chat_group_not_delivered">Not delivered · Tap for details</string>
+    <!-- For screen readers: the little circles under our group message; %1$s is the names -->
+    <string name="group_read_by">Read by %1$s</string>
+    <!-- Bar above every screen while the relay can't be reached -->
+    <string name="connection_connecting">Connecting…</string>
+    <string name="connection_no_internet">No internet connection</string>
     <string name="chat_unknown_payload">This message needs a newer Sotto. Update Sotto to see it.</string>
     <string name="chat_no_app_for_link">No app can open this link</string>
     <string name="chat_you">You</string>

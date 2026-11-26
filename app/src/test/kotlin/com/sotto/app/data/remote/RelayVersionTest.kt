@@ -6,6 +6,7 @@ import com.sotto.app.update.AppUpdates
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -23,6 +24,7 @@ class RelayVersionTest {
     private lateinit var server: ServerSocket
     private lateinit var api: KtorApiService
     private val appUpdates = mockk<AppUpdates>(relaxed = true)
+    private val reachability = com.sotto.app.connection.RelayReachability()
     @Volatile private var headers = "Sotto-Relay-Version: 0.7.3\r\nSotto-App-Ready: true\r\n"
 
     @Before
@@ -43,7 +45,7 @@ class RelayVersionTest {
             }
         }
         val relay = mockk<RelayConfig> { every { baseUrl } returns "http://127.0.0.1:${server.localPort}" }
-        api = KtorApiService(mockk<KeyManager>(relaxed = true), mockk(relaxed = true), relay, appUpdates)
+        api = KtorApiService(mockk<KeyManager>(relaxed = true), mockk(relaxed = true), relay, appUpdates, reachability)
     }
 
     @After
@@ -56,6 +58,15 @@ class RelayVersionTest {
     fun `an answer from our relay reports its version`() = runBlocking {
         runCatching { api.relayHealth("http://127.0.0.1:${server.localPort}") } // only the headers matter here
         verify { appUpdates.report("0.7.3", true) }
+    }
+
+    @Test
+    fun `an answer from our relay says it's reachable, for a socket waiting out its backoff`() = runBlocking {
+        val heard = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val watch = launch(kotlinx.coroutines.Dispatchers.Unconfined) { reachability.answered.collect { heard.complete(Unit) } }
+        runCatching { api.relayHealth("http://127.0.0.1:${server.localPort}") }
+        kotlinx.coroutines.withTimeout(2_000) { heard.await() }
+        watch.cancel()
     }
 
     @Test

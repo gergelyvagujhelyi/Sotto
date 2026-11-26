@@ -14,6 +14,15 @@ internal object AutoResend {
 
     fun messageDue(writtenAt: Long, now: Long): Boolean = now - writtenAt in 0..WINDOW_MS
 
+    /**
+     * A one-to-one message that goes again by itself: fresh, to someone not blocked, and not a
+     * file or HD photo. Those go through the attachment store, whose upload has its own retries
+     * and can be refused for good (too large, allowance used up): resending would upload again
+     * on every reconnect, and the text would overtake them. They wait for a tap.
+     */
+    fun oneToOneDue(writtenAt: Long, now: Long, blocked: Boolean, storeBacked: Boolean): Boolean =
+        !blocked && !storeBacked && messageDue(writtenAt, now)
+
     fun copyDue(messageId: String?, attempts: Int, lastError: String?, createdAt: Long, now: Long): Boolean =
         messageId != null &&
             attempts < MAX_COPY_ATTEMPTS &&

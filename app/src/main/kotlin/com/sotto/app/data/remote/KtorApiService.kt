@@ -21,6 +21,8 @@ import com.sotto.app.data.remote.dto.SendMessageRequest
 import com.sotto.app.data.remote.dto.SendMessageResponse
 import com.sotto.app.update.AppUpdates
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.timeout
+import io.ktor.client.request.parameter
 import android.util.Base64
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -69,6 +71,7 @@ class KtorApiService @Inject constructor(
     private val pqcProvider: PqcProvider,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
     private val appUpdates: com.sotto.app.update.AppUpdates,
+    private val reachability: com.sotto.app.connection.RelayReachability,
 ) : ApiService, java.io.Closeable {
 
     private val client = HttpClient(OkHttp) {
@@ -79,6 +82,8 @@ class KtorApiService @Inject constructor(
                 writeTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             }
         }
+        // Per request where a call needs longer than the engine's 10 s (sendMessage).
+        install(io.ktor.client.plugins.HttpTimeout)
         install(ContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
@@ -92,7 +97,7 @@ class KtorApiService @Inject constructor(
             retryIf(MAX_RETRIES) { request, response ->
                 response.status.value in RETRY_STATUSES && safeToRepeat(request.method, request.url.encodedPath)
             }
-            // Not after a timeout: the relay may be slow, and three waits would hold a send for 30 s.
+            // Not after a timeout: the relay may be slow, and three waits (up to 30 s each) would hold a send for minutes.
             retryOnExceptionIf(MAX_RETRIES) { request, cause ->
                 cause is java.io.IOException && cause !is java.net.SocketTimeoutException &&
                     safeToRepeat(request.method, request.url.build().encodedPath)
@@ -113,6 +118,7 @@ class KtorApiService @Inject constructor(
                 val version = response.headers[AppUpdates.RELAY_VERSION_HEADER] ?: return@onResponse
                 val relay = relayConfig.baseUrl?.trimEnd('/') ?: return@onResponse
                 if (!response.call.request.url.toString().startsWith("$relay/")) return@onResponse
+                if (response.status.isSuccess()) reachability.answered()
                 appUpdates.report(version, response.headers[AppUpdates.APP_READY_HEADER] == "true")
             }
         })
@@ -141,6 +147,9 @@ class KtorApiService @Inject constructor(
         const val MAX_RETRIES = 2
         /** Relay errors that pass: a crash, or a restart behind the proxy. Not 507 (queue full). */
         val RETRY_STATUSES = setOf(500, 502, 503, 504)
+        /** How long a message send or fetch may go without progress before it counts as failed. */
+        const val SEND_SOCKET_TIMEOUT_MS = 30_000L
+
         /**
          * Requests that do no harm when the relay gets them twice: reads, acks, the push
          * token, and messages (the relay keeps one copy per client message id, and a
@@ -228,6 +237,9 @@ class KtorApiService @Inject constructor(
         val response: HttpResponse = client.post("/v1/messages/send") {
             header("Authorization", "Bearer ${authToken()}")
             setBody(request)
+            // A send on a poor connection can stall for seconds and still arrive: giving up at
+            // 10 s marked such messages "not delivered" while the other side had them already.
+            timeout { socketTimeoutMillis = SEND_SOCKET_TIMEOUT_MS }
         }
         // The per-minute send limit (not the per-recipient queue cap, also a 429).
         if (response.status.value == 429 && response.bodyAsText().contains("Rate limit exceeded")) {
@@ -241,9 +253,15 @@ class KtorApiService @Inject constructor(
 
     override fun relayTimeOfLastFetch(): Long? = lastFetchRelayTime
 
-    override suspend fun fetchPendingMessages(): List<PendingMessageDto> {
+    override suspend fun fetchPendingMessages(): List<PendingMessageDto> = fetchPendingMessages(ApiService.PENDING_PAGE_SIZE)
+
+    override suspend fun fetchPendingMessages(limit: Int): List<PendingMessageDto> {
         val response: HttpResponse = client.get("/v1/messages/pending") {
             header("Authorization", "Bearer ${authToken()}")
+            // Small pages: each message carries kilobytes of signatures, and a phone that was
+            // away pulled hundreds of KB at once, which a poor line couldn't finish in time.
+            parameter("limit", limit)
+            timeout { socketTimeoutMillis = SEND_SOCKET_TIMEOUT_MS }
         }
         check(response.status.isSuccess()) { "Fetch pending failed: ${response.status}" }
         // The relay's clock, to tell how long the messages waited there (LateDelivery).

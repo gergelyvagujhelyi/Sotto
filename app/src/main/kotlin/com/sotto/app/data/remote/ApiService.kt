@@ -37,6 +37,11 @@ import com.sotto.app.data.remote.dto.SendMessageResponse
  * PUT    /v1/identity/me/keys            — rotate public keys
  */
 interface ApiService {
+    companion object {
+        /** Messages per fetch page (the relay's `limit`): small enough for a poor line to finish. */
+        const val PENDING_PAGE_SIZE = 20
+    }
+
     suspend fun bootstrapIdentity(request: BootstrapRequest): BootstrapResponse
 
     /** A one-time invite for someone to join this relay (any member may create one). */
@@ -52,6 +57,9 @@ interface ApiService {
     suspend fun resolveShareCode(shareCode: String): ResolveShareCodeResponse?
     suspend fun sendMessage(request: SendMessageRequest): SendMessageResponse
     suspend fun fetchPendingMessages(): List<PendingMessageDto>
+
+    /** A page of [limit] instead of [PENDING_PAGE_SIZE] (to look past held messages). */
+    suspend fun fetchPendingMessages(limit: Int): List<PendingMessageDto> = fetchPendingMessages()
 
     /** The relay's clock (its Date header, ms) when the last [fetchPendingMessages] was answered; null if unknown. */
     fun relayTimeOfLastFetch(): Long? = null

@@ -63,6 +63,8 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var pendingInvite: com.sotto.app.connection.PendingInvite
     @Inject lateinit var relayConfig: com.sotto.app.connection.RelayConfig
     @Inject lateinit var appUpdates: com.sotto.app.update.AppUpdates
+    @Inject lateinit var webSocketClient: com.sotto.app.data.remote.WebSocketClient
+    @Inject lateinit var networkMonitor: com.sotto.app.connection.DefaultNetworkMonitor
     @Inject lateinit var chatNotifications: ChatNotificationManager
     @Inject lateinit var callNotifier: CallNotifier
     @Inject lateinit var appUpdateNotifier: AppUpdateNotifier
@@ -241,7 +243,16 @@ class MainActivity : ComponentActivity() {
                 // app is out, opens SourceDrop). Below the call bar when both show.
                 val appUpdate by appUpdates.state.collectAsState()
                 val update = appUpdate.takeIf { startDestination == Routes.CONVERSATIONS } ?: com.sotto.app.update.AppUpdate.None
-                val anyBar = ongoingCall != null || update != com.sotto.app.update.AppUpdate.None
+                // The relay out of reach for a few seconds: a bar says so (messages wait, none come in).
+                val connected by webSocketClient.connected.collectAsState()
+                val network by networkMonitor.defaultNetwork.collectAsState()
+                // A phone whose network can't be watched counts as online: never a false "No internet".
+                val connectionProblem = com.sotto.app.ui.components.rememberConnectionProblem(
+                    connected,
+                    online = network != null || !networkMonitor.watching,
+                )
+                    .takeIf { startDestination == Routes.CONVERSATIONS }
+                val anyBar = ongoingCall != null || update != com.sotto.app.update.AppUpdate.None || connectionProblem != null
                 Column(Modifier.fillMaxSize()) {
                     ongoingCall?.let { call ->
                         OngoingCallBar(call, onClick = {
@@ -251,6 +262,10 @@ class MainActivity : ComponentActivity() {
                         })
                     }
                     com.sotto.app.ui.update.AppUpdateBar(update, underStatusBar = ongoingCall == null)
+                    com.sotto.app.ui.components.ConnectionBar(
+                        connectionProblem,
+                        underStatusBar = ongoingCall == null && update == com.sotto.app.update.AppUpdate.None,
+                    )
                     // The top bar covers the status bar, so the screens below mustn't pad for it again.
                     // Clipped: the aurora backgrounds paint their glow past their top edge,
                     // which tinted the bar and its text.

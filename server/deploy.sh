@@ -42,8 +42,10 @@ apply_nginx_conf() {
 # Wi-Fi in Serbia: an 81 KB fetch took 14 s, the phone gave up and got nothing; the same phones
 # were fine on mobile data). Both ways on the HTTPS port, packets are kept to MSS_CLAMP bytes:
 # the relay's SYN-ACK asks phones for small ones, and the phones' SYN is rewritten so the relay
-# sends small ones. The kernel also probes for black holes itself (tcp_mtu_probing). Every run,
-# so it's back after a reboot. MSS_CLAMP=0 in the environment leaves the firewall alone.
+# sends small ones. nginx, which holds the phones' connections, also probes for black holes itself
+# (tcp_mtu_probing, set on its container in docker-compose.yml: its network namespace doesn't
+# take the host's). Every run, so it's back after a reboot. MSS_CLAMP=0 in the environment leaves
+# the firewall alone. IPv4 only: the relay has no IPv6 address (add ip6tables rules if it gets one).
 ensure_mangle_rule() {
     iptables -t mangle -C "$@" 2>/dev/null && return 0
     iptables -t mangle -A "$@" && echo "$(date): MSS clamp set ($1)"
@@ -53,10 +55,13 @@ apply_mss_clamp() {
     local mss="${MSS_CLAMP:-1360}"
     [ "$mss" != "0" ] || return 0
     command -v iptables >/dev/null || return 0
+    local rc=0
     # Phones send small packets (the relay's SYN-ACK), and the relay does (the phones' SYN).
-    ensure_mangle_rule POSTROUTING -p tcp --sport 443 --tcp-flags SYN,ACK SYN,ACK -j TCPMSS --set-mss "$mss"
-    ensure_mangle_rule PREROUTING -p tcp --dport 443 --tcp-flags SYN,RST SYN -j TCPMSS --set-mss "$mss"
-    [ "$(sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null)" = "1" ] || sysctl -qw net.ipv4.tcp_mtu_probing=1 || true
+    ensure_mangle_rule POSTROUTING -p tcp --sport 443 --tcp-flags SYN,ACK SYN,ACK -j TCPMSS --set-mss "$mss" || rc=1
+    ensure_mangle_rule PREROUTING -p tcp --dport 443 --tcp-flags SYN,RST SYN -j TCPMSS --set-mss "$mss" || rc=1
+    # The host's own connections too; never lowers an admin's 2 (always probe).
+    [ "$(sysctl -n net.ipv4.tcp_mtu_probing 2>/dev/null)" != "0" ] || sysctl -qw net.ipv4.tcp_mtu_probing=1 || true
+    return $rc
 }
 
 LAST_DEPLOY_FILE="/tmp/chatcontroll-last-deploy"

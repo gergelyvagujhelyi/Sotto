@@ -467,6 +467,34 @@ class MessageSigningAndResetTest {
     }
 
     @Test
+    fun `a held message, back on every sync, isn't counted as late`() = runTest {
+        coEvery { contactDao.getByUserId("peer") } returns pqcContact
+        val arrived = 1_764_000_000_000L
+        // Missing its post-quantum signature: held, not ACKed.
+        coEvery { apiService.fetchPendingMessages() } returnsMany listOf(listOf(chatDto("held", pqcSignature = "").copy(timestamp = arrived)), emptyList())
+        every { apiService.relayTimeOfLastFetch() } returns arrived + 25 * 60_000
+
+        repo.fetchPendingAndWait()
+
+        verify(exactly = 0) { backgroundOffers.noticedLate(any(), any()) }
+    }
+
+    @Test
+    fun `held messages at the front don't block those behind them`() = runTest {
+        coEvery { contactDao.getByUserId("peer") } returns pqcContact
+        coEvery { blockedUserDao.isBlocked("other") } returns true // dropped and ACKed: the simplest way through
+        val held = (1..com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE).map { chatDto("h$it", pqcSignature = "") }
+        val behind = (1..3).map { chatDto("b$it").copy(senderId = "other") }
+        coEvery { apiService.fetchPendingMessages() } returns held
+        coEvery { apiService.fetchPendingMessages(any()) } returns held + behind
+
+        repo.fetchPendingAndWait()
+
+        coVerify { apiService.fetchPendingMessages(100) }
+        coVerify { apiService.acknowledgeMessages(match { it.messageIds.toSet() == setOf("b1", "b2", "b3") }) }
+    }
+
+    @Test
     fun `a message fetched soon after it arrived, or without the relay's clock, isn't late`() = runTest {
         coEvery { blockedUserDao.isBlocked("peer") } returns true
         val arrived = 1_764_000_000_000L
@@ -482,18 +510,18 @@ class MessageSigningAndResetTest {
     }
 
     @Test
-    fun `full pages that make progress stop after 10 pages`() = runTest {
+    fun `full pages that make progress stop after 25 pages, 500 messages`() = runTest {
         coEvery { blockedUserDao.isBlocked("peer") } returns true // dropped and ACKed: progress every page
         var page = 0
         coEvery { apiService.fetchPendingMessages() } answers {
             page++
-            (1..100).map { chatDto("p$page-$it") }
+            (1..com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE).map { chatDto("p$page-$it") }
         }
 
         repo.fetchPendingAndWait()
 
-        assertEquals(10, page)
-        coVerify(exactly = 10) { apiService.acknowledgeMessages(any()) }
+        assertEquals(25, page)
+        coVerify(exactly = 25) { apiService.acknowledgeMessages(any()) }
     }
 
     @Test
@@ -502,7 +530,7 @@ class MessageSigningAndResetTest {
         var page = 0
         coEvery { apiService.fetchPendingMessages() } answers {
             page++
-            (1..100).map { chatDto("q$it", pqcSignature = "") } // held, not ACKed
+            (1..com.sotto.app.data.remote.ApiService.PENDING_PAGE_SIZE).map { chatDto("q$it", pqcSignature = "") } // held, not ACKed
         }
 
         repo.fetchPendingAndWait()

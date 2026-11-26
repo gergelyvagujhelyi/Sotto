@@ -552,7 +552,7 @@ fun SettingsContent(
                         onCheckedChange = onBackgroundConnectionChange,
                     )
                     // Not only for the background connection: push-woken messages wait too while
-                        // Android (or a phone maker's battery saver) holds Sotto back.
+                    // Android (or a phone maker's battery saver) holds Sotto back.
                     if (batteryOptimised) {
                         RowDivider()
                         SettingsRow(

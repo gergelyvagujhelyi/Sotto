@@ -122,6 +122,37 @@ interface GroupDao {
     @Query("SELECT * FROM group_outbox WHERE messageId = :messageId")
     fun observeCopiesForMessage(messageId: String): Flow<List<GroupOutboxEntity>>
 
+    /**
+     * Failed copies the outbox sends again by itself, oldest first (GroupRepositoryImpl.retriesItself,
+     * AutoResend): picked in SQL, so copies that never retry can't fill the batch and starve these.
+     */
+    @Query(
+        "SELECT * FROM group_outbox WHERE state = 'failed' AND attempts < :maxAttempts " +
+            "AND (lastError IS NULL OR lastError != 'keys') " +
+            "AND (messageId IS NULL OR createdAt >= :messagesSince) ORDER BY createdAt LIMIT :limit"
+    )
+    suspend fun getRetryableFailed(maxAttempts: Int, messagesSince: Long, limit: Int): List<GroupOutboxEntity>
+
+    /** For each of our messages in [groupId]: how many members it goes to, how many have it, how many read it. */
+    @Query(
+        "SELECT messageId, COUNT(*) AS total, " +
+            "SUM(CASE WHEN state IN ('sent', 'delivered', 'read') THEN 1 ELSE 0 END) AS sent, " +
+            "SUM(CASE WHEN state IN ('delivered', 'read') THEN 1 ELSE 0 END) AS delivered, " +
+            "SUM(CASE WHEN state = 'read' THEN 1 ELSE 0 END) AS seen, " +
+            "SUM(CASE WHEN state = 'failed' AND attempts < :maxAttempts AND (lastError IS NULL OR lastError != 'keys') " +
+            "AND createdAt >= :since THEN 1 ELSE 0 END) AS retrying " +
+            "FROM group_outbox WHERE groupId = :groupId AND messageId IS NOT NULL AND state != 'skipped' GROUP BY messageId"
+    )
+    fun observeProgress(groupId: String, maxAttempts: Int, since: Long): Flow<List<GroupCopyProgressRow>>
+
+    /** Each of our messages in [groupId] a member read, with its time: who read how far. */
+    @Query(
+        "SELECT o.recipientId AS userId, o.messageId AS messageId, m.timestamp AS timestamp " +
+            "FROM group_outbox o JOIN messages m ON m.id = o.messageId " +
+            "WHERE o.groupId = :groupId AND o.messageId IS NOT NULL AND o.state = 'read'"
+    )
+    fun observeReads(groupId: String): Flow<List<GroupReadRow>>
+
     /** Copies of control packets (rosters, invitations, answers) for [groupId], newest first. */
     @Query("SELECT * FROM group_outbox WHERE groupId = :groupId AND messageId IS NULL ORDER BY createdAt DESC")
     fun observeControlCopies(groupId: String): Flow<List<GroupOutboxEntity>>
@@ -202,3 +233,17 @@ interface GroupDao {
     @Query("DELETE FROM group_held WHERE receivedAt < :before")
     suspend fun pruneHeld(before: Long)
 }
+
+/** One of our group messages: [total] members it goes to, [sent] whose copy the relay took, [delivered] whose phones have it, [seen] who read it. */
+data class GroupCopyProgressRow(
+    val messageId: String,
+    val total: Int,
+    val sent: Int,
+    val delivered: Int,
+    val seen: Int,
+    /** Failed copies the outbox will still send by itself. */
+    val retrying: Int = 0,
+)
+
+/** Member [userId] read our message [messageId], written at [timestamp]. */
+data class GroupReadRow(val userId: String, val messageId: String, val timestamp: Long)

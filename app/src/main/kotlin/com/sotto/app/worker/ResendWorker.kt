@@ -51,16 +51,20 @@ class ResendWorker @AssistedInject constructor(
 class ResendScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    /** After a failure: a run that's waiting keeps its place (and its backoff). */
-    fun schedule() = enqueue(ExistingWorkPolicy.KEEP)
+    /**
+     * After a failure: a fresh run in 30 s, replacing one that's waiting out a long backoff (or
+     * running past this message), so a new failure never inherits hours of waiting.
+     */
+    fun schedule() = enqueue(ExistingWorkPolicy.REPLACE, initialDelaySeconds = 30)
 
     /** The relay is reachable again (a fresh socket session): try now, not after the backoff. */
-    fun retryNow() = enqueue(ExistingWorkPolicy.REPLACE)
+    fun retryNow() = enqueue(ExistingWorkPolicy.REPLACE, initialDelaySeconds = 0)
 
-    private fun enqueue(policy: ExistingWorkPolicy) {
+    private fun enqueue(policy: ExistingWorkPolicy, initialDelaySeconds: Long) {
         val request = OneTimeWorkRequestBuilder<ResendWorker>()
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .setInitialDelay(initialDelaySeconds, TimeUnit.SECONDS)
             .build()
         runCatching { WorkManager.getInstance(context).enqueueUniqueWork(ResendWorker.WORK_NAME, policy, request) }
     }

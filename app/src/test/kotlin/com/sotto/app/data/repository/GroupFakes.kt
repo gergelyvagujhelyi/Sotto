@@ -77,6 +77,32 @@ class FakeGroupDao : GroupDao {
     override suspend fun getCopy(id: String) = outbox[id]
     override suspend fun getCopiesForMessage(messageId: String) = outbox.values.filter { it.messageId == messageId }
     override fun observeCopiesForMessage(messageId: String): Flow<List<GroupOutboxEntity>> = flow { emit(getCopiesForMessage(messageId)) }
+    /** Message times for the read rows; the fake has no join with messages, so tests set them. */
+    val messageTimes = HashMap<String, Long>()
+    override fun observeReads(groupId: String): Flow<List<com.sotto.app.data.local.dao.GroupReadRow>> = flow {
+        emit(
+            outbox.values.filter { it.groupId == groupId && it.messageId != null && it.state == "read" }
+                .map { com.sotto.app.data.local.dao.GroupReadRow(it.recipientId, it.messageId!!, messageTimes[it.messageId] ?: it.createdAt) },
+        )
+    }
+    override suspend fun getRetryableFailed(maxAttempts: Int, messagesSince: Long, limit: Int) =
+        outbox.values.filter {
+            it.state == "failed" && it.attempts < maxAttempts && it.lastError != "keys" &&
+                (it.messageId == null || it.createdAt >= messagesSince)
+        }.sortedBy { it.createdAt }.take(limit)
+    override fun observeProgress(groupId: String, maxAttempts: Int, since: Long): Flow<List<com.sotto.app.data.local.dao.GroupCopyProgressRow>> = flow {
+        emit(
+            outbox.values.filter { it.groupId == groupId && it.messageId != null && it.state != "skipped" }
+                .groupBy { it.messageId!! }
+                .map { (id, copies) ->
+                    com.sotto.app.data.local.dao.GroupCopyProgressRow(
+                        id, copies.size, copies.count { it.state in listOf("sent", "delivered", "read") },
+                        copies.count { it.state == "delivered" || it.state == "read" }, copies.count { it.state == "read" },
+                        copies.count { it.state == "failed" && it.attempts < maxAttempts && it.lastError != "keys" && it.createdAt >= since },
+                    )
+                },
+        )
+    }
     override fun observeControlCopies(groupId: String): Flow<List<GroupOutboxEntity>> =
         flow { emit(outbox.values.filter { it.groupId == groupId && it.messageId == null }.sortedByDescending { it.createdAt }) }
     override suspend fun getByStates(states: List<String>, limit: Int) = outbox.values.filter { it.state in states }.sortedBy { it.createdAt }.take(limit)

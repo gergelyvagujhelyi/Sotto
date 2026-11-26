@@ -43,6 +43,7 @@ class RelayConnectionPolicy @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val callManager: Lazy<CallManager>,
     private val networkMonitor: DefaultNetworkMonitor,
+    private val reachability: RelayReachability,
 ) : Application.ActivityLifecycleCallbacks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var startedActivities = 0
@@ -73,6 +74,16 @@ class RelayConnectionPolicy @Inject constructor(
         scope.launch {
             callManager.get().callState.collect { call ->
                 if (call != null) cancelClose() else scheduleClose(AWAY_GRACE_MS)
+            }
+        }
+        // The relay answered a request while the socket is down (waiting out its backoff after an
+        // outage): it's reachable, so connect now rather than when the backoff ends. Not during a
+        // call: CallManager retries the socket itself, faster.
+        scope.launch {
+            reachability.answered.collect {
+                if (keepNow() && !webSocketClient.connected.value && callManager.get().callState.value == null) {
+                    webSocketClient.connectUnlessWorking()
+                }
             }
         }
         scope.launch {
@@ -111,14 +122,19 @@ class RelayConnectionPolicy @Inject constructor(
     override fun onActivityStarted(activity: Activity) {
         startedActivities++
         if (startedActivities == 1) {
+            webSocketClient.onScreen = true
             cancelClose()
-            webSocketClient.connect() // no-op while connected or connecting
+            // Connect, or cut short a long wait from the background (connected or connecting: no-op).
+            webSocketClient.connectUnlessWorking()
         }
     }
 
     override fun onActivityStopped(activity: Activity) {
         startedActivities = (startedActivities - 1).coerceAtLeast(0)
-        if (startedActivities == 0) scheduleClose(AWAY_GRACE_MS)
+        if (startedActivities == 0) {
+            webSocketClient.onScreen = false
+            scheduleClose(AWAY_GRACE_MS)
+        }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}

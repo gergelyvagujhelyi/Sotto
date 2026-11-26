@@ -33,12 +33,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.sotto.app.R
 import com.sotto.app.domain.model.GroupCopy
@@ -46,6 +49,7 @@ import com.sotto.app.domain.model.GroupCopyState
 import com.sotto.app.domain.model.GroupEvent
 import com.sotto.app.domain.model.GroupReaction
 import com.sotto.app.domain.model.Message
+import com.sotto.app.domain.model.MessageState
 import com.sotto.app.ui.components.GradientAvatar
 import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.components.SystemEventPill
@@ -63,6 +67,10 @@ class GroupChatUi(
     val names: Map<String, String>,
     /** Every reaction, by message id. */
     val reactions: Map<String, List<GroupReaction>>,
+    /** How far each of our messages got, by message id. */
+    val progress: Map<String, com.sotto.app.domain.model.GroupProgress> = emptyMap(),
+    /** By message id, the members who read up to it: their circles sit under it. */
+    val readUpTo: Map<String, List<String>> = emptyMap(),
     val canSend: Boolean,
     /** Shown above the composer, or null. */
     val notice: (@Composable () -> Unit)?,
@@ -243,3 +251,56 @@ internal fun CopyRow(copy: GroupCopy) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = tint)
     }
 }
+
+/**
+ * The ticks on our group message, with how far it got while it's partway: [state] is all-or-
+ * nothing (delivered only when every member's phone has it), which looks stuck while one phone
+ * sleeps. Partway through delivery: double ticks with "delivered/total". Who read it isn't in the
+ * ticks (blue only once everyone has): the members' read circles show it ([ReadCircles]).
+ */
+internal fun groupTicks(state: MessageState, progress: com.sotto.app.domain.model.GroupProgress?): Pair<MessageState, String?> {
+    progress ?: return state to null
+    val total = progress.total
+    return when {
+        total >= 2 && state == MessageState.SENT && progress.delivered in 1 until total -> MessageState.DELIVERED to "${progress.delivered}/$total"
+        else -> state to null
+    }
+}
+
+/**
+ * Small circles with the initials of the members who read up to this message of ours, under it
+ * (as in Messenger): each member's sits under the latest one they read.
+ */
+@Composable
+internal fun ReadCircles(readers: List<Pair<String, String>>, modifier: Modifier = Modifier) {
+    if (readers.isEmpty()) return
+    val shown = readers.take(MAX_READ_CIRCLES)
+    // One label for the circles together, for screen readers ("Read by Bjorn, Cecilia").
+    val label = androidx.compose.ui.res.stringResource(R.string.group_read_by, readers.joinToString(", ") { it.first })
+    androidx.compose.foundation.layout.Row(
+        modifier = modifier
+            .padding(top = 3.dp, end = 4.dp)
+            .semantics(mergeDescendants = true) { contentDescription = label },
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy((-4).dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        shown.forEach { (name, id) ->
+            GradientAvatar(
+                name = name,
+                seed = id,
+                size = 16.dp,
+                modifier = Modifier.border(1.5.dp, MaterialTheme.colorScheme.background, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
+        if (readers.size > shown.size) {
+            Text(
+                "+${readers.size - shown.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+    }
+}
+
+private const val MAX_READ_CIRCLES = 5

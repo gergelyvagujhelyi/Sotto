@@ -128,6 +128,11 @@ services:
       - ${TLS_KEY_PATH:?Set TLS_KEY_PATH in .env}:/etc/nginx/ssl/key.pem:ro
     depends_on:
       - server
+    # nginx holds the phones' connections, in its own network namespace, which doesn't take the
+    # host's setting: probe for lines that silently lose large packets here (with deploy.sh's
+    # MSS clamp; RFC 4821).
+    sysctls:
+      net.ipv4.tcp_mtu_probing: 1
 
 volumes:
   pgdata:

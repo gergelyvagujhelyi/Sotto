@@ -395,6 +395,27 @@ class GroupRepositoryTest {
     }
 
     @Test
+    fun `copies that never retry can't crowd out a fresh one`() = runTest {
+        val id = fika()
+        // 250 old copies whose member's keys don't match: failed for good, oldest in the outbox.
+        repeat(250) { i ->
+            astrid.groupDao.outbox["stuck$i"] = com.sotto.app.data.local.entity.GroupOutboxEntity(
+                id = "stuck$i", groupId = id, messageId = "old$i", recipientId = "cecilia", kind = "msg", packet = null,
+                relayId = "r-stuck$i", state = "failed", attempts = 1, lastError = GroupRepositoryImpl.ERROR_KEYS,
+                createdAt = relay.clock - 1_000, updatedAt = relay.clock - 1_000,
+            )
+        }
+        relay.failFor += "cecilia"
+        astrid.repo.sendText(id, "Fika?")
+        val row = astrid.messageDao.messagesIn(id).single()
+        relay.failFor.clear()
+        relay.posted.clear()
+        assertFalse(astrid.repo.flushOutbox())
+        assertEquals(MessageState.SENT.name, astrid.messageDao.getById(row.id)!!.state)
+        assertEquals(listOf("cecilia"), relay.posted.map { it.to })
+    }
+
+    @Test
     fun `a failed copy older than a day waits for a tap`() = runTest {
         val id = fika()
         relay.failFor += "cecilia"
@@ -410,6 +431,18 @@ class GroupRepositoryTest {
 
         astrid.repo.retry(row.id)
         assertEquals(MessageState.SENT.name, astrid.messageDao.getById(row.id)!!.state)
+    }
+
+    @Test
+    fun `how far our group message got, how many have it and how many read it`() = runTest {
+        val id = fika()
+        astrid.repo.sendText(id, "Fika?")
+        val row = astrid.messageDao.messagesIn(id).single()
+        assertEquals(com.sotto.app.domain.model.GroupProgress(total = 2, delivered = 0, seen = 0, sent = 2), astrid.repo.observeProgress(id).first()[row.id])
+
+        bjorn.fetch() // Bjorn's phone has it: the relay tells Astrid
+        astrid.repo.onDelivered("bjorn", listOf(astrid.groupDao.getCopiesForMessage(row.id).single { it.recipientId == "bjorn" }.relayId))
+        assertEquals(1, astrid.repo.observeProgress(id).first()[row.id]!!.delivered)
     }
 
     @Test
