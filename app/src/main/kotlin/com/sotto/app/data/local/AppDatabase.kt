@@ -24,8 +24,9 @@ import com.sotto.app.data.local.entity.MessageEntity
         com.sotto.app.data.local.entity.GroupOutboxEntity::class,
         com.sotto.app.data.local.entity.GroupReactionEntity::class,
         com.sotto.app.data.local.entity.GroupHeldEntity::class,
+        com.sotto.app.data.local.entity.PendingUnsendEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

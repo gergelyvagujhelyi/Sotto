@@ -28,6 +28,7 @@ import com.sotto.app.domain.model.ReactionPayload
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.ReplyRef
 import com.sotto.app.domain.model.UnknownPayload
+import com.sotto.app.domain.model.UnsendPayload
 import com.sotto.app.domain.model.previewUiText
 import com.sotto.app.domain.model.quoteText
 import com.sotto.app.domain.repository.CryptoEngine
@@ -406,6 +407,8 @@ class MessageRepositoryImpl @Inject constructor(
         messageDao.setMediaState(entity.id, com.sotto.app.domain.model.FileState.DIRECT.wire)
         val reply = kotlinx.coroutines.withTimeoutOrNull(DIRECT_OFFER_WAIT_MS) { offerWait.await() }
         directWaits.remove(directKey(peer, token, ROLE_SENDER))
+        // Unsent while waiting: the file goes nowhere.
+        if (isUnsentNow(entity.id)) return
         val stun = if (reply?.kind == com.sotto.app.domain.model.DirectPayload.Kind.OFFER) stunServers() else emptyList()
         if (reply?.kind == com.sotto.app.domain.model.DirectPayload.Kind.OFFER && stun.isNotEmpty()) {
             val link = fileDrop.newDirectLink(stun)
@@ -436,8 +439,14 @@ class MessageRepositoryImpl @Inject constructor(
 
     /** The direct transfer didn't happen: upload the file, and tell the contact where it is. */
     private suspend fun storeAfterDirect(entity: MessageEntity, token: String) {
+        if (isUnsentNow(entity.id)) return
         val ready = ensureUploaded(entity)
         val id = ready.attachmentId ?: return
+        // Unsent while it went up: it isn't kept for anyone.
+        if (isUnsentNow(entity.id)) {
+            runCatching { apiService.deleteAttachment(id) }
+            return
+        }
         sendUnstored(entity.recipientId, com.sotto.app.domain.model.FileUpdatePayload.encode(token, id))
     }
 
@@ -469,6 +478,12 @@ class MessageRepositoryImpl @Inject constructor(
             link.awaitOpen(DIRECT_OPEN_MS)
             val expected = com.sotto.app.data.media.SegmentedCrypto.encryptedSize(com.sotto.app.data.media.Padme.padded(entity.mediaSize))
             fileDrop.receiveDirect(messageId, key, expected, link)
+            // Unsent while it came: it isn't kept, and the sender hears no DONE for it.
+            if (isUnsentNow(messageId)) {
+                runCatching { mediaStore.delete(messageId) }
+                runCatching { sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(messageId, com.sotto.app.domain.model.DirectPayload.Kind.NO)) }
+                return
+            }
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
             sendUnstored(peer, com.sotto.app.domain.model.DirectPayload.encode(messageId, com.sotto.app.domain.model.DirectPayload.Kind.DONE))
         } catch (e: kotlinx.coroutines.CancellationException) {
@@ -499,6 +514,13 @@ class MessageRepositoryImpl @Inject constructor(
             if (fits) wait.complete(msg)
         }
     }
+
+    /**
+     * [messageId] was unsent (by us or its sender) since a transfer of its file started. A row
+     * deleted meanwhile isn't: its file goes on as before unsending existed.
+     */
+    private suspend fun isUnsentNow(messageId: String): Boolean =
+        messageDao.getById(messageId)?.let { MessageState.valueOf(it.state).isUnsent } ?: false
 
     /** Our file is in the store or already on the contact's phone. */
     private fun fileIsOut(entity: MessageEntity): Boolean =
@@ -615,6 +637,12 @@ class MessageRepositoryImpl @Inject constructor(
             fileDrop.download(name, download.downloadUrl, key, expected)
         } catch (e: com.sotto.app.data.media.FileGoneException) {
             messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.GONE.wire)
+            return@withContext
+        }
+        // Unsent while it came down: it isn't kept.
+        if (isUnsentNow(messageId)) {
+            runCatching { mediaStore.delete(name) }
+            runCatching { apiService.deleteAttachment(id) }
             return@withContext
         }
         messageDao.setMediaState(messageId, com.sotto.app.domain.model.FileState.READY.wire)
@@ -777,8 +805,80 @@ class MessageRepositoryImpl @Inject constructor(
             }
         }
 
-    /** Encrypt, sign and send [payload] to [recipientId] like a message, storing nothing. */
-    private suspend fun sendUnstored(recipientId: String, payload: String) {
+    /**
+     * Our message is emptied at once and shows as being unsent; then the contact is told, by an
+     * [UnsendPayload] sent like a reaction (stored as no message). Until that reaches the relay it
+     * goes again (ResendWorker: backing off for about a day, and again after every reconnect and
+     * every start of the app), however old the message: an unsend that never arrives would leave
+     * the words on the contact's phone. Not cancellable once started.
+     */
+    override suspend fun unsend(messageId: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+        val entity = messageDao.getById(messageId) ?: return@withContext
+        if (entity.groupId != null) return@withContext groups.get().unsend(messageId)
+        require(entity.isOutgoing) { "Only our own messages can be unsent" }
+        if (MessageState.valueOf(entity.state).isUnsent) return@withContext
+        require(ownUnsendable(entity.state)) { "This message can't be unsent now" }
+        // Claimed in one step: a resend that takes a failed message at this moment wins, and this
+        // one stops (the user can unsend it once it's out), so nothing goes after its unsend.
+        // The unsend to send is kept with the claim, apart from the row: deleting the message
+        // (or its timer) before the relay has the unsend can't lose it.
+        check(messageDao.claimUnsend(messageId, entity.state, entity.recipientId, System.currentTimeMillis())) { "The message is being sent" }
+        wipeUnsent(messageDao, mediaStore, entity, MessageState.UNSENDING)
+        // Our file needn't wait in the relay's store for anyone now.
+        entity.attachmentId?.let { id -> runCatching { apiService.deleteAttachment(id) } }
+        notePreviewUnsent(entity)
+        if (!sendUnsend(messageId, entity.recipientId)) resend.schedule()
+    }
+
+    /**
+     * Tells [recipientId] our message [messageId] is unsent; true once the relay has it (or there's
+     * nobody to tell). Its row may be gone by now (deleted): the contact still has it.
+     */
+    private suspend fun sendUnsend(messageId: String, recipientId: String): Boolean {
+        val me = keyManager.getUserId() ?: return false
+        suspend fun done() {
+            messageDao.deletePendingUnsend(messageId)
+            messageDao.claimState(messageId, MessageState.UNSENDING.name, MessageState.UNSENT.name)
+        }
+        return try {
+            sendUnstored(recipientId, UnsendPayload.encode(ReceiptManager.relayMessageId(me, messageId)), "unsend:$messageId")
+            done()
+            true
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (com.sotto.app.BuildConfig.DEBUG) android.util.Log.w("MessageRepo", "Unsend not sent yet: ${e.message}")
+            // Someone whose account is gone has nothing left to take it from.
+            if (conversationDao.getByContactId(recipientId)?.peerDeleted == true) {
+                done()
+                return true
+            }
+            false
+        }
+    }
+
+    /** Our unsends that didn't reach the relay yet, sent again; true while some still wait. */
+    private suspend fun sendPendingUnsends(): Boolean {
+        var waiting = false
+        for (pending in messageDao.getPendingUnsends()) {
+            if (!sendUnsend(pending.messageId, pending.recipientId)) waiting = true
+        }
+        return waiting
+    }
+
+    /** The chat list shows "You unsent a message" when [row] was its latest message. */
+    private suspend fun notePreviewUnsent(row: MessageEntity) {
+        val conversation = conversationDao.getByIdOnce(row.conversationId) ?: return
+        if (conversation.lastMessageTimestamp != row.timestamp) return
+        val text = context.getString(if (row.isOutgoing) R.string.chat_unsent_by_you else R.string.chat_unsent_preview)
+        conversationDao.updatePreview(row.conversationId, text, row.timestamp, 0)
+    }
+
+    /**
+     * Encrypt, sign and send [payload] to [recipientId] like a message, storing nothing. A fixed
+     * [clientMessageId] makes a repeat (its answer was lost) one copy on the relay.
+     */
+    private suspend fun sendUnstored(recipientId: String, payload: String, clientMessageId: String = UUID.randomUUID().toString()) {
         val senderId = keyManager.getUserId() ?: throw IllegalStateException("No identity")
         val envelope = encryptFor(recipientId, payload.toByteArray(Charsets.UTF_8))
         val sigPayload = buildMessageSigPayload(senderId, recipientId, envelope.nonce, envelope.ciphertext)
@@ -789,7 +889,7 @@ class MessageRepositoryImpl @Inject constructor(
                 nonce = Base64.encodeToString(envelope.nonce, Base64.NO_WRAP),
                 signature = Base64.encodeToString(keyManager.sign(sigPayload), Base64.NO_WRAP),
                 pqcSignature = signWithMlDsa(sigPayload),
-                clientMessageId = UUID.randomUUID().toString(),
+                clientMessageId = clientMessageId,
             )
         )
     }
@@ -819,6 +919,10 @@ class MessageRepositoryImpl @Inject constructor(
                 clientMessageId = clientMessageId,
             ),
         )
+
+    override suspend fun deleteAttachment(attachmentId: String) {
+        apiService.deleteAttachment(attachmentId)
+    }
 
     override suspend fun upload(entity: MessageEntity, recipients: List<String>): MessageEntity =
         try {
@@ -856,6 +960,8 @@ class MessageRepositoryImpl @Inject constructor(
             }
         }
         if (messageDao.getSendingGroupMessages().isNotEmpty()) groups.get().scheduleOutbox()
+        // Unsends that didn't reach the relay before the app stopped.
+        if (messageDao.countPendingUnsends() > 0) resend.schedule()
     }
 
     private suspend fun retryFailedInternal(messageId: String) {
@@ -909,13 +1015,15 @@ class MessageRepositoryImpl @Inject constructor(
 
     // What goes by itself, by the rules the chat shows "Sends when connected" by (AutoResend):
     // being sent now, failed one-to-one messages that go again, group messages with a copy that
-    // goes again. Not what waits for a tap (older than a day, files, blocked contacts).
+    // goes again, unsends the relay doesn't have yet. Not what waits for a tap (older than a day,
+    // files, blocked contacts).
     override suspend fun countUnsent(): Int {
         val now = System.currentTimeMillis()
         val since = now - AutoResend.WINDOW_MS
         return messageDao.countSendingSince(since) +
             resendDue(now).size +
-            messageDao.countGroupMessagesRetrying(AutoResend.MAX_COPY_ATTEMPTS, since)
+            messageDao.countGroupMessagesRetrying(AutoResend.MAX_COPY_ATTEMPTS, since) +
+            messageDao.countPendingUnsends()
     }
 
     /** Our failed one-to-one messages that go again by themselves (AutoResend). */
@@ -935,7 +1043,8 @@ class MessageRepositoryImpl @Inject constructor(
                 // Still failed; the worker tries again later.
             }
         }
-        return due().isNotEmpty()
+        val unsendsWaiting = sendPendingUnsends()
+        return due().isNotEmpty() || unsendsWaiting
     }
 
     /**
@@ -951,7 +1060,7 @@ class MessageRepositoryImpl @Inject constructor(
             // Offered phone to phone first: no id in the store yet.
             val id = if (direct) "" else entity.attachmentId ?: throw IllegalStateException("File not uploaded")
             val key = entity.mediaKey ?: throw IllegalStateException("File without a key")
-            val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
+            val reply = to?.let { MediaPayload.Reply(it, UnsendPayload.wireQuote(entity.replyQuote), entity.replyToOwn) }
             return com.sotto.app.domain.model.FilePayload.encode(
                 id, key, entity.mediaName ?: "file", entity.mediaMime ?: "application/octet-stream",
                 entity.mediaSize, entity.plaintext, reply, entity.thumbnail, entity.mediaDurationMs, direct,
@@ -961,7 +1070,7 @@ class MessageRepositoryImpl @Inject constructor(
         if (media != null) {
             val key = entity.mediaKey ?: throw IllegalStateException("Media without a key")
             val bytes = mediaStore.load(entity.id, key) ?: throw IllegalStateException("Media file missing")
-            val reply = to?.let { MediaPayload.Reply(it, entity.replyQuote.orEmpty(), entity.replyToOwn) }
+            val reply = to?.let { MediaPayload.Reply(it, UnsendPayload.wireQuote(entity.replyQuote), entity.replyToOwn) }
             val hd = entity.hdKey?.let { key ->
                 val id = entity.attachmentId ?: throw IllegalStateException("HD copy not uploaded")
                 MediaPayload.Hd(id, key, entity.mediaSize)
@@ -969,7 +1078,7 @@ class MessageRepositoryImpl @Inject constructor(
             return MediaPayload.encode(media.copy(size = 0, hd = false), bytes, entity.plaintext, reply, hd)
         }
         to ?: return entity.plaintext
-        return ReplyPayload.encode(entity.plaintext, to, entity.replyQuote.orEmpty(), mine = entity.replyToOwn)
+        return ReplyPayload.encode(entity.plaintext, to, UnsendPayload.wireQuote(entity.replyQuote), mine = entity.replyToOwn)
     }
 
     /**
@@ -1351,6 +1460,12 @@ class MessageRepositoryImpl @Inject constructor(
             receivedIds.add(dto.messageId)
             return
         }
+        // An unsend: the message it names is emptied, and it's no message of its own.
+        if (UnsendPayload.isUnsend(plaintextStr)) {
+            applyReceivedUnsend(dto.senderId, plaintextStr)
+            receivedIds.add(dto.messageId)
+            return
+        }
         // A reaction: it goes on the message it names, and is no message of its own.
         if (ReactionPayload.isReaction(plaintextStr)) {
             applyReceivedReaction(dto.senderId, localUserId, plaintextStr)
@@ -1404,7 +1519,10 @@ class MessageRepositoryImpl @Inject constructor(
             expiresAt = disappearingExpiry(),
             isOutgoing = false,
             replyToId = replyToId,
-            replyQuote = reply?.quote,
+            // The quoted message was unsent here already: its words don't come back with the reply.
+            replyQuote = reply?.let { r ->
+                if (replyToId?.let { messageDao.getById(it) }?.let { MessageState.valueOf(it.state).isUnsent } == true) UnsendPayload.UNSENT_QUOTE else r.quote
+            },
             replyToOwn = reply != null && !reply.mine,
             mediaKind = media?.media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
             mediaMime = media?.media?.mime ?: file?.mime,
@@ -1500,6 +1618,8 @@ class MessageRepositoryImpl @Inject constructor(
         // Only the contact's reactions arrive here (the user's own are stored when sent).
         // "mine" is theirs, so the target is the user's message exactly when it's false.
         if (target.conversationId != conversation.id || target.isOutgoing == reaction.mine) return
+        // A reaction that crossed the unsend on its way: nothing left to react to.
+        if (MessageState.valueOf(target.state).isUnsent) return
         if (!reaction.mine && target.recipientId != senderId) return
         if (reaction.mine && target.senderId != senderId) return
         messageDao.setTheirReaction(target.id, reaction.emoji)
@@ -1513,6 +1633,29 @@ class MessageRepositoryImpl @Inject constructor(
             conversationId = conversation.id,
             isReaction = true,
         )
+    }
+
+    /**
+     * A contact unsent a message they sent us (ADR-36): it's emptied, only a note stays, and its
+     * notification (if it shows) no longer lists it. Dropped when that message isn't on this phone
+     * (any more), isn't theirs, or isn't one of their chat.
+     */
+    private suspend fun applyReceivedUnsend(senderId: String, plaintext: String) {
+        val target = messageDao.getById(UnsendPayload.decode(plaintext) ?: return) ?: return
+        val conversation = conversationDao.getByContactId(senderId) ?: return
+        if (target.isOutgoing || target.senderId != senderId || target.groupId != null || target.conversationId != conversation.id) return
+        if (!receivedUnsendable(target.state)) return
+        wipeUnsent(messageDao, mediaStore, target, MessageState.UNSENT)
+        // Unread, it no longer counts as unread.
+        if (target.state == MessageState.DELIVERED.name) conversationDao.capUnreadToUnseen(conversation.id)
+        // Its file is no longer anyone's to fetch (the sender drops it from the store too).
+        target.attachmentId?.let { id -> runCatching { apiService.deleteAttachment(id) } }
+        notePreviewUnsent(target)
+        if (conversation.id != activeConversationId) {
+            runCatching {
+                notificationManager.refreshAfterUnsend(conversation.id, senderId, contactDao.getByUserId(senderId)?.displayName ?: senderId.take(8))
+            }
+        }
     }
 
     private enum class SigCheck { VALID, INVALID, PQC_MISSING }

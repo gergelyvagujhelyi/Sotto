@@ -33,7 +33,7 @@ data class GroupPacket(
     /** [KIND_MSG]: the group message it replies to, and a quote of it. */
     @SerialName("re") val replyTo: GroupRef? = null,
     @SerialName("rq") val replyQuote: String? = null,
-    /** [KIND_REACT]: the group message reacted to, and the emoji ("" takes it back). */
+    /** [KIND_REACT]: the group message reacted to, and the emoji ("" takes it back). [KIND_UNSEND]: the sender's own message it unsends. */
     @SerialName("tg") val target: GroupRef? = null,
     @SerialName("em") val emoji: String? = null,
     /** [KIND_INVITE] and [KIND_ROSTER]: the signed roster. */
@@ -50,7 +50,11 @@ data class GroupPacket(
         const val KIND_REJECT = "reject"
         const val KIND_ROSTER = "roster"
         const val KIND_LEAVE = "leave"
-        val KINDS = setOf(KIND_MSG, KIND_REACT, KIND_INVITE, KIND_ACCEPT, KIND_REJECT, KIND_ROSTER, KIND_LEAVE)
+        /** The sender takes back a message of theirs (ADR-36). Sotto 0.7.30 and older drop it (unknown kind). */
+        const val KIND_UNSEND = "unsend"
+        val KINDS = setOf(KIND_MSG, KIND_REACT, KIND_INVITE, KIND_ACCEPT, KIND_REJECT, KIND_ROSTER, KIND_LEAVE, KIND_UNSEND)
+        /** What a member sends into the group's chat (rather than about the group itself). */
+        val CONTENT = setOf(KIND_MSG, KIND_REACT, KIND_UNSEND)
     }
 }
 
@@ -140,6 +144,12 @@ object GroupPacketCodec {
                 if (!refOk(target)) return "target"
                 val emoji = p.emoji ?: return "emoji"
                 if (emoji.isNotEmpty() && !ReactionPayload.isEmoji(emoji)) return "emoji"
+            }
+            GroupPacket.KIND_UNSEND -> {
+                if (forMsg || hasRoster || hasName || p.emoji != null) return "fields"
+                val target = p.target ?: return "target"
+                // Only one's own message can be unsent.
+                if (!refOk(target) || target.sender != p.sender) return "target"
             }
             GroupPacket.KIND_INVITE, GroupPacket.KIND_ROSTER -> {
                 if (forMsg || forReact || hasName) return "fields"

@@ -51,6 +51,16 @@ interface GroupDao {
     @Query("UPDATE groups SET unreadCount = 0 WHERE id = :id")
     suspend fun clearUnread(id: String)
 
+    /**
+     * After an unread message was unsent: the count is no more than what's still unread. Not one
+     * fewer, as that one may never have been counted (it came while the chat was open).
+     */
+    @Query(
+        "UPDATE groups SET unreadCount = MIN(unreadCount, (SELECT COUNT(*) FROM messages " +
+            "WHERE messages.conversationId = :id AND isOutgoing = 0 AND state = 'DELIVERED')) WHERE id = :id",
+    )
+    suspend fun capUnreadToUnseen(id: String)
+
     /** Drop previews whose message is gone (it disappeared): as for 1:1 chats, no plaintext stays in the list. */
     @Query(
         "UPDATE groups SET lastMessagePreview = NULL " +
@@ -124,12 +134,12 @@ interface GroupDao {
 
     /**
      * Failed copies the outbox sends again by itself, oldest first (GroupRepositoryImpl.retriesItself,
-     * AutoResend): picked in SQL, so copies that never retry can't fill the batch and starve these.
+     * AutoResend; an unsend always): picked in SQL, so copies that never retry can't fill the batch and starve these.
      */
     @Query(
-        "SELECT * FROM group_outbox WHERE state = 'failed' AND attempts < :maxAttempts " +
+        "SELECT * FROM group_outbox WHERE state = 'failed' AND (kind = 'unsend' OR (attempts < :maxAttempts " +
             "AND (lastError IS NULL OR lastError != 'keys') " +
-            "AND (messageId IS NULL OR createdAt >= :messagesSince) ORDER BY createdAt LIMIT :limit"
+            "AND (messageId IS NULL OR createdAt >= :messagesSince))) ORDER BY createdAt LIMIT :limit"
     )
     suspend fun getRetryableFailed(maxAttempts: Int, messagesSince: Long, limit: Int): List<GroupOutboxEntity>
 
@@ -212,6 +222,10 @@ interface GroupDao {
 
     @Query("DELETE FROM group_reactions WHERE messageId = :messageId AND reactorId = :reactorId")
     suspend fun deleteReaction(messageId: String, reactorId: String)
+
+    /** Every reaction to [messageId] (it was unsent). */
+    @Query("DELETE FROM group_reactions WHERE messageId = :messageId")
+    suspend fun deleteReactionsFor(messageId: String)
 
     @Query("DELETE FROM group_reactions WHERE messageId NOT IN (SELECT id FROM messages)")
     suspend fun pruneOrphanReactions()

@@ -36,6 +36,7 @@ import com.sotto.app.domain.model.MessageState
 import com.sotto.app.domain.model.ReplyPayload
 import com.sotto.app.domain.model.ReplyRef
 import com.sotto.app.domain.model.UnknownPayload
+import com.sotto.app.domain.model.UnsendPayload
 import com.sotto.app.domain.model.quoteText
 import com.sotto.app.domain.repository.GroupRepository
 import com.sotto.app.group.GroupIds
@@ -51,6 +52,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -60,6 +62,7 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Instant
 import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentHashMap
@@ -450,7 +453,7 @@ class GroupRepositoryImpl @Inject constructor(
             val packet = GroupPacket(
                 kind = GroupPacket.KIND_MSG, groupId = groupId, id = logicalId, sender = me, to = member.userId,
                 epoch = epoch, timestamp = row.timestamp, body = body,
-                replyTo = ref, replyQuote = ref?.let { row.replyQuote.orEmpty().take(GroupPacketCodec.MAX_QUOTE) },
+                replyTo = ref, replyQuote = ref?.let { UnsendPayload.wireQuote(row.replyQuote).take(GroupPacketCodec.MAX_QUOTE) },
             )
             copyFor(groupId, row.id, member.userId, packet, now)
         }
@@ -581,7 +584,8 @@ class GroupRepositoryImpl @Inject constructor(
     override suspend fun retry(messageId: String) = withContext(NonCancellable) {
         val row = messageDao.getById(messageId) ?: return@withContext
         if (!row.isOutgoing || row.groupId == null) return@withContext
-        if (row.state != MessageState.FAILED.name) return@withContext
+        // Claimed in one step: an unsend (or another tap) at the same moment can't have it too.
+        if (messageDao.claimState(messageId, MessageState.FAILED.name, MessageState.SENDING.name) == 0) return@withContext
         val copies = groupDao.getCopiesForMessage(messageId)
         if (copies.isEmpty()) {
             // It failed before any copy was made (its file didn't go up): start over.
@@ -626,7 +630,10 @@ class GroupRepositoryImpl @Inject constructor(
 
     /** A failed copy the outbox sends again without a tap. */
     private fun retriesItself(copy: GroupOutboxEntity): Boolean =
-        if (copy.messageId == null) copy.attempts < MAX_CONTROL_ATTEMPTS && copy.lastError != ERROR_KEYS
+        // An unsend never stops trying (as one-to-one): a member it misses keeps the message.
+        // One waiting for a member's keys goes once the admin vouches for them.
+        if (copy.kind == GroupPacket.KIND_UNSEND) true
+        else if (copy.messageId == null) copy.attempts < MAX_CONTROL_ATTEMPTS && copy.lastError != ERROR_KEYS
         else AutoResend.copyDue(copy.messageId, copy.attempts, copy.lastError, copy.createdAt, env.now())
 
     /** Our messages left SENDING by a process death: their copies are sent again (the same bytes). */
@@ -670,6 +677,53 @@ class GroupRepositoryImpl @Inject constructor(
         groupDao.insertCopies(copies)
         deliver(copies)
         if (copies.any { groupDao.getCopy(it.id)?.state == COPY_FAILED }) env.scheduleOutbox()
+    }
+
+    // ── Unsending (ADR-36) ────────────────────────────────────────────────
+
+    /**
+     * Empties our group message at once and tells every member, as a control packet the outbox
+     * sends again until it's through. Copies of the message itself that haven't gone yet never
+     * will. Only while the user is a member: a group they left can't be told anything.
+     */
+    override suspend fun unsend(messageId: String) = withContext(NonCancellable) {
+        val me = env.me() ?: throw IllegalStateException("No identity")
+        val row = messageDao.getById(messageId) ?: return@withContext
+        val groupId = row.groupId ?: throw IllegalArgumentException("Not a group message")
+        require(row.isOutgoing && row.senderId == me) { "Only our own messages can be unsent" }
+        if (MessageState.valueOf(row.state).isUnsent) return@withContext
+        require(ownUnsendable(row.state)) { "This message can't be unsent now" }
+        val logicalId = row.groupMessageId ?: return@withContext
+        lockFor(groupId).withLock {
+            val group = groupDao.get(groupId) ?: return@withLock
+            if (GroupStatus.fromWire(group.status) != GroupStatus.ACTIVE) throw IllegalStateException("Not a member")
+            check(messageDao.claimState(messageId, row.state, MessageState.UNSENT.name) == 1) { "The message is being sent" }
+            // Its copies go: one not sent yet never will be, and a receipt for one that went changes nothing now.
+            val copyIds = groupDao.getCopiesForMessage(messageId).map { it.id }
+            groupDao.deleteCopiesForMessage(messageId)
+            // One already on its way (the outbox took it before the delete) reaches the relay
+            // first, so the unsend can't overtake it and be dropped as naming nothing.
+            withTimeoutOrNull(IN_FLIGHT_WAIT_MS) { while (copyIds.any { it in inFlight }) delay(IN_FLIGHT_POLL_MS) }
+            wipeUnsent(messageDao, mediaStore, row, MessageState.UNSENT)
+            groupDao.deleteReactionsFor(messageId)
+            row.attachmentId?.let { id -> runCatching { transport.get().deleteAttachment(id) } }
+            notePreviewUnsent(groupId, row, "")
+            val packetId = GroupIds.newId()
+            val now = env.now()
+            val copies = recipientsFor(groupId).map { member ->
+                copyFor(
+                    groupId, null, member.userId,
+                    GroupPacket(
+                        kind = GroupPacket.KIND_UNSEND, groupId = groupId, id = packetId, sender = me, to = member.userId,
+                        epoch = group.epoch, timestamp = now, target = GroupRef(me, logicalId),
+                    ),
+                    now,
+                )
+            }
+            groupDao.insertCopies(copies)
+            deliver(copies)
+            if (copies.any { groupDao.getCopy(it.id)?.state == COPY_FAILED }) env.scheduleOutbox()
+        }
     }
 
     // ── Invitations, leaving ──────────────────────────────────────────────
@@ -1074,7 +1128,7 @@ class GroupRepositoryImpl @Inject constructor(
                     GroupPacket.KIND_ROSTER -> onRoster(packet, inbound)
                     GroupPacket.KIND_ACCEPT, GroupPacket.KIND_REJECT -> onAnswer(packet, inbound)
                     GroupPacket.KIND_LEAVE -> onLeave(packet, inbound)
-                    GroupPacket.KIND_MSG, GroupPacket.KIND_REACT -> onContent(packet, inbound, fromHeld = false)
+                    GroupPacket.KIND_MSG, GroupPacket.KIND_REACT, GroupPacket.KIND_UNSEND -> onContent(packet, inbound, fromHeld = false)
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -1258,6 +1312,7 @@ class GroupRepositoryImpl @Inject constructor(
         when (packet.kind) {
             GroupPacket.KIND_MSG -> storeMessage(group, packet, inbound)
             GroupPacket.KIND_REACT -> applyReaction(group, packet, inbound)
+            GroupPacket.KIND_UNSEND -> applyUnsend(group, packet)
         }
     }
 
@@ -1291,7 +1346,11 @@ class GroupRepositoryImpl @Inject constructor(
             expiresAt = group.timerMs.takeIf { it > 0 }?.let { now + it },
             isOutgoing = false,
             replyToId = reply?.let { GroupIds.rowId(group.id, it.sender, it.id) },
-            replyQuote = reply?.let { packet.replyQuote.orEmpty() },
+            // The quoted message was unsent here already: its words don't come back with the reply.
+            replyQuote = reply?.let { r ->
+                val quoted = messageDao.getById(GroupIds.rowId(group.id, r.sender, r.id))
+                if (quoted != null && MessageState.valueOf(quoted.state).isUnsent) UnsendPayload.UNSENT_QUOTE else packet.replyQuote.orEmpty()
+            },
             replyToOwn = reply?.sender == me,
             mediaKind = media?.media?.kind?.wire ?: file?.let { MediaKind.FILE.wire },
             mediaMime = media?.media?.mime ?: file?.mime,
@@ -1321,6 +1380,8 @@ class GroupRepositoryImpl @Inject constructor(
         val target = packet.target ?: return
         val targetRow = messageDao.getById(GroupIds.rowId(group.id, target.sender, target.id)) ?: return
         if (targetRow.groupId != group.id) return
+        // A reaction that crossed the unsend on its way: nothing left to react to.
+        if (MessageState.valueOf(targetRow.state).isUnsent) return
         val emoji = packet.emoji.orEmpty()
         if (emoji.isEmpty()) {
             groupDao.deleteReaction(targetRow.id, packet.sender)
@@ -1332,6 +1393,33 @@ class GroupRepositoryImpl @Inject constructor(
             val name = nameOf(group.id, packet.sender)
             env.notifyMessage(group, packet.sender, name, env.reactionText(emoji, env.preview(targetRow)), isReaction = true, names = memberNames(group.id))
         }
+    }
+
+    /**
+     * A member unsent a message of theirs (ADR-36): it's emptied, its reactions go, and the group's
+     * notification no longer lists it. The codec checked that it names the sender's own message.
+     */
+    private suspend fun applyUnsend(group: GroupEntity, packet: GroupPacket) {
+        val target = packet.target ?: return
+        if (target.sender != packet.sender) return
+        val row = messageDao.getById(GroupIds.rowId(group.id, target.sender, target.id)) ?: return
+        if (row.groupId != group.id || row.isOutgoing || row.senderId != packet.sender) return
+        if (!receivedUnsendable(row.state)) return
+        wipeUnsent(messageDao, mediaStore, row, MessageState.UNSENT)
+        groupDao.deleteReactionsFor(row.id)
+        // Unread, it no longer counts as unread.
+        if (row.state == MessageState.DELIVERED.name) groupDao.capUnreadToUnseen(group.id)
+        row.attachmentId?.let { id -> runCatching { transport.get().deleteAttachment(id) } }
+        notePreviewUnsent(group.id, row, nameOf(group.id, row.senderId))
+        if (activeGroupId != group.id) runCatching { env.refreshAfterUnsend(group, memberNames(group.id)) }
+    }
+
+    /** The group list shows the note when [row] was the group's latest message. */
+    private suspend fun notePreviewUnsent(groupId: String, row: MessageEntity, senderName: String) {
+        val group = groupDao.get(groupId) ?: return
+        if (group.lastMessageTimestamp != row.timestamp) return
+        val text = env.unsentNote(row.isOutgoing)
+        groupDao.updatePreview(groupId, (if (senderName.isEmpty()) text else "$senderName: $text").take(100), row.timestamp, 0)
     }
 
     // ── Held packets ──────────────────────────────────────────────────────
@@ -1367,13 +1455,13 @@ class GroupRepositoryImpl @Inject constructor(
                 continue
             }
             val packet = decoded.packet
-            val isContent = packet.kind == GroupPacket.KIND_MSG || packet.kind == GroupPacket.KIND_REACT
+            val isContent = packet.kind in GroupPacket.CONTENT
             if (isContent && (GroupStatus.fromWire(group.status) != GroupStatus.ACTIVE || held.epoch > group.epoch)) continue
             groupDao.deleteHeld(held.relayId)
             val inbound = Inbound(held.relayId, held.senderId, held.packet, held.receivedAt, held.senderFingerprint, null)
             try {
                 when (packet.kind) {
-                    GroupPacket.KIND_MSG, GroupPacket.KIND_REACT -> onContent(packet, inbound, fromHeld = true)
+                    GroupPacket.KIND_MSG, GroupPacket.KIND_REACT, GroupPacket.KIND_UNSEND -> onContent(packet, inbound, fromHeld = true)
                     GroupPacket.KIND_ROSTER -> onRoster(packet, inbound)
                     GroupPacket.KIND_INVITE -> onInvite(packet, inbound)
                     GroupPacket.KIND_ACCEPT, GroupPacket.KIND_REJECT -> onAnswer(packet, inbound)
@@ -1525,6 +1613,10 @@ class GroupRepositoryImpl @Inject constructor(
         private const val SEND_PARALLELISM = 4
         private const val OUTBOX_BATCH = 200
         private const val MAX_CONTROL_ATTEMPTS = 12
+
+        /** How long an unsend waits for a copy of its message that is being posted. */
+        private const val IN_FLIGHT_WAIT_MS = 30_000L
+        private const val IN_FLIGHT_POLL_MS = 50L
         private const val CONTROL_COPY_KEEP_MS = 14L * 24 * 60 * 60 * 1000
         private const val HELD_KEEP_MS = 7L * 24 * 60 * 60 * 1000
 

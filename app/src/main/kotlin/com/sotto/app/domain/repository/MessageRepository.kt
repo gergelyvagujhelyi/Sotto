@@ -29,6 +29,12 @@ interface MessageRepository {
      */
     suspend fun sendReaction(message: Message, recipientId: String, emoji: String?)
     /**
+     * Unsend our own message [messageId] (ADR-36): it's emptied here at once, and the contact's
+     * phone (or every group member's) is told to empty it too; that goes again until it reaches
+     * the relay. Throws if the message can't be unsent (it's being sent right now, say).
+     */
+    suspend fun unsend(messageId: String)
+    /**
      * Send the user's own [name] to [recipientId], end-to-end encrypted like a message.
      * Nothing is stored or shown on this side.
      */

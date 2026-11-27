@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +66,9 @@ import com.sotto.app.ui.theme.Aurora
  * handled by the chat (it closes this). A popup that doesn't take focus lets taps outside
  * it through to the chat, though, so this one covers the whole window: a tap anywhere but
  * the picker only closes it, instead of also opening a link or retrying a message.
+ *
+ * Under the reactions, for the user's own message, an Unsend button ([onUnsend], ADR-36). A
+ * message that can't be reacted to yet (one that failed) gets only that ([showReactions] false).
  */
 @Composable
 internal fun ReactionPicker(
@@ -73,6 +78,8 @@ internal fun ReactionPicker(
     onPick: (String) -> Unit,
     onMore: () -> Unit,
     onDismiss: () -> Unit,
+    showReactions: Boolean = true,
+    onUnsend: (() -> Unit)? = null,
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
     val gap = with(density) { 6.dp.roundToPx() }
@@ -92,7 +99,16 @@ internal fun ReactionPicker(
             Spacer(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { onDismiss() } })
             val bounds = anchor ?: return@Box
             Layout(content = {
-                if (expanded) MoreReactions(current, onPick) else QuickReactions(current, onPick, onMore)
+                Column(
+                    horizontalAlignment = if (alignEnd) Alignment.End else Alignment.Start,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    when {
+                        expanded -> MoreReactions(current, onPick)
+                        showReactions -> QuickReactions(current, onPick, onMore)
+                    }
+                    if (onUnsend != null && !expanded) UnsendButton(onUnsend)
+                }
             }) { measurables, constraints ->
                 val window = IntSize(constraints.maxWidth, constraints.maxHeight)
                 val picker = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
@@ -140,6 +156,33 @@ private fun QuickReactions(current: String?, onPick: (String) -> Unit, onMore: (
                 modifier = Modifier.size(22.dp),
             )
         }
+    }
+}
+
+/** "Unsend", in a pill like the reactions'. */
+@Composable
+private fun UnsendButton(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(24.dp)
+    val label = stringResource(R.string.chat_unsend)
+    Row(
+        modifier = Modifier
+            .padding(4.dp)
+            .shadow(6.dp, shape)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, Aurora.colors.glassBorder, shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(
+            Icons.AutoMirrored.Rounded.Undo,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp),
+        )
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.error)
     }
 }
 

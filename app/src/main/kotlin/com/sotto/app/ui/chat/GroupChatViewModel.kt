@@ -75,7 +75,10 @@ class GroupChatViewModel @Inject constructor(
 
     private val replyingToId: StateFlow<String?> = savedStateHandle.getStateFlow(KEY_REPLY_TO, null)
     val replyingTo: StateFlow<Message?> =
-        combine(messages, replyingToId) { list, id -> id?.let { wanted -> list?.firstOrNull { it.id == wanted } } }
+        combine(messages, replyingToId) { list, id ->
+            // An unsent message can't be replied to: the bar closes when it's unsent meanwhile.
+            id?.let { wanted -> list?.firstOrNull { it.id == wanted } }?.takeIf { !it.state.isUnsent }
+        }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _error = MutableStateFlow<UiText?>(null)
@@ -158,6 +161,18 @@ class GroupChatViewModel @Inject constructor(
                 groups.react(groupId, message, next)
             } catch (e: Exception) {
                 _error.value = UiText.res(R.string.chat_error_send_reaction)
+            }
+        }
+    }
+
+    /** Unsend our [message] for every member (ADR-36); only while the user is one of them. */
+    fun unsend(message: Message) {
+        if (!message.canUnsend || !canSend()) return
+        viewModelScope.launch {
+            try {
+                groups.unsend(message.id)
+            } catch (e: Exception) {
+                _error.value = UiText.res(R.string.chat_error_unsend)
             }
         }
     }

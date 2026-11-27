@@ -37,6 +37,7 @@ class GroupPacketTest {
             msg().copy(kind = GroupPacket.KIND_ACCEPT, body = null, name = "Björn"),
             msg().copy(kind = GroupPacket.KIND_REJECT, body = null),
             msg().copy(kind = GroupPacket.KIND_LEAVE, body = null),
+            msg().copy(kind = GroupPacket.KIND_UNSEND, body = null, target = GroupRef("astrid", GroupIds.newId())),
         )
         for (p in packets) assertEquals(Decoded.Ok(p), decode(p))
     }
@@ -83,6 +84,11 @@ class GroupPacketTest {
             msg().copy(kind = GroupPacket.KIND_LEAVE),
             msg().copy(kind = GroupPacket.KIND_ROSTER, body = null),
             msg().copy(kind = "poll"),
+            // Only one's own message can be unsent, and an unsend carries nothing else.
+            msg().copy(kind = GroupPacket.KIND_UNSEND, body = null, target = GroupRef("cecilia", GroupIds.newId())),
+            msg().copy(kind = GroupPacket.KIND_UNSEND, body = null),
+            msg().copy(kind = GroupPacket.KIND_UNSEND, target = GroupRef("astrid", GroupIds.newId())),
+            msg().copy(kind = GroupPacket.KIND_UNSEND, body = null, target = GroupRef("astrid", GroupIds.newId()), emoji = ""),
         )
         for (p in wrong) assertTrue(p.toString(), decode(p) is Decoded.Invalid)
     }

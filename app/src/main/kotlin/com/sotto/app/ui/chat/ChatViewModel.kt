@@ -76,7 +76,10 @@ class ChatViewModel @Inject constructor(
      */
     private val replyingToId: StateFlow<String?> = savedStateHandle.getStateFlow(KEY_REPLY_TO, null)
     val replyingTo: StateFlow<Message?> =
-        combine(messages, replyingToId) { list, id -> id?.let { wanted -> list?.firstOrNull { it.id == wanted } } }
+        combine(messages, replyingToId) { list, id ->
+            // An unsent message can't be replied to: the bar closes when it's unsent meanwhile.
+            id?.let { wanted -> list?.firstOrNull { it.id == wanted } }?.takeIf { !it.state.isUnsent }
+        }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     /** Reply to [message] with the next one sent. */
@@ -509,6 +512,21 @@ class ChatViewModel @Inject constructor(
                 .onFailure { e ->
                     _sendError.value = UiText.res(R.string.chat_error_send_message)
                 }
+        }
+    }
+
+    /**
+     * Unsend our [message] (ADR-36): emptied here at once; it reaches the contact when it can
+     * (ResendWorker), so a missing connection is no error here.
+     */
+    fun unsend(message: Message) {
+        if (!message.canUnsend) return
+        viewModelScope.launch {
+            try {
+                messageRepository.unsend(message.id)
+            } catch (e: Exception) {
+                _sendError.value = UiText.res(R.string.chat_error_unsend)
+            }
         }
     }
 

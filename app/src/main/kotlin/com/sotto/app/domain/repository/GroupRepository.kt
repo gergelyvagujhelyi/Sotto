@@ -43,6 +43,8 @@ interface GroupRepository {
     suspend fun sendMedia(groupId: String, media: MessageMedia, bytes: ByteArray, caption: String, replyTo: Message?, hdBytes: ByteArray? = null)
     suspend fun sendFile(groupId: String, uri: android.net.Uri, caption: String, replyTo: Message?)
     suspend fun react(groupId: String, message: Message, emoji: String?)
+    /** Unsends our group message [messageId] for every member (ADR-36); see MessageRepository.unsend. */
+    suspend fun unsend(messageId: String)
     /** Sends the copies of our message [messageId] that failed again (never the ones that went). */
     suspend fun retry(messageId: String)
 

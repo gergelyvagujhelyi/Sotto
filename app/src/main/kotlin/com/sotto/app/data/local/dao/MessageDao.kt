@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
+import com.sotto.app.data.local.entity.PendingUnsendEntity
 import com.sotto.app.data.local.entity.MessageEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -31,8 +33,9 @@ interface MessageDao {
     // A receipt can arrive before the send result (or for a send whose response was
     // lost): SEEN is final, and a sent message that was delivered never goes back to
     // SENDING / SENT / FAILED.
+    // An unsent message stays unsent (ADR-36): a late receipt or send result never brings it back.
     @Query(
-        "UPDATE messages SET state = :state WHERE id = :messageId AND state != 'SEEN' " +
+        "UPDATE messages SET state = :state WHERE id = :messageId AND state NOT IN ('SEEN', 'UNSENDING', 'UNSENT') " +
             "AND NOT (isOutgoing = 1 AND state = 'DELIVERED' AND :state IN ('SENDING', 'SENT', 'FAILED'))"
     )
     suspend fun updateState(messageId: String, state: String)
@@ -91,7 +94,7 @@ interface MessageDao {
     )
     suspend fun getUnreadOutgoingIds(recipientId: String, since: Long): List<String>
 
-    @Query("UPDATE messages SET state = 'SEEN' WHERE id IN (:ids)")
+    @Query("UPDATE messages SET state = 'SEEN' WHERE id IN (:ids) AND state NOT IN ('UNSENDING', 'UNSENT')")
     suspend fun markSeen(ids: List<String>)
 
     /** Our recent sent messages to [recipientId] that no delivery (or read) receipt has covered. */
@@ -108,7 +111,7 @@ interface MessageDao {
     @Query(
         "UPDATE messages SET state = CASE WHEN state = 'SEEN' OR (isOutgoing = 1 AND state = 'DELIVERED') " +
             "THEN state ELSE :state END, " +
-            "timestamp = :timestamp WHERE id = :messageId"
+            "timestamp = :timestamp WHERE id = :messageId AND state NOT IN ('UNSENDING', 'UNSENT')"
     )
     suspend fun updateStateAndTimestamp(messageId: String, state: String, timestamp: Long)
 
@@ -164,6 +167,51 @@ interface MessageDao {
     @Query("DELETE FROM messages WHERE id = :messageId")
     suspend fun delete(messageId: String)
 
+    /**
+     * Unsends a message (ADR-36): [state] is UNSENDING or UNSENT, and everything it said goes:
+     * its text, media, file, reply, reactions and ciphertext. Its place in the chat (time,
+     * sender, disappearing timer) stays, for the note that it was unsent.
+     */
+    @Query(
+        "UPDATE messages SET state = :state, plaintext = '', encryptedBody = X'', nonce = X'', " +
+            "replyToId = NULL, replyQuote = NULL, replyToOwn = 0, myReaction = NULL, theirReaction = NULL, " +
+            "mediaKind = NULL, mediaMime = NULL, mediaKey = NULL, mediaDurationMs = 0, mediaWidth = 0, mediaHeight = 0, " +
+            "mediaName = NULL, mediaSize = 0, mediaState = NULL, attachmentId = NULL, hdKey = NULL, thumbnail = NULL " +
+            "WHERE id = :messageId"
+    )
+    suspend fun wipeUnsent(messageId: String, state: String)
+
+    /** Replies in [conversationId] quoting the unsent [messageId] no longer show its words. */
+    @Query("UPDATE messages SET replyQuote = :quote WHERE conversationId = :conversationId AND replyToId = :messageId")
+    suspend fun setQuotesOf(conversationId: String, messageId: String, quote: String)
+
+    /**
+     * Claims our one-to-one message [messageId] for unsending (from [from] to UNSENDING) and keeps
+     * the unsend to send, in one step: false when something else changed its state first.
+     */
+    @Transaction
+    suspend fun claimUnsend(messageId: String, from: String, recipientId: String, now: Long): Boolean {
+        if (claimState(messageId, from, "UNSENDING") == 0) return false
+        insertPendingUnsend(PendingUnsendEntity(messageId, recipientId, now))
+        return true
+    }
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPendingUnsend(pending: PendingUnsendEntity)
+
+    /** Our one-to-one unsends that haven't reached the relay yet, oldest first. */
+    @Query("SELECT * FROM pending_unsends ORDER BY createdAt")
+    suspend fun getPendingUnsends(): List<PendingUnsendEntity>
+
+    @Query("SELECT COUNT(*) FROM pending_unsends")
+    suspend fun countPendingUnsends(): Int
+
+    @Query("DELETE FROM pending_unsends WHERE messageId = :messageId")
+    suspend fun deletePendingUnsend(messageId: String)
+
+    @Query("DELETE FROM pending_unsends")
+    suspend fun deleteAllPendingUnsends()
+
     @Query("DELETE FROM messages WHERE conversationId = :conversationId AND timestamp < :beforeTimestamp")
     suspend fun deleteOlderThan(conversationId: String, beforeTimestamp: Long)
 
@@ -194,7 +242,8 @@ interface MessageDao {
     )
     suspend fun getOutgoingFilesNotReceived(recipientId: String): List<String>
 
-    @Query("UPDATE messages SET mediaState = :state WHERE id = :messageId")
+    /** An unsent message's file is gone for good: a transfer that ends after the unsend changes nothing. */
+    @Query("UPDATE messages SET mediaState = :state WHERE id = :messageId AND state NOT IN ('UNSENDING', 'UNSENT')")
     suspend fun setMediaState(messageId: String, state: String)
 
     @Query("UPDATE messages SET attachmentId = :attachmentId WHERE id = :messageId")
