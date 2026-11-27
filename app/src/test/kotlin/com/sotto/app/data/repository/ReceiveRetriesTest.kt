@@ -21,6 +21,7 @@ class ReceiveRetriesTest {
         override fun edit(): SharedPreferences.Editor = object : SharedPreferences.Editor {
             val puts = HashMap<String, Any?>()
             val removes = HashSet<String>()
+            var clearing = false
             override fun putString(key: String, value: String?) = apply { puts[key] = value }
             override fun putStringSet(key: String?, values: MutableSet<String>?) = this
             override fun putInt(key: String?, value: Int) = this
@@ -28,8 +29,14 @@ class ReceiveRetriesTest {
             override fun putFloat(key: String?, value: Float) = this
             override fun putBoolean(key: String?, value: Boolean) = this
             override fun remove(key: String) = apply { removes += key }
-            override fun clear() = this
-            override fun commit(): Boolean { removes.forEach { data.remove(it) }; data.putAll(puts); return true }
+            override fun clear() = apply { clearing = true }
+            // As Android does: clear() first, then the removes and puts of the same edit.
+            override fun commit(): Boolean {
+                if (clearing) data.clear()
+                removes.forEach { data.remove(it) }
+                data.putAll(puts)
+                return true
+            }
             override fun apply() { commit() }
         }
     }
@@ -44,6 +51,18 @@ class ReceiveRetriesTest {
         assertEquals(3, next.bump("d:m1"))
         next.clear("d:m1")
         assertEquals(0, ReceiveRetries.over(prefs).count("d:m1"))
+    }
+
+    @Test
+    fun `a wipe forgets every count, also in a new process`() {
+        val prefs = FakePrefs()
+        ReceiveRetries.over(prefs).apply {
+            bump("d:m1")
+            bump("p:m2")
+            clearAll()
+            assertEquals(0, count("d:m1"))
+        }
+        assertEquals(0, ReceiveRetries.over(prefs).count("p:m2"))
     }
 
     @Test

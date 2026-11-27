@@ -750,10 +750,7 @@ fun ChatContent(
             ReactionsSheet(
                 entries = entries,
                 onRemoveMine = if (message.canReact && mine != null) ({ onReact(message, mine) }) else null,
-                onChange = if (message.canReact) ({
-                    pickFor = rid
-                    scrollToPick = rid
-                }) else null,
+                onChange = if (message.canReact) ({ scrollToPick = rid }) else null,
                 onDismiss = { reactionsFor = null },
             )
         }
@@ -805,10 +802,11 @@ fun ChatContent(
             val index = kotlinx.coroutines.withTimeoutOrNull(2_000) {
                 androidx.compose.runtime.snapshotFlow { currentRows.value.indexOfFirst { it.key == "m:$id" } }.first { it >= 0 }
             }
-            if (index == null) {
-                if (pickFor == id) pickFor = null
-            } else {
+            if (index != null) {
                 listState.animateScrollToItem(index)
+                // Only once it's in view: a scroll cut short (a touch, a new message) opens
+                // nothing, rather than a picker later on a message the user has left.
+                pickFor = id
             }
         } finally {
             // Also when a touch stops the scroll: the next "Change" scrolls again. Not a newer

@@ -42,6 +42,7 @@ class SettingsRepositoryImpl @Inject constructor(
     private val sessionResetSender: SessionResetSender,
     private val pushTokenRepository: com.sotto.app.domain.repository.PushTokenRepository,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
+    private val receiveRetries: ReceiveRetries,
 ) : SettingsRepository {
 
     override fun getPrivacySettings(): Flow<PrivacySettings> {
@@ -135,6 +136,8 @@ class SettingsRepositoryImpl @Inject constructor(
         androidx.work.WorkManager.getInstance(context).cancelAllWork()
         try { pushTokenRepository.clearLocal() } catch (_: Exception) {}
         messageDao.deleteAll()
+        // Counted decrypt tries name message ids, in a file of their own.
+        receiveRetries.clearAll()
         // Voice messages and photos are files beside the database.
         java.io.File(context.filesDir, "media").deleteRecursively()
         // Decrypted copies made for opening files, and records of unfinished uploads.

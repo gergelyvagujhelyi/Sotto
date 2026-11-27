@@ -45,6 +45,13 @@ class ReceiveRetries private constructor(private val prefsSource: (() -> SharedP
         prefs?.edit(commit = true) { remove(key) }
     }
 
+    /** Forgets every count: Wipe local data (they name message ids, outside the encrypted database). */
+    @Synchronized
+    fun clearAll() {
+        memory.clear()
+        prefs?.edit(commit = true) { clear() }
+    }
+
     /** Forgets tries last counted more than a week ago (the relay keeps a message 28 days). */
     @Synchronized
     fun prune(now: Long = System.currentTimeMillis()) {

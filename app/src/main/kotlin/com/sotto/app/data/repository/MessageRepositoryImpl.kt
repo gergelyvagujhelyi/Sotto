@@ -907,16 +907,27 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
-    // The last day's, as the automatic resend: older failures wait for a tap and aren't "waiting".
-    override suspend fun countUnsent(): Int = messageDao.countUnsent(System.currentTimeMillis() - AutoResend.WINDOW_MS)
+    // What goes by itself, by the rules the chat shows "Sends when connected" by (AutoResend):
+    // being sent now, failed one-to-one messages that go again, group messages with a copy that
+    // goes again. Not what waits for a tap (older than a day, files, blocked contacts).
+    override suspend fun countUnsent(): Int {
+        val now = System.currentTimeMillis()
+        val since = now - AutoResend.WINDOW_MS
+        return messageDao.countSendingSince(since) +
+            resendDue(now).size +
+            messageDao.countGroupMessagesRetrying(AutoResend.MAX_COPY_ATTEMPTS, since)
+    }
+
+    /** Our failed one-to-one messages that go again by themselves (AutoResend). */
+    private suspend fun resendDue(now: Long) = messageDao.getFailedOutgoingSince(now - AutoResend.WINDOW_MS).filter {
+        it.plaintext != null &&
+            AutoResend.oneToOneDue(it.timestamp, now, blockedUserDao.isBlocked(it.recipientId), usesStore(it))
+    }
 
     override suspend fun resendFailed(): Boolean {
         val now = System.currentTimeMillis()
         // The same rule the chat shows "Not sent yet · Sends when connected" by (AutoResend).
-        suspend fun due() = messageDao.getFailedOutgoingSince(now - AutoResend.WINDOW_MS).filter {
-            it.plaintext != null &&
-                AutoResend.oneToOneDue(it.timestamp, now, blockedUserDao.isBlocked(it.recipientId), usesStore(it))
-        }
+        suspend fun due() = resendDue(now)
         for (message in due()) {
             try {
                 retryFailed(message.id)

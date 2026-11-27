@@ -20,7 +20,7 @@ import java.net.URL
  */
 object ConnectionTest {
     /** Connections to one place: [label] (a string resource), where, how many tries. */
-    data class Target(val label: Int, val host: String, val port: Int, val tries: Int)
+    data class Target(val label: Int, val host: String, val port: Int, val tries: Int, val ipv4Only: Boolean = false)
 
     const val RELAY_TCP_TRIES = 20
     const val HTTP_TRIES = 5
@@ -32,7 +32,7 @@ object ConnectionTest {
     val OTHERS = listOf(
         Target(com.sotto.app.R.string.diag_test_google_v4, "8.8.8.8", 443, OTHER_TRIES),
         Target(com.sotto.app.R.string.diag_test_google_v6, "2001:4860:4860::8888", 443, OTHER_TRIES),
-        Target(com.sotto.app.R.string.diag_test_github, "github.com", 443, OTHER_TRIES),
+        Target(com.sotto.app.R.string.diag_test_github, "github.com", 443, OTHER_TRIES, ipv4Only = true),
     )
 
     /** How many tries in all, for the progress. */
@@ -72,10 +72,12 @@ object ConnectionTest {
 
         // Looked up once: the TCP tries below then measure only connecting, not the lookup (the
         // HTTPS tries go by name, as Sotto does; Android keeps the answer for them).
-        var relayAddress: InetAddress? = null
-        val lookup = timed { relayAddress = InetAddress.getAllByName(url.host).first() }
+        // Every address, in Android's order: a try connects to the first that answers, as Sotto's
+        // own connections do (an IPv6 address on a network with broken IPv6 isn't a failure).
+        var relayAddresses: List<InetAddress> = emptyList()
+        val lookup = timed { relayAddresses = InetAddress.getAllByName(url.host).toList() }
         step()
-        val relayTcp = connections(relayAddress, port, RELAY_TCP_TRIES, ::step)
+        val relayTcp = connections(relayAddresses, port, RELAY_TCP_TRIES, ::step)
         val http = ArrayList<Long>()
         repeat(HTTP_TRIES) {
             timed {
@@ -97,18 +99,37 @@ object ConnectionTest {
             step()
         }
         val others = OTHERS.map { target ->
-            val address = try { InetAddress.getAllByName(target.host).first() } catch (_: Exception) { null }
-            target to connections(address, target.port, target.tries, ::step)
+            // GitHub over IPv4 only (its label says so); Google's are addresses already.
+            val addresses = try {
+                InetAddress.getAllByName(target.host).toList().let { all ->
+                    if (target.ipv4Only) all.filterIsInstance<java.net.Inet4Address>() else all
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+            target to connections(addresses, target.port, target.tries, ::step)
         }
         Result(lookup, relayTcp, Outcome(HTTP_TRIES, http), others)
     }
 
-    /** [tries] connections to [address] (none can work without one). */
-    private suspend fun connections(address: InetAddress?, port: Int, tries: Int, step: suspend () -> Unit): Outcome {
+    /** [tries] connections, each to the first of [addresses] that answers (none without any). */
+    private suspend fun connections(addresses: List<InetAddress>, port: Int, tries: Int, step: suspend () -> Unit): Outcome {
         val times = ArrayList<Long>()
         repeat(tries) {
-            if (address != null) {
-                timed { Socket().use { it.connect(InetSocketAddress(address, port), TCP_TIMEOUT_MS) } }?.let { times += it }
+            if (addresses.isNotEmpty()) {
+                timed {
+                    var connected = false
+                    for (address in addresses) {
+                        connected = try {
+                            Socket().use { it.connect(InetSocketAddress(address, port), TCP_TIMEOUT_MS) }
+                            true
+                        } catch (_: Exception) {
+                            false
+                        }
+                        if (connected) break
+                    }
+                    check(connected)
+                }?.let { times += it }
             }
             step()
         }
