@@ -737,6 +737,8 @@ fun ChatContent(
                 entries.isNotEmpty() -> shown = true
                 historyLoaded && message == null -> reactionsFor = null
                 shown -> reactionsFor = null
+                // One-to-one, the reactions are part of the message: nothing more is coming.
+                historyLoaded && group == null -> reactionsFor = null
                 historyLoaded -> {
                     kotlinx.coroutines.delay(3_000)
                     reactionsFor = null
