@@ -4,6 +4,8 @@ What each version added, newest first. **Unreleased** is on `develop` but not in
 
 ## Unreleased
 
+## 0.7.31 — 2026-11-27
+
 - **Unsend a message** — Hold one of your messages and tap Unsend (under the reactions), then confirm. It goes from your phone and from the other person's (in a group, from every member's): its text, photo, voice message or file, the reactions to it, and the words of replies that quote it. Both sides keep a note in its place: "You unsent a message", or "Astrid unsent a message". If their notification still shows it, it's taken out of it without a sound. There's no time limit, and it works on a message that failed to send too. Without a connection it's unsent on your phone at once and reaches the others by itself once the relay can be reached (in a one-to-one chat a clock shows until then). Whoever got it may have seen or saved it already: that can't be taken back. Sotto 0.7.30 and older can't unsend; they show the unsend from a newer phone as "This message needs a newer Sotto" (in a group, nothing) and keep the message.
 
 ## 0.7.30 — 2026-11-27
