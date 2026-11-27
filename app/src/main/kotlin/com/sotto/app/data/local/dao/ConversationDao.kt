@@ -59,6 +59,16 @@ interface ConversationDao {
     @Query("UPDATE conversations SET unreadCount = 0 WHERE id = :conversationId")
     suspend fun clearUnread(conversationId: String)
 
+    /**
+     * After an unread message was unsent: the count is no more than what's still unread. Not one
+     * fewer, as that one may never have been counted (it came while the chat was open).
+     */
+    @Query(
+        "UPDATE conversations SET unreadCount = MIN(unreadCount, (SELECT COUNT(*) FROM messages " +
+            "WHERE messages.conversationId = :conversationId AND isOutgoing = 0 AND state = 'DELIVERED')) WHERE id = :conversationId",
+    )
+    suspend fun capUnreadToUnseen(conversationId: String)
+
     @Query("UPDATE conversations SET needsSessionReset = :needsReset WHERE contactId = :contactId")
     suspend fun setNeedsSessionReset(contactId: String, needsReset: Boolean)
 

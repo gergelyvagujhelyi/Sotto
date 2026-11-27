@@ -30,6 +30,10 @@ interface GroupEnvironment {
     suspend fun notifyMessage(group: GroupEntity, senderId: String, senderName: String, text: String, isReaction: Boolean, names: Map<String, String>)
     suspend fun notifyInvitation(group: GroupEntity, inviterName: String)
     fun cancelNotification(groupId: String)
+    /** A message in [group]'s notification was unsent: it's shown again without it, quietly, or goes. */
+    suspend fun refreshAfterUnsend(group: GroupEntity, names: Map<String, String>)
+    /** What the chat list says for an unsent message: ours ("You unsent a message") or a member's. */
+    fun unsentNote(ours: Boolean): String
     /** Sends what waits in the outbox in the background, when there's a network. */
     fun scheduleOutbox()
 }
@@ -84,6 +88,12 @@ class AndroidGroupEnvironment @Inject constructor(
     }
 
     override fun cancelNotification(groupId: String) = notificationManager.get().cancelNotification(groupId)
+
+    override suspend fun refreshAfterUnsend(group: GroupEntity, names: Map<String, String>) =
+        notificationManager.get().refreshGroupAfterUnsend(group.id, group.title, names)
+
+    override fun unsentNote(ours: Boolean): String =
+        context.getString(if (ours) R.string.chat_unsent_by_you else R.string.chat_unsent_preview)
 
     override fun scheduleOutbox() = outbox.schedule()
 }

@@ -12,6 +12,7 @@ import com.sotto.app.data.local.dao.ConversationDao
 import com.sotto.app.data.local.dao.MessageDao
 import com.sotto.app.data.local.entity.ContactEntity
 import com.sotto.app.data.local.entity.MessageEntity
+import com.sotto.app.data.local.entity.PendingUnsendEntity
 import com.sotto.app.data.remote.ApiService
 import com.sotto.app.data.remote.dto.AckRequest
 import com.sotto.app.data.remote.dto.PendingMessageDto
@@ -593,6 +594,101 @@ class MessageSigningAndResetTest {
     }
 
     // ── Message requests bring text only ────────────────────────────────────
+
+    // ── Unsending (ADR-36) ─────────────────────────────────────────────────
+
+    private fun received(id: String, from: String = "peer") = MessageEntity(
+        id = id, conversationId = "conv", senderId = from, recipientId = "me",
+        encryptedBody = ByteArray(0), nonce = ByteArray(0), plaintext = "Hemligt", state = MessageState.DELIVERED.name,
+        timestamp = 900L, expiresAt = null, isOutgoing = false,
+    )
+
+    private suspend fun receiveUnsend(of: String) {
+        coEvery { contactDao.getByUserId("peer") } returns classicalContact
+        coEvery { conversationDao.getByContactId("peer") } returns conversation(true)
+        coEvery { cryptoEngine.decrypt(any(), any(), any()) } returns com.sotto.app.domain.model.UnsendPayload.encode(of).toByteArray()
+        coEvery { apiService.fetchPendingMessages() } returns listOf(chatDto("u1"))
+        repo.fetchPendingAndWait()
+    }
+
+    @Test
+    fun `a contact's unsend empties their message and is no message of its own`() = runTest {
+        coEvery { messageDao.getById("m1") } returns received("m1")
+        receiveUnsend("m1")
+        coVerify { messageDao.wipeUnsent("m1", MessageState.UNSENT.name) }
+        coVerify { messageDao.setQuotesOf("conv", "m1", com.sotto.app.domain.model.UnsendPayload.UNSENT_QUOTE) }
+        coVerify(exactly = 0) { messageDao.insert(any()) }
+        coVerify { apiService.acknowledgeMessages(AckRequest(listOf("u1"))) }
+    }
+
+    @Test
+    fun `an unsend can't touch our own messages or someone else's`() = runTest {
+        coEvery { messageDao.getById("ours") } returns received("ours").copy(senderId = "me", recipientId = "peer", isOutgoing = true)
+        receiveUnsend("ours")
+        coEvery { messageDao.getById("other") } returns received("other", from = "someone-else")
+        receiveUnsend("other")
+        coVerify(exactly = 0) { messageDao.wipeUnsent(any(), any()) }
+    }
+
+    @Test
+    fun `unsending tells the contact under one id, and goes again until the relay has it`() = runTest {
+        stubSendableSession()
+        val ours = failedText("m1").copy(state = MessageState.SENT.name)
+        coEvery { messageDao.getById("m1") } returns ours
+        coEvery { messageDao.claimUnsend("m1", MessageState.SENT.name, "peer", any()) } returns true
+        coEvery { conversationDao.getByContactId("peer") } returns conversation(true)
+        coEvery { apiService.sendMessage(any()) } throws java.io.IOException("offline")
+
+        repo.unsend("m1")
+
+        coVerify { messageDao.wipeUnsent("m1", MessageState.UNSENDING.name) }
+        coVerify { resendScheduler.schedule() }
+        coVerify(exactly = 0) { messageDao.claimState("m1", MessageState.UNSENDING.name, MessageState.UNSENT.name) }
+        coVerify(exactly = 0) { messageDao.deletePendingUnsend(any()) }
+
+        // Back online: the automatic resend takes it, under the same id as before.
+        val sent = mutableListOf<SendMessageRequest>()
+        coEvery { apiService.sendMessage(capture(sent)) } returns SendMessageResponse("r1", 2_000L)
+        coEvery { messageDao.getFailedOutgoingSince(any()) } returns emptyList()
+        coEvery { messageDao.getPendingUnsends() } returns listOf(PendingUnsendEntity("m1", "peer", 0L))
+        assertEquals(false, repo.resendFailed())
+        assertEquals(listOf("unsend:m1"), sent.map { it.clientMessageId })
+        coVerify { messageDao.deletePendingUnsend("m1") }
+        coVerify { messageDao.claimState("m1", MessageState.UNSENDING.name, MessageState.UNSENT.name) }
+        val payload = com.sotto.app.domain.model.UnsendPayload.encode(ReceiptManager.relayMessageId("me", "m1"))
+        coVerify { cryptoEngine.encrypt(any(), match { String(it, Charsets.UTF_8) == payload }) }
+    }
+
+    @Test
+    fun `a message being sent right now isn't unsent`() = runTest {
+        stubSendableSession()
+        coEvery { messageDao.getById("m1") } returns failedText("m1")
+        coEvery { messageDao.claimUnsend("m1", MessageState.FAILED.name, "peer", any()) } returns false
+        assertTrue(runCatching { repo.unsend("m1") }.isFailure)
+        coVerify(exactly = 0) { messageDao.wipeUnsent(any(), any()) }
+        coVerify(exactly = 0) { apiService.sendMessage(any()) }
+    }
+
+    @Test
+    fun `an unsend still goes after its message was deleted here`() = runTest {
+        stubSendableSession()
+        // Unsent offline, then deleted (or its timer ran out) before the relay had the unsend.
+        coEvery { messageDao.getById("gone") } returns null
+        coEvery { messageDao.getPendingUnsends() } returns listOf(PendingUnsendEntity("gone", "peer", 0L))
+        coEvery { messageDao.getFailedOutgoingSince(any()) } returns emptyList()
+        val sent = mutableListOf<SendMessageRequest>()
+        coEvery { apiService.sendMessage(capture(sent)) } returns SendMessageResponse("r1", 2_000L)
+        assertEquals(false, repo.resendFailed())
+        assertEquals(listOf("unsend:gone"), sent.map { it.clientMessageId })
+        coVerify { messageDao.deletePendingUnsend("gone") }
+    }
+
+    @Test
+    fun `an unread message that's unsent caps the unread count at what's still unread`() = runTest {
+        coEvery { messageDao.getById("m1") } returns received("m1")
+        receiveUnsend("m1")
+        coVerify { conversationDao.capUnreadToUnseen("conv") }
+    }
 
     private fun conversation(approved: Boolean) = com.sotto.app.data.local.entity.ConversationEntity(
         id = "conv", contactId = "peer", contactDisplayName = "Peer", lastMessagePreview = null,

@@ -27,11 +27,15 @@ enum class MessageState {
     /** Voice call that failed before it connected (no internet, no relay, an error): outgoing, or incoming and answered. */
     CALL_FAILED,
     /** Something happened in a group (someone joined or left, a new title...): plaintext is a [GroupEvent]. */
-    GROUP_EVENT;
+    GROUP_EVENT,
+    /** Our message, unsent here; the word that takes it back from the contact hasn't reached the relay yet (ADR-36). */
+    UNSENDING,
+    /** A message its sender took back (ADR-36): only a note that it was unsent is left. */
+    UNSENT;
 
     val isTerminal: Boolean
         get() = this == DELIVERED || this == SEEN || this == FAILED || this == DECRYPT_FAILED || this == REJECTED
-                || isCallEvent || isKeyChangeEvent || this == ACCOUNT_DELETED || this == GROUP_EVENT
+                || isCallEvent || isKeyChangeEvent || this == ACCOUNT_DELETED || this == GROUP_EVENT || this == UNSENT
 
     val isCallEvent: Boolean
         get() = this == CALL_OUTGOING || this == CALL_OUTGOING_MISSED
@@ -39,6 +43,10 @@ enum class MessageState {
 
     val isGroupEvent: Boolean
         get() = this == GROUP_EVENT
+
+    /** Unsent by its sender (or being unsent by us): its content is gone. */
+    val isUnsent: Boolean
+        get() = this == UNSENDING || this == UNSENT
 
     val isKeyChangeEvent: Boolean
         get() = this == KEY_ROTATED_LOCAL || this == KEY_ROTATED_REMOTE || this == ACCOUNT_DELETED

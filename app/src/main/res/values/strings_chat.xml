@@ -97,6 +97,18 @@
     <string name="chat_quote_fallback">Message</string>
     <string name="chat_quote_not_here">That message isn\'t on this phone any more.</string>
 
+    <!-- Unsending (ADR-36) -->
+    <string name="chat_unsend">Unsend</string>
+    <string name="chat_unsend_title">Unsend this message?</string>
+    <string name="chat_unsend_body">It goes from your phone and from %1$s\'s. They may have seen or saved it already.</string>
+    <string name="chat_unsend_body_group">It goes from the phone of everyone in the group. Some may have seen or saved it already.</string>
+    <string name="chat_unsent_by_you">You unsent a message</string>
+    <string name="chat_unsent_by_them">%1$s unsent a message</string>
+    <string name="chat_unsent_preview">Message unsent</string>
+    <string name="chat_unsending">Unsending…</string>
+    <string name="chat_quote_unsent">Unsent message</string>
+    <string name="chat_error_unsend">Couldn\'t unsend the message. Try again in a moment.</string>
+
     <!-- Reactions -->
     <string name="chat_react">React</string>
     <string name="chat_more_reactions">More reactions</string>

@@ -169,7 +169,12 @@ internal fun Modifier.replyHighlight(active: Boolean): Modifier {
 @Composable
 internal fun Message.bubbleQuote(contactName: String): BubbleQuote? {
     val you = stringResource(R.string.chat_you)
-    return replyTo?.let { BubbleQuote(author = if (it.toOwn) you else contactName, text = quoteUiText(it.quote).asString(), toOwn = it.toOwn) }
+    val unsent = stringResource(R.string.chat_quote_unsent)
+    return replyTo?.let {
+        // The quoted message was unsent (ADR-36): its words went with it.
+        val text = if (it.quote == com.sotto.app.domain.model.UnsendPayload.UNSENT_QUOTE) unsent else quoteUiText(it.quote).asString()
+        BubbleQuote(author = if (it.toOwn) you else contactName, text = text, toOwn = it.toOwn)
+    }
 }
 
 /**

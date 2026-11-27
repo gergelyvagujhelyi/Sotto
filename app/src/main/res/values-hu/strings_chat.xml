@@ -93,6 +93,18 @@
     <string name="chat_quote_fallback">Üzenet</string>
     <string name="chat_quote_not_here">Ez az üzenet már nincs meg ezen a telefonon.</string>
 
+    <!-- Unsending (ADR-36) -->
+    <string name="chat_unsend">Visszavonás</string>
+    <string name="chat_unsend_title">Visszavonod ezt az üzenetet?</string>
+    <string name="chat_unsend_body">Eltűnik a te telefonodról és %1$s telefonjáról is. Lehet, hogy már látta vagy elmentette.</string>
+    <string name="chat_unsend_body_group">Eltűnik a csoport minden tagjának telefonjáról. Lehet, hogy néhányan már látták vagy elmentették.</string>
+    <string name="chat_unsent_by_you">Visszavontál egy üzenetet</string>
+    <string name="chat_unsent_by_them">%1$s visszavont egy üzenetet</string>
+    <string name="chat_unsent_preview">Visszavont üzenet</string>
+    <string name="chat_unsending">Visszavonás…</string>
+    <string name="chat_quote_unsent">Visszavont üzenet</string>
+    <string name="chat_error_unsend">Nem sikerült visszavonni az üzenetet. Próbáld újra egy kicsit később.</string>
+
     <!-- Reactions -->
     <string name="chat_react">Reagálás</string>
     <string name="chat_more_reactions">További reakciók</string>

@@ -26,7 +26,7 @@ data class Message(
     /** Whether this can be replied to: a readable message, not a call, key change or "could not decrypt" placeholder. */
     val canReply: Boolean
         get() = !state.isCallEvent && !state.isKeyChangeEvent && !state.isGroupEvent &&
-            state != MessageState.REJECTED && state != MessageState.DECRYPT_FAILED &&
+            state != MessageState.REJECTED && state != MessageState.DECRYPT_FAILED && !state.isUnsent &&
             (plaintext.isNotEmpty() || media != null)
 
     /**
@@ -35,4 +35,12 @@ data class Message(
      */
     val canReact: Boolean
         get() = canReply && !(isOutgoing && (state == MessageState.SENDING || state == MessageState.FAILED))
+
+    /**
+     * Whether the user can unsend this (ADR-36): their own message, readable, once it's out of
+     * their hands (sent, delivered, seen) or failed. Not while it's being sent: it may be on its
+     * way at that moment.
+     */
+    val canUnsend: Boolean
+        get() = isOutgoing && canReply && state != MessageState.SENDING
 }

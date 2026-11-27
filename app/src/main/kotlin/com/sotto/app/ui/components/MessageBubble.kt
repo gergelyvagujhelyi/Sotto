@@ -300,7 +300,8 @@ internal fun BubbleSurface(
     val colors = MaterialTheme.colorScheme
     val aurora = Aurora.colors
     val failed = isOutgoing && state == MessageState.FAILED
-    val unreadable = state == MessageState.REJECTED || state == MessageState.DECRYPT_FAILED
+    // Not the message itself but a note in its place (italic, no links): unreadable, or unsent.
+    val unreadable = state == MessageState.REJECTED || state == MessageState.DECRYPT_FAILED || state.isUnsent
     val fill = look.coerceIn(0f, 1f)
 
     val round = 20.dp
@@ -401,7 +402,8 @@ internal fun BubbleSurface(
                 ) {
                     Text(text = timestamp, style = MaterialTheme.typography.labelSmall, color = metaColor)
                     // Ticks sit dimmer than the time so the bright read tick stands out.
-                    if (isOutgoing) MessageStateIcon(state, if (failed) metaColor else aurora.bubbleOutgoingTick)
+                    // An unsent message has no ticks: nobody has it any more (a clock while that's on its way).
+                    if (isOutgoing && state != MessageState.UNSENT) MessageStateIcon(state, if (failed) metaColor else aurora.bubbleOutgoingTick)
                     if (isOutgoing && stateNote != null) {
                         Text(text = stateNote, style = MaterialTheme.typography.labelSmall, color = metaColor)
                     }
@@ -650,7 +652,7 @@ private fun TextWithTrailingMeta(
 @Composable
 private fun MessageStateIcon(state: MessageState, baseTint: Color) {
     val (icon, tint) = when (state) {
-        MessageState.SENDING -> Icons.Rounded.Schedule to baseTint
+        MessageState.SENDING, MessageState.UNSENDING -> Icons.Rounded.Schedule to baseTint
         MessageState.SENT -> Icons.Rounded.Done to baseTint
         MessageState.DELIVERED -> Icons.Rounded.DoneAll to baseTint
         MessageState.SEEN -> Icons.Rounded.DoneAll to Aurora.colors.readTick
@@ -660,7 +662,8 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
         // Call/key events are rendered by their own composables — but keep the when exhaustive
         MessageState.CALL_OUTGOING, MessageState.CALL_OUTGOING_MISSED, MessageState.CALL_INCOMING, MessageState.CALL_MISSED,
         MessageState.CALL_FAILED,
-        MessageState.KEY_ROTATED_LOCAL, MessageState.KEY_ROTATED_REMOTE, MessageState.ACCOUNT_DELETED, MessageState.GROUP_EVENT ->
+        MessageState.KEY_ROTATED_LOCAL, MessageState.KEY_ROTATED_REMOTE, MessageState.ACCOUNT_DELETED, MessageState.GROUP_EVENT,
+        MessageState.UNSENT ->
             Icons.Rounded.Done to baseTint
     }
     Icon(
@@ -668,6 +671,7 @@ private fun MessageStateIcon(state: MessageState, baseTint: Color) {
         contentDescription = stringResource(
             when (state) {
                 MessageState.SENDING -> R.string.chat_state_sending
+                MessageState.UNSENDING -> R.string.chat_unsending
                 MessageState.DELIVERED -> R.string.chat_state_delivered
                 MessageState.SEEN -> R.string.chat_state_seen
                 MessageState.FAILED -> R.string.chat_state_failed

@@ -172,6 +172,8 @@ class ChatNotificationManager @Inject constructor(
         conversationId: String? = null,
         /** [messageBody] is a reaction: it isn't stored, so it's listed after the unread messages. */
         isReaction: Boolean = false,
+        /** Only brings the shown notification up to date (a message in it was unsent): no sound. */
+        silent: Boolean = false,
     ) {
         if (!hasNotificationPermission()) return
 
@@ -228,6 +230,7 @@ class ChatNotificationManager @Inject constructor(
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setGroup(GROUP_CHATS)
+            .setSilent(silent)
         if (content.messages.isNotEmpty()) {
             val sender = Person.Builder().setName(senderName).setKey(senderId).build()
             val style = NotificationCompat.MessagingStyle(Person.Builder().setName(context.getString(R.string.notification_you)).build())
@@ -254,6 +257,8 @@ class ChatNotificationManager @Inject constructor(
         messageBody: String,
         isReaction: Boolean,
         names: Map<String, String> = emptyMap(),
+        /** Only brings the shown notification up to date (a message in it was unsent): no sound. */
+        silent: Boolean = false,
     ) {
         if (!hasNotificationPermission()) return
         val settings = settingsRepository.getPrivacySettings().firstOrNull() ?: PrivacySettings()
@@ -293,6 +298,7 @@ class ChatNotificationManager @Inject constructor(
             .setAutoCancel(true)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setGroup(GROUP_CHATS)
+            .setSilent(silent)
         if (content.messages.isNotEmpty()) {
             val style = NotificationCompat.MessagingStyle(Person.Builder().setName(context.getString(R.string.notification_you)).build())
                 .setConversationTitle(groupTitle)
@@ -312,6 +318,30 @@ class ChatNotificationManager @Inject constructor(
         postOn(SoundKind.GROUPS, notificationId, builder)
         postGroupSummary(visibility)
     }
+
+    /**
+     * A message of [conversationId] was unsent (ADR-36): its notification, if it shows, lists only
+     * what's still unread, without a sound, and goes when nothing is left. (A reaction or "wants to
+     * connect" in it isn't stored, so it goes too.)
+     */
+    suspend fun refreshAfterUnsend(conversationId: String, senderId: String, senderName: String) {
+        if (!isShowing(conversationId.hashCode() and Int.MAX_VALUE)) return
+        if (messageDao.getUnseenIncomingTexts(conversationId, 1).isEmpty()) return cancelNotification(conversationId)
+        showMessageNotification(senderId, senderName, "", conversationId, silent = true)
+    }
+
+    /** As [refreshAfterUnsend], for a group's notification. [names]: the members' names, by id. */
+    suspend fun refreshGroupAfterUnsend(groupId: String, groupTitle: String, names: Map<String, String>) {
+        if (!isShowing(groupId.hashCode() and Int.MAX_VALUE)) return
+        val latest = messageDao.getUnseenGroupTexts(groupId, 1).lastOrNull() ?: return cancelNotification(groupId)
+        showGroupNotification(
+            groupId, groupTitle, latest.senderId, names[latest.senderId] ?: latest.senderId.take(8), "",
+            isReaction = false, names = names, silent = true,
+        )
+    }
+
+    private fun isShowing(id: Int): Boolean =
+        context.getSystemService(NotificationManager::class.java)?.activeNotifications?.any { it.id == id } == true
 
     suspend fun showMissedCallNotification(
         callerId: String,

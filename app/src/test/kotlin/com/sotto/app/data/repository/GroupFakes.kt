@@ -47,6 +47,9 @@ class FakeGroupDao : GroupDao {
         groups[id]?.let { groups[id] = it.copy(lastMessagePreview = preview, lastMessageTimestamp = timestamp, unreadCount = it.unreadCount + unreadDelta) }
     }
     override suspend fun clearUnread(id: String) { groups[id]?.let { groups[id] = it.copy(unreadCount = 0) } }
+    override suspend fun capUnreadToUnseen(id: String) {
+        groups[id]?.let { groups[id] = it.copy(unreadCount = minOf(it.unreadCount, messages.countUnseenIncoming(id))) }
+    }
     override suspend fun clearPreviewsWithoutMessage() {
         groups.replaceAll { _, g ->
             if (g.lastMessagePreview != null && messages.rows.values.none { it.conversationId == g.id && it.timestamp == g.lastMessageTimestamp }) {
@@ -87,8 +90,10 @@ class FakeGroupDao : GroupDao {
     }
     override suspend fun getRetryableFailed(maxAttempts: Int, messagesSince: Long, limit: Int) =
         outbox.values.filter {
-            it.state == "failed" && it.attempts < maxAttempts && it.lastError != "keys" &&
-                (it.messageId == null || it.createdAt >= messagesSince)
+            it.state == "failed" && (
+                it.kind == "unsend" ||
+                    (it.attempts < maxAttempts && it.lastError != "keys" && (it.messageId == null || it.createdAt >= messagesSince))
+                )
         }.sortedBy { it.createdAt }.take(limit)
     override fun observeProgress(groupId: String, maxAttempts: Int, since: Long): Flow<List<com.sotto.app.data.local.dao.GroupCopyProgressRow>> = flow {
         emit(
@@ -129,6 +134,7 @@ class FakeGroupDao : GroupDao {
     override suspend fun getReactions(messageId: String) = reactions.values.filter { it.messageId == messageId }
     override suspend fun upsertReaction(reaction: GroupReactionEntity) { reactions[reaction.messageId to reaction.reactorId] = reaction }
     override suspend fun deleteReaction(messageId: String, reactorId: String) { reactions.remove(messageId to reactorId) }
+    override suspend fun deleteReactionsFor(messageId: String) { reactions.keys.removeAll { it.first == messageId } }
     override suspend fun pruneOrphanReactions() { reactions.values.removeAll { messages.rows[it.messageId] == null } }
     override suspend fun hold(held: GroupHeldEntity) { this.held.putIfAbsent(held.relayId, held) }
     override suspend fun getHeld(groupId: String) = held.values.filter { it.groupId == groupId }.sortedBy { it.receivedAt }
@@ -145,8 +151,32 @@ class FakeMessageDao(rest: MessageDao = mockk(relaxed = true)) : MessageDao by r
         flow { emit(rows.values.filter { it.conversationId == conversationId }.sortedBy { it.timestamp }) }
     override suspend fun insert(message: MessageEntity) { rows[message.id] = message }
     override suspend fun getById(messageId: String) = rows[messageId]
-    override suspend fun updateState(messageId: String, state: String) { rows[messageId]?.let { rows[messageId] = it.copy(state = state) } }
-    override suspend fun setMediaState(messageId: String, state: String) { rows[messageId]?.let { rows[messageId] = it.copy(mediaState = state) } }
+    override suspend fun updateState(messageId: String, state: String) {
+        // As the query: an unsent message stays unsent, and SEEN is final.
+        rows[messageId]?.takeIf { it.state !in listOf("SEEN", "UNSENDING", "UNSENT") }?.let { rows[messageId] = it.copy(state = state) }
+    }
+    override suspend fun claimState(messageId: String, from: String, to: String): Int {
+        val row = rows[messageId]?.takeIf { it.state == from } ?: return 0
+        rows[messageId] = row.copy(state = to)
+        return 1
+    }
+    override suspend fun wipeUnsent(messageId: String, state: String) {
+        rows[messageId]?.let {
+            rows[messageId] = it.copy(
+                state = state, plaintext = "", encryptedBody = ByteArray(0), nonce = ByteArray(0),
+                replyToId = null, replyQuote = null, replyToOwn = false, myReaction = null, theirReaction = null,
+                mediaKind = null, mediaMime = null, mediaKey = null, mediaDurationMs = 0, mediaWidth = 0, mediaHeight = 0,
+                mediaName = null, mediaSize = 0, mediaState = null, attachmentId = null, hdKey = null, thumbnail = null,
+            )
+        }
+    }
+    override suspend fun setQuotesOf(conversationId: String, messageId: String, quote: String) {
+        rows.replaceAll { _, m -> if (m.conversationId == conversationId && m.replyToId == messageId) m.copy(replyQuote = quote) else m }
+    }
+    override suspend fun setMediaState(messageId: String, state: String) {
+        // As the query: an unsent message's file stays gone.
+        rows[messageId]?.takeIf { it.state !in listOf("UNSENDING", "UNSENT") }?.let { rows[messageId] = it.copy(mediaState = state) }
+    }
     override suspend fun setAttachmentId(messageId: String, attachmentId: String?) {
         rows[messageId]?.let { rows[messageId] = it.copy(attachmentId = attachmentId) }
     }
@@ -201,6 +231,9 @@ class FakeRelay {
     var clock = 1_764_000_000_000L
     /** Posts to these recipients fail (a network error, the relay refusing). */
     val failFor = mutableSetOf<String>()
+    /** The next post to each of these recipients waits for [gate] (a slow network): one under way. */
+    val holdFor = mutableSetOf<String>()
+    var gate = kotlinx.coroutines.CompletableDeferred<Unit>()
     /** Key lookups for these accounts fail (the relay can't be reached). */
     val failBundles = mutableSetOf<String>()
 

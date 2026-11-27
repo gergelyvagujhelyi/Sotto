@@ -23,4 +23,7 @@ interface GroupTransport {
 
     /** Puts the file (or HD copy) of our group message [entity] in the relay's store once, for [recipients]. */
     suspend fun upload(entity: MessageEntity, recipients: List<String>): MessageEntity
+
+    /** Removes a file from the relay's store: ours for everyone, or only our claim to someone else's. */
+    suspend fun deleteAttachment(attachmentId: String)
 }

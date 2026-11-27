@@ -159,6 +159,7 @@ fun GroupChatScreen(
         onReply = viewModel::startReply,
         onCancelReply = viewModel::cancelReply,
         onReact = viewModel::react,
+        onUnsend = viewModel::unsend,
         onSendVoice = viewModel::sendVoice,
         onSendPhoto = { uri, hd, caption -> viewModel.sendPhoto(uri, hd, caption) },
         loadHd = viewModel::loadHd,

@@ -48,6 +48,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.rounded.Undo
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Call
@@ -412,6 +413,7 @@ fun ChatScreen(
         onReply = viewModel::startReply,
         onCancelReply = viewModel::cancelReply,
         onReact = viewModel::react,
+        onUnsend = viewModel::unsend,
         onSendVoice = { recording -> gated(onCancel = { recording.file.delete() }) { viewModel.sendVoice(recording) } },
         onSendPhoto = { uri, hd, caption -> gated { viewModel.sendPhoto(uri, hd, caption) } },
         loadHd = viewModel::loadHd,
@@ -589,6 +591,8 @@ fun ChatContent(
     onCancelReply: () -> Unit = {},
     /** React to a message with an emoji (its current one takes it back). */
     onReact: (Message, String) -> Unit = { _, _ -> },
+    /** Unsend our message (ADR-36), once the user confirmed. */
+    onUnsend: (Message) -> Unit = {},
     /** Send a recorded voice message, or the photo picked. */
     onSendVoice: (com.sotto.app.media.VoiceRecording) -> Unit = {},
     onSendPhoto: (android.net.Uri, Boolean, String) -> Unit = { _, _, _ -> },
@@ -714,6 +718,25 @@ fun ChatContent(
     // arriving) doesn't close it.
     var reactionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var pickFor by remember { mutableStateOf<String?>(null) }
+    // Our message the user picked Unsend for: asked first (kept over a rotation).
+    var unsendFor by rememberSaveable { mutableStateOf<String?>(null) }
+    unsendFor?.let { id ->
+        val target = messages.firstOrNull { it.id == id }?.takeIf { it.canUnsend && group?.canSend != false }
+        if (target == null) {
+            // Gone, or no longer unsendable (it was unsent, or is being sent again). Not before the
+            // history is in: after a restart the list starts empty, and the question should stay.
+            if (historyLoaded) LaunchedEffect(id) { unsendFor = null }
+        } else {
+            UnsendDialog(
+                name = if (group != null) null else quoteName,
+                onConfirm = {
+                    unsendFor = null
+                    onUnsend(target)
+                },
+                onDismiss = { unsendFor = null },
+            )
+        }
+    }
     // The message to scroll to for that picker: its own state, so the row taking the pick (and
     // clearing pickFor) doesn't stop the scroll half-way.
     var scrollToPick by remember { mutableStateOf<String?>(null) }
@@ -929,6 +952,7 @@ fun ChatContent(
                                     group = group,
                                     onReply = onReply,
                                     onReact = onReact,
+                                    onUnsend = { unsendFor = it.id },
                                     onQuoteClick = { targetId ->
                                         val index = newestFirst.indexOfFirst { it.key == "m:$targetId" }
                                         if (index < 0) {
@@ -1322,6 +1346,27 @@ internal fun DeleteChatDialog(name: String?, onConfirm: () -> Unit, onDismiss: (
     )
 }
 
+/** Asks before unsending our message (ADR-36): from [name]'s phone too, or (null) every member's in a group. */
+@Composable
+internal fun UnsendDialog(name: String?, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.AutoMirrored.Rounded.Undo, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+        title = { Text(stringResource(R.string.chat_unsend_title)) },
+        text = {
+            Text(
+                if (name != null) stringResource(R.string.chat_unsend_body, name) else stringResource(R.string.chat_unsend_body_group),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.chat_unsend), color = MaterialTheme.colorScheme.error) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+        },
+    )
+}
+
 /**
  * Names a contact on this phone only. Mentions the name they chose when it differs; saving
  * an empty field goes back to it (or to the start of their id).
@@ -1455,6 +1500,8 @@ private fun ChatRowItem(
     onPickHandled: () -> Unit = {},
     onReply: (Message) -> Unit = {},
     onReact: (Message, String) -> Unit = { _, _ -> },
+    /** Unsend was picked for our message (ChatContent asks first). */
+    onUnsend: (Message) -> Unit = {},
     onQuoteClick: (String) -> Unit = {},
     highlighted: Boolean = false,
     animateIn: Boolean = false,
@@ -1473,6 +1520,8 @@ private fun ChatRowItem(
         is ChatRow.Entry -> {
             val message = row.message
             val time = remember(row.time) { row.time.clockTime() }
+            // In a group the user left, nobody can be told: Unsend isn't offered.
+            val unsendable = message.canUnsend && group?.canSend != false
             when {
                 message.state.isGroupEvent -> GroupEventItem(
                     message = message,
@@ -1552,6 +1601,8 @@ private fun ChatRowItem(
                         text = when {
                             message.state == MessageState.REJECTED -> stringResource(R.string.chat_message_rejected)
                             message.state == MessageState.DECRYPT_FAILED -> stringResource(R.string.chat_message_undecryptable)
+                            message.state.isUnsent && message.isOutgoing -> stringResource(R.string.chat_unsent_by_you)
+                            message.state.isUnsent -> stringResource(R.string.chat_unsent_by_them, group?.nameOf(message.senderId) ?: contactName)
                             message.media != null -> message.plaintext.trim()
                             message.plaintext.isEmpty() -> "..."
                             else -> message.plaintext
@@ -1582,7 +1633,9 @@ private fun ChatRowItem(
                         onQuoteClick = message.replyTo?.let { ref -> { onQuoteClick(ref.messageId) } },
                         // Failed sends (or a file that couldn't follow its message): tap to retry. In a
                         // group, a tap on our message shows who has it (and retries from there).
-                        onClick = if (group != null && message.isOutgoing) {
+                        onClick = if (message.state.isUnsent) {
+                            null
+                        } else if (group != null && message.isOutgoing) {
                             { group.onMessageInfo(message) }
                         } else if (message.isOutgoing && message.shownState == MessageState.FAILED) {
                             { onRetry(message.id) }
@@ -1593,7 +1646,7 @@ private fun ChatRowItem(
                         onAnimateInDone = onAnimateInDone,
                         hidden = hidden,
                         onBubblePlaced = onBubblePlaced,
-                        onLongClick = if (message.canReact) {
+                        onLongClick = if (message.canReact || unsendable) {
                             {
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                 picking = true
@@ -1630,6 +1683,16 @@ private fun ChatRowItem(
                                         picking = false
                                         pickingMore = false
                                     },
+                                    showReactions = message.canReact,
+                                    onUnsend = if (unsendable) {
+                                        {
+                                            picking = false
+                                            pickingMore = false
+                                            onUnsend(message)
+                                        }
+                                    } else {
+                                        null
+                                    },
                                 )
                             }
                         } else {
@@ -1637,7 +1700,7 @@ private fun ChatRowItem(
                         },
                     )
                     // Who read up to here (Messenger's little circles), under our group message.
-                    if (group != null && message.isOutgoing) {
+                    if (group != null && message.isOutgoing && !message.state.isUnsent) {
                         group.readUpTo[message.id]?.let { ids ->
                             ReadCircles(ids.map { group.nameOf(it) to it }, Modifier.align(Alignment.End))
                         }

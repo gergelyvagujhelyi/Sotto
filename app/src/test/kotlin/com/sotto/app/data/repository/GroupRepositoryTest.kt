@@ -27,6 +27,9 @@ import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.After
@@ -65,6 +68,9 @@ class GroupRepositoryTest {
         /** Sealing for these finds an endorsed key change (as MessageRepositoryImpl.recordRemoteRotation reports it). */
         val rotatedOnSeal = mutableSetOf<String>()
         val uploads = mutableListOf<List<String>>()
+        val deletedAttachments = mutableListOf<String>()
+        /** Notifications brought up to date after an unsend, by group title. */
+        val refreshed = mutableListOf<String>()
 
         val transport = object : GroupTransport {
             override suspend fun seal(peerId: String, plaintext: String): GroupTransport.Sealed {
@@ -75,8 +81,13 @@ class GroupRepositoryTest {
                 return GroupTransport.Sealed(plaintext.toByteArray(), byteArrayOf(seals[peerId]!!.toByte()), "sig", "pq")
             }
 
-            override suspend fun post(peerId: String, sealed: GroupTransport.Sealed, clientMessageId: String) =
-                relay.post(me, peerId, clientMessageId, String(sealed.ciphertext))
+            override suspend fun post(peerId: String, sealed: GroupTransport.Sealed, clientMessageId: String): com.sotto.app.data.remote.dto.SendMessageResponse {
+                // Only the next post to them is held: the one under way.
+                if (relay.holdFor.remove(peerId)) relay.gate.await()
+                return relay.post(me, peerId, clientMessageId, String(sealed.ciphertext))
+            }
+
+            override suspend fun deleteAttachment(attachmentId: String) { deletedAttachments += attachmentId }
 
             override suspend fun upload(entity: MessageEntity, recipients: List<String>): MessageEntity {
                 uploads += recipients
@@ -99,6 +110,8 @@ class GroupRepositoryTest {
             }
             override suspend fun notifyInvitation(group: GroupEntity, inviterName: String) { invitations += group.title }
             override fun cancelNotification(groupId: String) = Unit
+            override suspend fun refreshAfterUnsend(group: GroupEntity, names: Map<String, String>) { refreshed += group.title }
+            override fun unsentNote(ours: Boolean) = if (ours) "You unsent a message" else "Unsent a message"
             override fun scheduleOutbox() { outboxScheduled++ }
         }
 
@@ -821,6 +834,154 @@ class GroupRepositoryTest {
         bjorn.repo.react(id, atBjorn.toMessage(), null)
         fetchAll()
         assertEquals(mapOf("cecilia" to "👍"), astrid.groupDao.getReactions(row).associate { it.reactorId to it.emoji })
+    }
+
+    // ── Unsending (ADR-36) ─────────────────────────────────────────────────
+
+    @Test
+    fun `an unsent group message is emptied for every member, with its reactions and the words of replies quoting it`() = runTest {
+        val id = fika()
+        astrid.repo.sendText(id, "Fel grupp, förlåt")
+        fetchAll()
+        val atBjorn = bjorn.messageDao.messagesIn(id).single()
+        bjorn.repo.react(id, atBjorn.toMessage(), "😂")
+        bjorn.repo.sendText(id, "Haha", replyTo = atBjorn.toMessage())
+        fetchAll()
+        val row = atBjorn.id
+
+        astrid.repo.unsend(row)
+        fetchAll()
+
+        for (p in listOf(astrid, bjorn, cecilia)) {
+            val m = p.messageDao.getById(row)!!
+            assertEquals(p.me, MessageState.UNSENT.name, m.state)
+            assertEquals("", m.plaintext)
+            assertTrue(p.me, p.groupDao.getReactions(row).isEmpty())
+            val reply = p.messageDao.messagesIn(id).single { it.plaintext == "Haha" }
+            assertEquals(p.me, row, reply.replyToId)
+            assertEquals(p.me, com.sotto.app.domain.model.UnsendPayload.UNSENT_QUOTE, reply.replyQuote)
+        }
+        // Cecilia wasn't in the chat: her notification is shown again without it.
+        assertTrue("Fika" in cecilia.refreshed)
+        // A late receipt doesn't bring it back.
+        astrid.repo.onRead("bjorn", relay.posted.filter { it.to == "bjorn" }.map { it.relayId })
+        assertEquals(MessageState.UNSENT.name, astrid.messageDao.getById(row)!!.state)
+    }
+
+    @Test
+    fun `a reply or reaction that crosses the unsend doesn't bring the message back, and it stops counting as unread`() = runTest {
+        val id = fika()
+        astrid.repo.sendText(id, "Hemligt")
+        fetchAll()
+        val row = bjorn.messageDao.messagesIn(id).single().id
+        assertEquals(1, cecilia.group(id)!!.unreadCount)
+        // Astrid unsends; Bjorn, who hasn't heard yet, reacts and replies quoting it.
+        astrid.repo.unsend(row)
+        bjorn.repo.react(id, bjorn.messageDao.getById(row)!!.toMessage(), "❤️")
+        bjorn.repo.sendText(id, "Vad hemligt?", replyTo = bjorn.messageDao.getById(row)!!.toMessage())
+        cecilia.fetch() // the unsend first, then Bjorn's reaction and reply
+        assertEquals(MessageState.UNSENT.name, cecilia.messageDao.getById(row)!!.state)
+        assertTrue(cecilia.groupDao.getReactions(row).isEmpty())
+        val reply = cecilia.messageDao.messagesIn(id).single { it.senderId == "bjorn" }
+        assertEquals(com.sotto.app.domain.model.UnsendPayload.UNSENT_QUOTE, reply.replyQuote)
+        // Only the reply is unread now.
+        assertEquals(1, cecilia.group(id)!!.unreadCount)
+    }
+
+    @Test
+    fun `only the sender can unsend a group message`() = runTest {
+        val id = fika()
+        astrid.repo.sendText(id, "Hej")
+        fetchAll()
+        val row = bjorn.messageDao.messagesIn(id).single().id
+        assertTrue(runCatching { bjorn.repo.unsend(row) }.isFailure)
+        // A packet from Bjorn naming Astrid's message is refused before it's looked at.
+        val forged = GroupPacket(
+            kind = GroupPacket.KIND_UNSEND, groupId = id, id = GroupIds.newId(), sender = "bjorn", to = "cecilia",
+            epoch = cecilia.group(id)!!.epoch, timestamp = relay.clock,
+            target = com.sotto.app.group.GroupRef("astrid", cecilia.messageDao.getById(row)!!.groupMessageId!!),
+        )
+        relay.post("bjorn", "cecilia", "forged", GroupPacketCodec.encode(forged))
+        fetchAll()
+        assertEquals("Hej", cecilia.messageDao.getById(row)!!.plaintext)
+    }
+
+    @Test
+    fun `copies that hadn't gone never go after an unsend`() = runTest {
+        val id = fika()
+        relay.failFor += "cecilia"
+        astrid.repo.sendText(id, "Oj")
+        val row = astrid.messageDao.messagesIn(id).single().id
+        assertEquals(MessageState.FAILED.name, astrid.messageDao.getById(row)!!.state)
+        astrid.repo.unsend(row)
+        relay.failFor.clear()
+        astrid.repo.flushOutbox()
+        fetchAll()
+        assertNull(cecilia.messageDao.getById(row))
+        assertEquals(MessageState.UNSENT.name, bjorn.messageDao.getById(row)!!.state)
+        assertTrue(astrid.groupDao.getCopiesForMessage(row).isEmpty())
+    }
+
+    @Test
+    fun `an unsend waits for a copy of its message already on its way, so it can't overtake it`() = runTest {
+        val id = fika()
+        relay.failFor += "cecilia"
+        astrid.repo.sendText(id, "Oj")
+        val row = astrid.messageDao.messagesIn(id).single().id
+        relay.failFor.clear()
+        // The outbox re-posts Cecilia's copy; the network is slow, so it's still under way...
+        relay.holdFor += "cecilia"
+        val flush = launch { astrid.repo.flushOutbox() }
+        runCurrent()
+        // ...when Astrid unsends. Her unsend doesn't go to Cecilia ahead of the message.
+        val unsend = launch { astrid.repo.unsend(row) }
+        advanceTimeBy(1_000)
+        runCurrent()
+        val overtaken = relay.queues["cecilia"].orEmpty().isNotEmpty()
+        // Let the held post go either way: a flush can't be cancelled, and the test would hang.
+        relay.gate.complete(Unit)
+        assertFalse(overtaken)
+        flush.join()
+        unsend.join()
+        astrid.repo.flushOutbox()
+        fetchAll()
+        val atCecilia = cecilia.messageDao.getById(row)!!
+        assertEquals(MessageState.UNSENT.name, atCecilia.state)
+        assertEquals("", atCecilia.plaintext)
+    }
+
+    @Test
+    fun `a group unsend keeps trying past the usual limit until a member has it`() = runTest {
+        val id = fika()
+        astrid.repo.sendText(id, "Fel")
+        fetchAll()
+        val row = cecilia.messageDao.messagesIn(id).single().id
+        relay.failFor += "cecilia"
+        astrid.repo.unsend(row)
+        repeat(20) { astrid.repo.flushOutbox() }
+        relay.failFor.clear()
+        assertTrue(astrid.repo.flushOutbox().not())
+        fetchAll()
+        assertEquals(MessageState.UNSENT.name, cecilia.messageDao.getById(row)!!.state)
+    }
+
+    @Test
+    fun `an unsent message that was never counted as unread leaves the count alone`() = runTest {
+        val id = fika()
+        // Cecilia has the chat open: the first message isn't counted, and stays unread (no receipt yet).
+        cecilia.repo.setActiveGroup(id)
+        astrid.repo.sendText(id, "Ett")
+        cecilia.fetch()
+        cecilia.repo.setActiveGroup(null)
+        astrid.repo.sendText(id, "Två")
+        cecilia.fetch()
+        val unread = cecilia.group(id)!!.unreadCount
+        val first = cecilia.messageDao.messagesIn(id).single { it.plaintext == "Ett" }
+        assertEquals(MessageState.DELIVERED.name, first.state)
+        assertEquals(1, unread)
+        astrid.repo.unsend(first.id)
+        cecilia.fetch()
+        assertEquals(unread, cecilia.group(id)!!.unreadCount)
     }
 
     @Test
