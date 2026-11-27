@@ -61,7 +61,7 @@ object ConnectionTest {
     )
 
     /** Runs the test against [baseUrl] (the relay's), telling [onProgress] tries done of all. */
-    suspend fun run(baseUrl: String, onProgress: (done: Int, total: Int) -> Unit): Result = withContext(Dispatchers.IO) {
+    suspend fun run(baseUrl: String, onProgress: suspend (done: Int, total: Int) -> Unit): Result = withContext(Dispatchers.IO) {
         var done = 0
         suspend fun step() {
             onProgress(++done, TOTAL_TRIES)

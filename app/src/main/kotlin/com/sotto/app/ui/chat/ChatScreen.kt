@@ -712,7 +712,7 @@ fun ChatContent(
     val quoteName = if (group != null) them else contactName ?: them
     // Who reacted to which message: here, not in the row, so the list scrolling (a new message
     // arriving) doesn't close it.
-    var reactionsFor by remember { mutableStateOf<String?>(null) }
+    var reactionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var pickFor by remember { mutableStateOf<String?>(null) }
     // The message to scroll to for that picker: its own state, so the row taking the pick (and
     // clearing pickFor) doesn't stop the scroll half-way.
@@ -728,9 +728,21 @@ fun ChatContent(
                 message.myReaction?.let { ReactionEntry(myself?.second ?: youName, myself?.first ?: "", it, isMine = true) },
             )
         }
-        // Opened by a tap on reactions that were there: empty now means all were taken back (or
-        // the message is gone), so it closes.
-        LaunchedEffect(rid, entries.isEmpty()) { if (entries.isEmpty()) reactionsFor = null }
+        // Closes when all were taken back while it showed, or the message is gone. Kept across a
+        // rotation or a restart; then the reactions come a moment after the messages, and if
+        // none come within 3 s (taken back meanwhile) it closes rather than wait unseen.
+        var shown by remember(rid) { mutableStateOf(false) }
+        LaunchedEffect(rid, entries.isEmpty(), historyLoaded, message == null) {
+            when {
+                entries.isNotEmpty() -> shown = true
+                historyLoaded && message == null -> reactionsFor = null
+                shown -> reactionsFor = null
+                historyLoaded -> {
+                    kotlinx.coroutines.delay(3_000)
+                    reactionsFor = null
+                }
+            }
+        }
         if (message != null && entries.isNotEmpty()) {
             val mine = entries.firstOrNull { it.isMine }?.emoji
             ReactionsSheet(
@@ -797,8 +809,9 @@ fun ChatContent(
                 listState.animateScrollToItem(index)
             }
         } finally {
-            // Also when a touch stops the scroll: the next "Change" scrolls again.
-            scrollToPick = null
+            // Also when a touch stops the scroll: the next "Change" scrolls again. Not a newer
+            // request that replaced this one.
+            if (scrollToPick == id) scrollToPick = null
         }
     }
 

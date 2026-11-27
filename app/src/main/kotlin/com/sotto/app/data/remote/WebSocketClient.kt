@@ -65,8 +65,6 @@ class WebSocketClient @Inject constructor(
         private const val MAX_RECONNECT_DELAY = 60_000L
         /** On screen, the longest wait between reconnect attempts. */
         private const val ON_SCREEN_MAX_RECONNECT_DELAY = 20_000L
-        /** [ensureConnected] lets an attempt younger than this (ms) finish rather than restart it. */
-        private const val KEEP_ATTEMPT_MS = 10_000L
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -215,12 +213,6 @@ class WebSocketClient @Inject constructor(
      */
     @Synchronized
     fun ensureConnected(urgent: Boolean = false) {
-        // An attempt under way for less than [KEEP_ATTEMPT_MS] goes on: on a Wi-Fi that drops
-        // every few seconds (each drop a network change, each calling this) restarting it threw
-        // away a half-done TLS handshake and signed sign-in every time. A call doesn't wait.
-        if (!urgent && connectionJob?.isActive == true && socketState == SocketState.CONNECTING &&
-            SystemClock.elapsedRealtime() - socketStateSince < KEEP_ATTEMPT_MS
-        ) return
         if (connectionJob?.isActive == true) {
             // Already reconnecting with backoff — restart to connect immediately
             connectionJob?.cancel()

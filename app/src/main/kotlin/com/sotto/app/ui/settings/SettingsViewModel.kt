@@ -60,7 +60,9 @@ class SettingsViewModel @Inject constructor(
         connectionTestJob = viewModelScope.launch {
             val result = try {
                 com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
-                    show(ConnectionTestState.Running(done, total))
+                    // On the main thread, like stopConnectionTest: the run check and the write
+                    // can't be split by a stop.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { show(ConnectionTestState.Running(done, total)) }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 show(ConnectionTestState.Idle)
