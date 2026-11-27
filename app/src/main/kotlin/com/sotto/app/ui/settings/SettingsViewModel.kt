@@ -50,23 +50,31 @@ class SettingsViewModel @Inject constructor(
     fun runConnectionTest() {
         if (_connectionTest.value is ConnectionTestState.Running) return
         val base = relayConfig.baseUrl ?: return
+        // Only the latest run shows: a stopped one finishes its try under way and must not
+        // write over a new one's progress.
+        val run = ++connectionTestRun
+        fun show(state: ConnectionTestState) {
+            if (run == connectionTestRun) _connectionTest.value = state
+        }
         _connectionTest.value = ConnectionTestState.Running(0, com.sotto.app.connection.ConnectionTest.TOTAL_TRIES)
         connectionTestJob = viewModelScope.launch {
             val result = try {
                 com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
-                    _connectionTest.value = ConnectionTestState.Running(done, total)
+                    show(ConnectionTestState.Running(done, total))
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                _connectionTest.value = ConnectionTestState.Idle
+                show(ConnectionTestState.Idle)
                 throw e
             } catch (_: Exception) {
                 // An address that doesn't parse, say: no result rather than a crash.
-                _connectionTest.value = ConnectionTestState.Done(
-                    listOf(DiagnosticsLine(UiText.res(R.string.diag_test_title), UiText.res(R.string.diag_test_failed))),
+                show(
+                    ConnectionTestState.Done(
+                        listOf(DiagnosticsLine(UiText.res(R.string.diag_test_title), UiText.res(R.string.diag_test_failed))),
+                    ),
                 )
                 return@launch
             }
-            _connectionTest.value = ConnectionTestState.Done(
+            show(ConnectionTestState.Done(
                 listOf(
                     DiagnosticsLine(
                         UiText.res(R.string.diag_test_lookup),
@@ -75,17 +83,19 @@ class SettingsViewModel @Inject constructor(
                     testLine(R.string.diag_test_tcp, result.relayTcp),
                     testLine(R.string.diag_test_http, result.relayHttp),
                 ) + result.others.map { (target, outcome) -> testLine(target.label, outcome) },
-            )
+            ))
         }
     }
 
     private var connectionTestJob: kotlinx.coroutines.Job? = null
+    private var connectionTestRun = 0
 
     /**
      * Closing the Diagnostics window stops a test (after the try under way) and forgets its
      * result: a new window starts fresh.
      */
     fun stopConnectionTest() {
+        connectionTestRun++
         connectionTestJob?.cancel()
         connectionTestJob = null
         _connectionTest.value = ConnectionTestState.Idle

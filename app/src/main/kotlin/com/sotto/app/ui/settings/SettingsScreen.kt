@@ -397,8 +397,10 @@ fun SettingsScreen(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Exception) {
-            // Couldn't read (a database being wiped, say): no window rather than a crash.
+            // Couldn't read (a database being wiped, say): no window rather than a crash, and no
+            // test going on without one.
             diagnosticsOpen = false
+            viewModel.stopConnectionTest()
             null
         }
     }
