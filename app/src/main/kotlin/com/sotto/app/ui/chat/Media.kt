@@ -72,6 +72,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -675,6 +676,13 @@ internal fun MicButton(
     val holding = state == RecordState.HOLDING
     val grow by animateFloatAsState(if (holding) 1.35f else 1f, label = "micGrow")
     val micLabel = stringResource(R.string.chat_mic_description)
+    // The gesture below lives as long as `enabled` doesn't change: it calls the latest callbacks.
+    val press by rememberUpdatedState(onPress)
+    val release by rememberUpdatedState(onRelease)
+    val cancel by rememberUpdatedState(onCancel)
+    val lock by rememberUpdatedState(onLock)
+    val drag by rememberUpdatedState(onDrag)
+    val current by rememberUpdatedState(state)
     Box(
         modifier = Modifier
             .size(52.dp)
@@ -693,33 +701,73 @@ internal fun MicButton(
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    if (!onPress()) return@awaitEachGesture
+                    if (!press()) return@awaitEachGesture
                     down.consume()
-                    var done = false
-                    while (!done) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        val dx = change.position.x - down.position.x
-                        val dy = change.position.y - down.position.y
-                        change.consume()
-                        if (!change.pressed) {
-                            onRelease()
-                            done = true
-                        } else if (dx < -cancelAt) {
-                            onCancel()
-                            done = true
-                        } else if (dy < -lockAt) {
-                            onLock()
-                            done = true
-                        } else {
-                            onDrag(dx.coerceAtMost(0f), dy.coerceAtMost(0f))
+                    // Ended by letting go, sliding to cancel or lock, or the touch going away.
+                    var ended = false
+                    var stillDown = false
+                    // The recording started (the state shown has caught up with the press).
+                    var started = false
+                    try {
+                        while (!ended) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                            if (change == null) {
+                                // The touch was taken away (another window, say): nobody chose to
+                                // send, so the recording goes.
+                                cancel()
+                                ended = true
+                                break
+                            }
+                            if (current != RecordState.IDLE) {
+                                started = true
+                            } else if (started) {
+                                // It ended without the finger lifting (the length limit sent it, or
+                                // the app went to the background): the rest of this touch is nothing.
+                                change.consume()
+                                ended = true
+                                stillDown = change.pressed
+                                break
+                            }
+                            val dx = change.position.x - down.position.x
+                            val dy = change.position.y - down.position.y
+                            // Android cancelled the touch (the notification shade, a call): Compose
+                            // makes it an "up" someone already took. Not letting go: thrown away.
+                            val cancelled = !change.pressed && change.isConsumed
+                            change.consume()
+                            if (cancelled) {
+                                cancel()
+                                ended = true
+                            } else if (!change.pressed) {
+                                release()
+                                ended = true
+                            } else if (dx < -cancelAt) {
+                                cancel()
+                                ended = true
+                                stillDown = true
+                            } else if (dy < -lockAt) {
+                                lock()
+                                ended = true
+                                stillDown = true
+                            } else {
+                                drag(dx.coerceAtMost(0f), dy.coerceAtMost(0f))
+                            }
                         }
+                    } finally {
+                        // The gesture stopped mid-hold (the button left the screen): no recording
+                        // may go on without a finger on it.
+                        if (!ended) cancel()
                     }
-                    // A cancel or lock ends the hold; swallow the rest of this touch.
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        event.changes.forEach { it.consume() }
-                        if (event.changes.none { it.pressed }) break
+                    // A cancel or lock ends the hold while the finger is still down: swallow the
+                    // rest of this touch. After letting go there's nothing left of it; waiting
+                    // here would swallow the next press instead (the mic seemed dead after a
+                    // recording, every other time).
+                    if (stillDown) {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { it.consume() }
+                            if (event.changes.none { it.pressed }) break
+                        }
                     }
                 }
             },

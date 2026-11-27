@@ -64,7 +64,8 @@ class WebSocketClient @Inject constructor(
         private const val URGENT_RECONNECT_DELAY = 250L
         private const val MAX_RECONNECT_DELAY = 60_000L
         /** On screen, the longest wait between reconnect attempts. */
-        private const val ON_SCREEN_MAX_RECONNECT_DELAY = 10_000L
+        private const val ON_SCREEN_MAX_RECONNECT_DELAY = 20_000L
+        private const val CALL_MAX_RECONNECT_DELAY = 10_000L
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -109,6 +110,34 @@ class WebSocketClient @Inject constructor(
     @Volatile
     var onScreen = false
 
+    /**
+     * A call is going on (RelayConnectionPolicy): every session that signed in starts the
+     * backoff over, as always, so the call's signals get quick retries (CallManager).
+     */
+    @Volatile
+    var callActive = false
+
+    /** When connection attempts started (elapsedRealtime), the last hour's: Settings > Diagnostics. */
+    private val attempts = ArrayDeque<Long>()
+
+    private fun recordAttempt(now: Long = SystemClock.elapsedRealtime()) = synchronized(attempts) {
+        attempts.addLast(now)
+        while (attempts.isNotEmpty() && attempts.first() < now - 3_600_000L) attempts.removeFirst()
+    }
+
+    /**
+     * Connection attempts in the last hour, since Sotto last started: a few is normal, dozens
+     * means the line keeps dropping.
+     */
+    fun attemptsInLastHour(): Int = synchronized(attempts) {
+        val since = SystemClock.elapsedRealtime() - 3_600_000L
+        attempts.count { it >= since }
+    }
+
+    /** When the current loop's session signed in (elapsedRealtime); 0 if it didn't. */
+    @Volatile
+    private var sessionOpenedAt = 0L
+
     private val _connected = MutableStateFlow(false)
     /** The socket is open and signed in: for the screens' "Connecting…" bar. */
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
@@ -127,19 +156,36 @@ class WebSocketClient @Inject constructor(
         val generation = ++loopGeneration
         connectionJob = scope.launch {
             while (isActive) {
+                if (generation == loopGeneration) sessionOpenedAt = 0L
                 try {
                     markState(generation, SocketState.CONNECTING)
                     connectWebSocket(generation)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    // Ours (disconnect, ensureConnected): the loop ends. A cancelled channel inside
+                    // Ktor/OkHttp (the line dropped mid-sign-in) is a failed try: the loop goes on.
+                    if (!isActive) throw e
+                    if (BuildConfig.DEBUG) Log.w(TAG, "WebSocket connection cancelled: ${e.message}")
                 } catch (e: Exception) {
                     if (BuildConfig.DEBUG) Log.w(TAG, "WebSocket connection failed: ${e.message}")
                 } finally {
                     markState(generation, SocketState.IDLE)
                 }
+                // A loop that was replaced (ensureConnected, disconnect) leaves the backoff alone.
+                if (generation != loopGeneration) return@launch
+                if (backoffStartsOver(sessionOpenedAt, SystemClock.elapsedRealtime(), callActive)) {
+                    reconnectDelay = INITIAL_RECONNECT_DELAY
+                }
 
                 // Exponential backoff reconnect
                 // On screen the wait is capped, so "Connecting…" goes soon after the relay is back;
                 // off screen the backoff grows to a minute, as before.
-                delay(if (onScreen) reconnectDelay.coerceAtMost(ON_SCREEN_MAX_RECONNECT_DELAY) else reconnectDelay)
+                // During a call at most 10 s, as before 0.7.30: its signals can't wait long.
+                val cap = when {
+                    callActive -> CALL_MAX_RECONNECT_DELAY
+                    onScreen -> ON_SCREEN_MAX_RECONNECT_DELAY
+                    else -> MAX_RECONNECT_DELAY
+                }
+                delay(reconnectDelay.coerceAtMost(cap))
                 reconnectDelay = (reconnectDelay * 2).coerceAtMost(MAX_RECONNECT_DELAY)
             }
         }
@@ -210,6 +256,8 @@ class WebSocketClient @Inject constructor(
             "ws://" + relay.removePrefix("http://")
         }
 
+        // A real try (an account and a relay): counted for Settings > Diagnostics.
+        recordAttempt()
         client.webSocket("$baseUrl/v1/ws") {
             // Authenticate with signed token
             send(buildJsonObject {
@@ -226,7 +274,10 @@ class WebSocketClient @Inject constructor(
 
             relayReport(authMsg)?.let { (version, ready) -> appUpdates.report(version, ready) }
             if (BuildConfig.DEBUG) Log.d(TAG, "WebSocket connected and authenticated")
-            reconnectDelay = INITIAL_RECONNECT_DELAY
+            // The backoff starts over once the session has lasted (backoffStartsOver), not at
+            // sign-in: a line that drops the socket after a few seconds got a reconnect every
+            // few seconds, and the messages being sent were stuck behind the handshakes.
+            if (generation == loopGeneration) sessionOpenedAt = SystemClock.elapsedRealtime()
             lastFrameAt = SystemClock.elapsedRealtime()
             markState(generation, SocketState.OPEN)
             _sessionEpoch.value += 1
@@ -371,3 +422,12 @@ internal val CALL_SIGNAL_TYPES = setOf(
     "call_hangup", "call_busy", "call_reject", "call_ringing", "call_ice_restart",
     "call_verify",
 )
+
+/**
+ * Whether the reconnect backoff starts over after a session ends: only one that signed in and
+ * lasted [stableMs] (30 s), or any during a call (its signals need quick retries). Before, every
+ * sign-in started it over, so a socket that dropped after a few seconds reconnected every few
+ * seconds (0.7.29, a shaky Wi-Fi).
+ */
+internal fun backoffStartsOver(signedInAt: Long, now: Long, callActive: Boolean, stableMs: Long = 30_000L): Boolean =
+    signedInAt > 0 && (callActive || now - signedInAt >= stableMs)

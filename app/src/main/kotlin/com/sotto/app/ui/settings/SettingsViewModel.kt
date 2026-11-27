@@ -36,7 +36,153 @@ class SettingsViewModel @Inject constructor(
     private val groupRepository: com.sotto.app.domain.repository.GroupRepository,
     private val chatNotifications: com.sotto.app.notification.ChatNotificationManager,
     @dagger.hilt.android.qualifiers.ApplicationContext private val appContext: android.content.Context,
+    private val webSocketClient: com.sotto.app.data.remote.WebSocketClient,
+    private val networkMonitor: com.sotto.app.connection.DefaultNetworkMonitor,
+    private val pushTokens: com.sotto.app.domain.repository.PushTokenRepository,
+    private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : ViewModel() {
+
+    private val _connectionTest = MutableStateFlow<ConnectionTestState>(ConnectionTestState.Idle)
+    /** Settings > Diagnostics > Test the connection. */
+    val connectionTest: StateFlow<ConnectionTestState> = _connectionTest.asStateFlow()
+
+    /** TCP connections and a few full requests to the relay (ConnectionTest), about 30 s. */
+    fun runConnectionTest() {
+        if (_connectionTest.value is ConnectionTestState.Running) return
+        val base = relayConfig.baseUrl ?: return
+        // Only the latest run shows: a stopped one finishes its try under way and must not
+        // write over a new one's progress.
+        val run = ++connectionTestRun
+        fun show(state: ConnectionTestState) {
+            if (run == connectionTestRun) _connectionTest.value = state
+        }
+        _connectionTest.value = ConnectionTestState.Running(0, com.sotto.app.connection.ConnectionTest.TOTAL_TRIES)
+        connectionTestJob = viewModelScope.launch {
+            val result = try {
+                com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
+                    // On the main thread, like stopConnectionTest: the run check and the write
+                    // can't be split by a stop.
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { show(ConnectionTestState.Running(done, total)) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                show(ConnectionTestState.Idle)
+                throw e
+            } catch (_: Exception) {
+                // An address that doesn't parse, say: no result rather than a crash.
+                show(
+                    ConnectionTestState.Done(
+                        listOf(DiagnosticsLine(UiText.res(R.string.diag_test_title), UiText.res(R.string.diag_test_failed))),
+                    ),
+                )
+                return@launch
+            }
+            show(ConnectionTestState.Done(
+                listOf(
+                    DiagnosticsLine(
+                        UiText.res(R.string.diag_test_lookup),
+                        result.lookupMillis?.let { UiText.res(R.string.diag_test_ms, it) } ?: UiText.res(R.string.diag_test_failed),
+                    ),
+                    testLine(R.string.diag_test_tcp, result.relayTcp),
+                    testLine(R.string.diag_test_http, result.relayHttp),
+                ) + result.others.map { (target, outcome) -> testLine(target.label, outcome) },
+            ))
+        }
+    }
+
+    private var connectionTestJob: kotlinx.coroutines.Job? = null
+    private var connectionTestRun = 0
+
+    /**
+     * Closing the Diagnostics window stops a test (after the try under way) and forgets its
+     * result: a new window starts fresh.
+     */
+    fun stopConnectionTest() {
+        connectionTestRun++
+        connectionTestJob?.cancel()
+        connectionTestJob = null
+        _connectionTest.value = ConnectionTestState.Idle
+    }
+
+    /** The test needs a relay to test. */
+    val canTestConnection: Boolean get() = relayConfig.baseUrl != null
+
+    /** Push is registered with our relay: then the background connection isn't needed (the warning). */
+    suspend fun pushRegistered(): Boolean =
+        relayConfig.canPush && try {
+            pushTokens.registeredWithRelay()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            false
+        }
+
+    /**
+     * Settings > Diagnostics: how this phone reaches the relay, to screenshot or share when
+     * something doesn't arrive. What needs a Context the screen passes in.
+     */
+    suspend fun diagnostics(
+        googlePlay: Boolean,
+        batteryRestricted: Boolean,
+        notificationsAllowed: Boolean,
+    ): List<DiagnosticsLine> {
+        val settings = settingsRepository.getPrivacySettings().first()
+        val unsent = try {
+            messageRepository.countUnsent()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            0
+        }
+        val pushRegistered = pushRegistered()
+        // A delay from long ago isn't news: only the last week's.
+        val late = backgroundOffers.state.value.takeIf { System.currentTimeMillis() - it.lateAt <= 7L * 24 * 60 * 60 * 1000 }
+        fun line(label: Int, value: UiText) = DiagnosticsLine(UiText.res(label), value)
+        fun onOff(on: Boolean) = UiText.res(if (on) R.string.diag_on else R.string.diag_off)
+        return listOf(
+            line(R.string.diag_version, UiText.Plain("${com.sotto.app.BuildConfig.VERSION_NAME} (${com.sotto.app.BuildConfig.VERSION_CODE})")),
+            line(R.string.diag_phone, UiText.Plain("${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}, Android ${android.os.Build.VERSION.RELEASE}")),
+            line(R.string.diag_relay, UiText.Plain(relayConfig.host ?: "–")),
+            line(
+                R.string.diag_connection,
+                UiText.res(
+                    when {
+                        relayConfig.baseUrl == null -> R.string.diag_no_relay
+                        webSocketClient.connected.value -> R.string.diag_connected
+                        networkMonitor.defaultNetwork.value == null && networkMonitor.watching -> R.string.diag_no_internet
+                        else -> R.string.diag_connecting
+                    },
+                ),
+            ),
+            line(R.string.diag_reconnects, UiText.Plain(webSocketClient.attemptsInLastHour().toString())),
+            line(
+                R.string.diag_push,
+                UiText.res(
+                    when {
+                        !relayConfig.canPush -> R.string.diag_push_not_this_relay
+                        !googlePlay -> R.string.diag_push_unavailable
+                        pushRegistered -> R.string.diag_push_registered
+                        else -> R.string.diag_push_not_registered
+                    },
+                ),
+            ),
+            line(R.string.diag_background_connection, onOff(settings.backgroundConnection)),
+            line(R.string.diag_battery, UiText.res(if (batteryRestricted) R.string.diag_battery_restricted else R.string.diag_battery_unrestricted)),
+            line(R.string.diag_notifications, UiText.res(if (notificationsAllowed) R.string.diag_allowed else R.string.diag_not_allowed)),
+            line(R.string.diag_unsent, UiText.Plain(unsent.toString())),
+            line(
+                R.string.diag_late,
+                if (late != null && late.lateAt > 0) {
+                    UiText.res(
+                        R.string.diag_late_value,
+                        late.lateMinutes,
+                        java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(late.lateAt)),
+                    )
+                } else {
+                    UiText.res(R.string.diag_none)
+                },
+            ),
+        )
+    }
 
     private val _sounds = MutableStateFlow<Sounds?>(null)
     /** The sounds in Settings > Sounds; null until read. */

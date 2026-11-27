@@ -102,6 +102,12 @@
     <string name="chat_reaction_theirs_description_unnamed">Az ő reakciója: %1$s</string>
     <string name="chat_reaction_mine_description">A reakciód: %1$s</string>
     <string name="chat_reaction_change">Reakció módosítása</string>
+    <string name="chat_reactions_title">Reakciók · %1$d</string>
+    <string name="chat_reactions_you">Te</string>
+    <string name="chat_reactions_tap_to_remove">Koppints az eltávolításhoz</string>
+    <string name="chat_reactions_remove">Reakciód eltávolítása</string>
+    <string name="chat_reactions_add">Reagálás</string>
+    <string name="chat_reactions_show">Ki reagált</string>
     <string name="chat_reaction_notification">Reagált (%1$s) az üzenetedre</string>
     <string name="chat_reaction_notification_quote">Reagált (%1$s) erre: „%2$s”</string>
 

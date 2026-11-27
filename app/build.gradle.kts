@@ -123,8 +123,8 @@ android {
         manifestPlaceholders["inviteHost"] = ownerRelayHost.ifEmpty { "relay.invalid" }
         minSdk = 26
         targetSdk = 35
-        versionCode = 71
-        versionName = "0.7.29"
+        versionCode = 72
+        versionName = "0.7.30"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -191,6 +191,17 @@ android {
     packaging {
         resources {
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            // Bouncy Castle's tables for Picnic, a post-quantum signature Sotto never uses (it
+            // signs with ML-DSA): 1.2 MB of the APK.
+            excludes += "org/bouncycastle/pqc/crypto/picnic/**"
+        }
+        // Native code (WebRTC, SQLCipher: about 80 % of the APK) compressed in the APK. Stored
+        // uncompressed it can run from the APK as it is, but Sotto is downloaded from GitHub, not
+        // from Play: compressed, the APK is about 15.7 MB smaller (36.3 to 20.6 MB, together with the
+        // Picnic tables above). Android unpacks
+        // it once when installing, which takes that much more room on the phone.
+        jniLibs {
+            useLegacyPackaging = true
         }
     }
 }

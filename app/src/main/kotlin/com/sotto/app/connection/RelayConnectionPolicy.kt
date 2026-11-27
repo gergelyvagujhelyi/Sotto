@@ -43,7 +43,6 @@ class RelayConnectionPolicy @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val callManager: Lazy<CallManager>,
     private val networkMonitor: DefaultNetworkMonitor,
-    private val reachability: RelayReachability,
 ) : Application.ActivityLifecycleCallbacks {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var startedActivities = 0
@@ -73,17 +72,8 @@ class RelayConnectionPolicy @Inject constructor(
         }
         scope.launch {
             callManager.get().callState.collect { call ->
+                webSocketClient.callActive = call != null
                 if (call != null) cancelClose() else scheduleClose(AWAY_GRACE_MS)
-            }
-        }
-        // The relay answered a request while the socket is down (waiting out its backoff after an
-        // outage): it's reachable, so connect now rather than when the backoff ends. Not during a
-        // call: CallManager retries the socket itself, faster.
-        scope.launch {
-            reachability.answered.collect {
-                if (keepNow() && !webSocketClient.connected.value && callManager.get().callState.value == null) {
-                    webSocketClient.connectUnlessWorking()
-                }
             }
         }
         scope.launch {

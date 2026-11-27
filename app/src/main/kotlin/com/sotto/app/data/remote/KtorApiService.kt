@@ -71,7 +71,6 @@ class KtorApiService @Inject constructor(
     private val pqcProvider: PqcProvider,
     private val relayConfig: com.sotto.app.connection.RelayConfig,
     private val appUpdates: com.sotto.app.update.AppUpdates,
-    private val reachability: com.sotto.app.connection.RelayReachability,
 ) : ApiService, java.io.Closeable {
 
     private val client = HttpClient(OkHttp) {
@@ -118,7 +117,6 @@ class KtorApiService @Inject constructor(
                 val version = response.headers[AppUpdates.RELAY_VERSION_HEADER] ?: return@onResponse
                 val relay = relayConfig.baseUrl?.trimEnd('/') ?: return@onResponse
                 if (!response.call.request.url.toString().startsWith("$relay/")) return@onResponse
-                if (response.status.isSuccess()) reachability.answered()
                 appUpdates.report(version, response.headers[AppUpdates.APP_READY_HEADER] == "true")
             }
         })

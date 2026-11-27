@@ -379,9 +379,11 @@ fun ChatScreen(
         )
     }
 
+    val myself by viewModel.myself.collectAsState()
     ChatContent(
         contactName = conversation?.contactDisplayName,
         avatarSeed = viewModel.contactId,
+        myself = myself,
         isEncrypted = conversation?.isEncrypted == true,
         encryptionInfo = encryptionInfo,
         messages = history.orEmpty(),
@@ -554,6 +556,8 @@ internal fun NotVerifiedWarningDialog(
 fun ChatContent(
     contactName: String?,
     avatarSeed: String,
+    /** The user's own id and name: their row in the who-reacted sheet of a one-to-one chat. */
+    myself: Pair<String, String?>? = null,
     isEncrypted: Boolean,
     encryptionInfo: String,
     messages: List<Message>,
@@ -706,6 +710,51 @@ fun ChatContent(
     }
     val them = stringResource(R.string.chat_them)
     val quoteName = if (group != null) them else contactName ?: them
+    // Who reacted to which message: here, not in the row, so the list scrolling (a new message
+    // arriving) doesn't close it.
+    var reactionsFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var pickFor by remember { mutableStateOf<String?>(null) }
+    // The message to scroll to for that picker: its own state, so the row taking the pick (and
+    // clearing pickFor) doesn't stop the scroll half-way.
+    var scrollToPick by remember { mutableStateOf<String?>(null) }
+    reactionsFor?.let { rid ->
+        val message = messages.firstOrNull { it.id == rid }
+        val youName = stringResource(R.string.chat_reactions_you)
+        val entries = when {
+            message == null -> emptyList()
+            group != null -> group.reactions[rid].orEmpty().map { ReactionEntry(it.reactorName, it.reactorId, it.emoji, it.isMine) }
+            else -> listOfNotNull(
+                message.theirReaction?.let { ReactionEntry(quoteName, avatarSeed, it, isMine = false) },
+                message.myReaction?.let { ReactionEntry(myself?.second ?: youName, myself?.first ?: "", it, isMine = true) },
+            )
+        }
+        // Closes when all were taken back while it showed, or the message is gone. Kept across a
+        // rotation or a restart; then the reactions come a moment after the messages, and if
+        // none come within 3 s (taken back meanwhile) it closes rather than wait unseen.
+        var shown by remember(rid) { mutableStateOf(false) }
+        LaunchedEffect(rid, entries.isEmpty(), historyLoaded, message == null) {
+            when {
+                entries.isNotEmpty() -> shown = true
+                historyLoaded && message == null -> reactionsFor = null
+                shown -> reactionsFor = null
+                // One-to-one, the reactions are part of the message: nothing more is coming.
+                historyLoaded && group == null -> reactionsFor = null
+                historyLoaded -> {
+                    kotlinx.coroutines.delay(3_000)
+                    reactionsFor = null
+                }
+            }
+        }
+        if (message != null && entries.isNotEmpty()) {
+            val mine = entries.firstOrNull { it.isMine }?.emoji
+            ReactionsSheet(
+                entries = entries,
+                onRemoveMine = if (message.canReact && mine != null) ({ onReact(message, mine) }) else null,
+                onChange = if (message.canReact) ({ scrollToPick = rid }) else null,
+                onDismiss = { reactionsFor = null },
+            )
+        }
+    }
     // In a group a quote names the original's sender ("them" when it's gone from this phone).
     val quoteAuthor: (Message) -> String = { reply ->
         if (group == null) {
@@ -743,6 +792,28 @@ fun ChatContent(
     // Newest first, for a list laid out from the bottom up: it stays anchored on the
     // newest message when the keyboard (or anything else) makes it shorter.
     val newestFirst = remember(rows) { rows.orEmpty().asReversed() }
+    // "Change your reaction": the message is scrolled into view, where its row opens the picker
+    // (it may have scrolled away while the sheet was open). Gone from the chat: nothing.
+    val currentRows = rememberUpdatedState(newestFirst)
+    LaunchedEffect(scrollToPick) {
+        val id = scrollToPick ?: return@LaunchedEffect
+        try {
+            // The rows may be being rebuilt (a message just arrived): wait a moment for this one.
+            val index = kotlinx.coroutines.withTimeoutOrNull(2_000) {
+                androidx.compose.runtime.snapshotFlow { currentRows.value.indexOfFirst { it.key == "m:$id" } }.first { it >= 0 }
+            }
+            if (index != null) {
+                listState.animateScrollToItem(index)
+                // Only once it's in view: a scroll cut short (a touch, a new message) opens
+                // nothing, rather than a picker later on a message the user has left.
+                pickFor = id
+            }
+        } finally {
+            // Also when a touch stops the scroll: the next "Change" scrolls again. Not a newer
+            // request that replaced this one.
+            if (scrollToPick == id) scrollToPick = null
+        }
+    }
 
     // A sent message's text flies from the composer to its bubble (SendFlightOverlay).
     var flight by remember { mutableStateOf<SendFlight?>(null) }
@@ -852,6 +923,9 @@ fun ChatContent(
                                     contactBlocked = isBlocked,
                                     now = now,
                                     contactName = (row as? ChatRow.Entry)?.message?.let(quoteAuthor) ?: quoteName,
+                                    onReactionsClick = { id?.let { reactionsFor = it } },
+                                    pickRequested = id != null && id == pickFor,
+                                    onPickHandled = { pickFor = null },
                                     group = group,
                                     onReply = onReply,
                                     onReact = onReact,
@@ -1010,12 +1084,16 @@ fun ChatContent(
                         onRecordPress = startRecording,
                         onRecordRelease = { finishRecording(true) },
                         onRecordCancel = {
-                            recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            // Only a recording that was going on buzzes (not the button merely going away).
+                            if (recordState != RecordState.IDLE) recordHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             finishRecording(false)
                         },
                         onRecordLock = {
-                            recordHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            recordState = RecordState.LOCKED
+                            // Only a recording going on locks (not one the limit already sent).
+                            if (recordState == RecordState.HOLDING) {
+                                recordHaptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                recordState = RecordState.LOCKED
+                            }
                             recordSlide = Offset.Zero
                         },
                         onRecordDrag = { dx, dy -> recordSlide = Offset(dx, dy) },
@@ -1370,6 +1448,11 @@ private fun ChatRowItem(
     onRetry: (String) -> Unit,
     modifier: Modifier = Modifier,
     contactName: String = "",
+    /** Tapping the reactions under the message: who reacted (the sheet lives in ChatContent). */
+    onReactionsClick: () -> Unit = {},
+    /** The sheet's "Change your reaction" asked for the picker; [onPickHandled] once it's open. */
+    pickRequested: Boolean = false,
+    onPickHandled: () -> Unit = {},
     onReply: (Message) -> Unit = {},
     onReact: (Message, String) -> Unit = { _, _ -> },
     onQuoteClick: (String) -> Unit = {},
@@ -1411,6 +1494,13 @@ private fun ChatRowItem(
                 else -> {
                 var picking by remember { mutableStateOf(false) }
                 var pickingMore by remember { mutableStateOf(false) }
+                // "Change your reaction" in the who-reacted sheet (kept in ChatContent) opens the picker here.
+                LaunchedEffect(pickRequested) {
+                    if (pickRequested) {
+                        picking = true
+                        onPickHandled()
+                    }
+                }
                 val haptics = LocalHapticFeedback.current
                 val react = { emoji: String ->
                     picking = false
@@ -1527,7 +1617,7 @@ private fun ChatRowItem(
                                 BubbleReactions(message.theirReaction, message.myReaction, contactName)
                             }
                             ).takeUnless { it.isEmpty },
-                        onReactionsClick = if (message.canReact) ({ picking = true }) else null,
+                        onReactionsClick = onReactionsClick,
                         overlay = if (picking) {
                             {
                                 ReactionPicker(

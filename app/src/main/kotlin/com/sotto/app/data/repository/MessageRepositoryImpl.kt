@@ -76,6 +76,8 @@ class MessageRepositoryImpl @Inject constructor(
     private val groups: javax.inject.Provider<GroupRepositoryImpl>,
     /** Failed messages go again by themselves (AutoResend). */
     private val resend: com.sotto.app.worker.ResendScheduler,
+    /** Tries per held message, kept across processes (see ReceiveRetries). */
+    private val receiveRetries: ReceiveRetries,
     /** Messages that waited long on the relay bring back the offer to run in the background. */
     private val backgroundOffers: com.sotto.app.connection.BackgroundOfferStore,
 ) : MessageRepository, GroupTransport {
@@ -87,14 +89,12 @@ class MessageRepositoryImpl @Inject constructor(
     private val reactionLock = kotlinx.coroutines.sync.Mutex()
     private val headerJson = Json { ignoreUnknownKeys = true }
 
-    /** Track consecutive decrypt failures per message to avoid infinite retry. */
-    private val decryptFailCounts = ConcurrentHashMap<String, Int>()
-
-    /** Track skipped syncs for messages missing a PQC signature (may be transient). */
-    private val pqcSigMissCounts = ConcurrentHashMap<String, Int>()
-
-    /** Track skipped syncs for control messages missing a PQC signature. */
-    private val ctrlPqcSigMissCounts = ConcurrentHashMap<String, Int>()
+    // Tries per message kept on the phone (ReceiveRetries), so a process stopped between
+    // syncs still gets to the limit: decrypt failures, and syncs a message (or control
+    // message) came without the post-quantum signature its sender should have.
+    private fun decryptKey(id: String) = "d:$id"
+    private fun pqcKey(id: String) = "p:$id"
+    private fun ctrlPqcKey(id: String) = "c:$id"
 
     /**
      * Peers we sent a session_reset (and when), so one broken session gets one reset,
@@ -170,36 +170,7 @@ class MessageRepositoryImpl @Inject constructor(
      * threads about to acquire it.
      */
     private fun pruneInMemoryMaps() {
-        if (decryptFailCounts.size > PRUNE_THRESHOLD) {
-            // Evict entries with the lowest retry counts first to ensure that
-            // messages nearing the MAX_DECRYPT_RETRIES limit are correctly tombstoned.
-            // Snapshot keys to avoid ConcurrentModificationException.
-            // At least 0: entries can go between the size check and here (other threads).
-            val evictCount = (decryptFailCounts.size - PRUNE_THRESHOLD).coerceAtLeast(0)
-            val keysToEvict = decryptFailCounts.entries.toList()
-                .sortedBy { it.value }
-                .take(evictCount)
-                .map { it.key }
-            keysToEvict.forEach { decryptFailCounts.remove(it) }
-        }
-        if (pqcSigMissCounts.size > PRUNE_THRESHOLD) {
-            // At least 0: entries can go between the size check and here (other threads).
-            val evictCount = (pqcSigMissCounts.size - PRUNE_THRESHOLD).coerceAtLeast(0)
-            val keysToEvict = pqcSigMissCounts.entries.toList()
-                .sortedBy { it.value }
-                .take(evictCount)
-                .map { it.key }
-            keysToEvict.forEach { pqcSigMissCounts.remove(it) }
-        }
-        if (ctrlPqcSigMissCounts.size > PRUNE_THRESHOLD) {
-            // At least 0: entries can go between the size check and here (other threads).
-            val evictCount = (ctrlPqcSigMissCounts.size - PRUNE_THRESHOLD).coerceAtLeast(0)
-            val keysToEvict = ctrlPqcSigMissCounts.entries.toList()
-                .sortedBy { it.value }
-                .take(evictCount)
-                .map { it.key }
-            keysToEvict.forEach { ctrlPqcSigMissCounts.remove(it) }
-        }
+        receiveRetries.prune()
         if (sessionResetSentTo.size > PRUNE_THRESHOLD) {
             // Forget the oldest resets only: clearing all would re-send to every peer
             // whose session is still broken.
@@ -936,13 +907,27 @@ class MessageRepositoryImpl @Inject constructor(
         }
     }
 
+    // What goes by itself, by the rules the chat shows "Sends when connected" by (AutoResend):
+    // being sent now, failed one-to-one messages that go again, group messages with a copy that
+    // goes again. Not what waits for a tap (older than a day, files, blocked contacts).
+    override suspend fun countUnsent(): Int {
+        val now = System.currentTimeMillis()
+        val since = now - AutoResend.WINDOW_MS
+        return messageDao.countSendingSince(since) +
+            resendDue(now).size +
+            messageDao.countGroupMessagesRetrying(AutoResend.MAX_COPY_ATTEMPTS, since)
+    }
+
+    /** Our failed one-to-one messages that go again by themselves (AutoResend). */
+    private suspend fun resendDue(now: Long) = messageDao.getFailedOutgoingSince(now - AutoResend.WINDOW_MS).filter {
+        it.plaintext != null &&
+            AutoResend.oneToOneDue(it.timestamp, now, blockedUserDao.isBlocked(it.recipientId), usesStore(it))
+    }
+
     override suspend fun resendFailed(): Boolean {
         val now = System.currentTimeMillis()
         // The same rule the chat shows "Not sent yet · Sends when connected" by (AutoResend).
-        suspend fun due() = messageDao.getFailedOutgoingSince(now - AutoResend.WINDOW_MS).filter {
-            it.plaintext != null &&
-                AutoResend.oneToOneDue(it.timestamp, now, blockedUserDao.isBlocked(it.recipientId), usesStore(it))
-        }
+        suspend fun due() = resendDue(now)
         for (message in due()) {
             try {
                 retryFailed(message.id)
@@ -1262,10 +1247,9 @@ class MessageRepositoryImpl @Inject constructor(
                 // Missing ML-DSA signature from a PQC-capable sender. Possibly a
                 // timing issue (sent before the sender's PQC upgrade completed):
                 // skip without ACKing; permanently reject after a few syncs.
-                val misses = (pqcSigMissCounts[dto.messageId] ?: 0) + 1
-                pqcSigMissCounts[dto.messageId] = misses
+                val misses = receiveRetries.bump(pqcKey(dto.messageId))
                 if (misses >= MAX_PQC_SIG_MISS_RETRIES) {
-                    pqcSigMissCounts.remove(dto.messageId)
+                    receiveRetries.clear(pqcKey(dto.messageId))
                     storeRejected(dto.messageId, dto.senderId, localUserId, envelope, dto.timestamp)
                     receivedIds.add(dto.messageId)
                 }
@@ -1302,8 +1286,9 @@ class MessageRepositoryImpl @Inject constructor(
             countDecryptFailure(dto.messageId, dto.senderId, localUserId, envelope, dto.timestamp, receivedIds)
             return
         }
-        decryptFailCounts.remove(dto.messageId)
-        pqcSigMissCounts.remove(dto.messageId)
+        // A message that went through: its earlier tries, if any, are forgotten.
+        if (receiveRetries.count(decryptKey(dto.messageId)) > 0) receiveRetries.clear(decryptKey(dto.messageId))
+        if (receiveRetries.count(pqcKey(dto.messageId)) > 0) receiveRetries.clear(pqcKey(dto.messageId))
         // Their session works again: should it break later, it needs a new reset.
         sessionResetSentTo.remove(dto.senderId)
 
@@ -1604,8 +1589,7 @@ class MessageRepositoryImpl @Inject constructor(
         timestamp: Long,
         receivedIds: MutableList<String>,
     ) {
-        val failures = (decryptFailCounts[messageId] ?: 0) + 1
-        decryptFailCounts[messageId] = failures
+        val failures = receiveRetries.bump(decryptKey(messageId))
         if (failures >= MAX_DECRYPT_RETRIES) {
             // Permanently failed — store as DECRYPT_FAILED so the user
             // sees a tombstone instead of silently losing the message.
@@ -1628,7 +1612,7 @@ class MessageRepositoryImpl @Inject constructor(
             ))
             }
             receivedIds.add(messageId)
-            decryptFailCounts.remove(messageId)
+            receiveRetries.clear(decryptKey(messageId))
 
             // The message was correctly signed by the peer but no session can
             // decrypt it: the peer's session is out of sync. Ask them to start a
@@ -1742,10 +1726,9 @@ class MessageRepositoryImpl @Inject constructor(
                 return true
             }
             SigCheck.PQC_MISSING -> {
-                val misses = (ctrlPqcSigMissCounts[dto.messageId] ?: 0) + 1
-                ctrlPqcSigMissCounts[dto.messageId] = misses
+                val misses = receiveRetries.bump(ctrlPqcKey(dto.messageId))
                 if (misses >= MAX_PQC_SIG_MISS_RETRIES) {
-                    ctrlPqcSigMissCounts.remove(dto.messageId)
+                    receiveRetries.clear(ctrlPqcKey(dto.messageId))
                     receivedIds.add(dto.messageId)
                 }
                 return true

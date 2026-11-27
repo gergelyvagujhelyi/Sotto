@@ -48,6 +48,7 @@ import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.DoneAll
+import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Hearing
@@ -131,6 +132,7 @@ import com.sotto.app.ui.components.SoftButton
 import com.sotto.app.ui.text.asString
 import com.sotto.app.ui.text.resolve
 import com.sotto.app.ui.theme.Aurora
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -357,6 +359,67 @@ fun SettingsScreen(
     // maker's battery saver holds messages, calls or the background connection back.
     fun allowBackgroundActivity() = com.sotto.app.ui.components.BackgroundActivity.requestUnrestricted(context)
 
+    fun turnOnBackgroundConnection() {
+        viewModel.updateBackgroundConnection(true)
+        if (batteryOptimised) allowBackgroundActivity()
+    }
+
+    // Turning the background connection on where Google push works: asked first. It isn't needed
+    // there, costs battery, and on a Wi-Fi that keeps dropping it reconnects all the time.
+    var askingBackground by rememberSaveable { mutableStateOf(false) }
+    if (askingBackground) {
+        AlertDialog(
+            onDismissRequest = { askingBackground = false },
+            title = { Text(stringResource(R.string.settings_background_not_needed_title)) },
+            text = { Text(stringResource(R.string.settings_background_not_needed_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    askingBackground = false
+                    turnOnBackgroundConnection()
+                }) { Text(stringResource(R.string.settings_background_turn_on_anyway)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { askingBackground = false }) { Text(stringResource(R.string.common_cancel)) }
+            },
+        )
+    }
+
+    // Settings > Diagnostics: read when opened (fresh each time, also after a rotation), with Share.
+    var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
+    var diagnostics by remember { mutableStateOf<List<DiagnosticsLine>?>(null) }
+    LaunchedEffect(diagnosticsOpen) {
+        diagnostics = if (!diagnosticsOpen) null else try {
+            viewModel.diagnostics(
+                googlePlay = !noGooglePush,
+                batteryRestricted = com.sotto.app.ui.components.BackgroundActivity.isRestricted(context),
+                notificationsAllowed = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled(),
+            )
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Couldn't read (a database being wiped, say): no window rather than a crash, and no
+            // test going on without one.
+            diagnosticsOpen = false
+            viewModel.stopConnectionTest()
+            null
+        }
+    }
+    val connectionTest by viewModel.connectionTest.collectAsState()
+    diagnostics?.let { lines ->
+        DiagnosticsDialog(
+            lines = lines,
+            test = connectionTest,
+            onTest = if (viewModel.canTestConnection) viewModel::runConnectionTest else null,
+            onDismiss = {
+                diagnosticsOpen = false
+                viewModel.stopConnectionTest()
+            },
+        )
+    }
+    val warnScope = androidx.compose.runtime.rememberCoroutineScope()
+    var backgroundWanted by remember { mutableStateOf(false) }
+    var backgroundAsking by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
     SettingsContent(
         settings = settings,
         shareCode = shareCode,
@@ -380,8 +443,25 @@ fun SettingsScreen(
         onWebRtcVoiceProcessingChange = viewModel::updateWebRtcVoiceProcessing,
         onReduceAnimationsChange = viewModel::updateReduceAnimations,
         onBackgroundConnectionChange = { on ->
-            viewModel.updateBackgroundConnection(on)
-            if (on && batteryOptimised) allowBackgroundActivity()
+            backgroundWanted = on
+            if (!on) {
+                viewModel.updateBackgroundConnection(false)
+            } else {
+                // Asked only where push really works: registered with our relay. The switch may
+                // have gone off again while that was read: then nothing.
+                // One at a time: a second tap while push is being read does nothing more.
+                if (backgroundAsking?.isActive == true) return@SettingsContent
+                backgroundAsking = warnScope.launch {
+                    val ask = !noGooglePush && viewModel.pushRegistered()
+                    if (!backgroundWanted) return@launch
+                    if (ask) askingBackground = true else turnOnBackgroundConnection()
+                }
+            }
+        },
+        // A new window starts without an old result (not on a rotation: the result stays then).
+        onDiagnostics = {
+            viewModel.stopConnectionTest()
+            diagnosticsOpen = true
         },
         backgroundConnectionRecommended = noGooglePush,
         noRelayPush = !viewModel.relayCanPush,
@@ -435,6 +515,7 @@ fun SettingsContent(
     blockedUsers: List<BlockedUser>,
     onUnblock: (userId: String) -> Unit,
     onWipe: () -> Unit,
+    onDiagnostics: () -> Unit = {},
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -706,6 +787,15 @@ fun SettingsContent(
                             onClick = onRotateKeys,
                         )
                     }
+                }
+
+                SettingsGroup {
+                    SettingsRow(
+                        icon = Icons.Rounded.MonitorHeart,
+                        title = stringResource(R.string.settings_diagnostics),
+                        subtitle = stringResource(R.string.settings_diagnostics_subtitle),
+                        onClick = onDiagnostics,
+                    )
                 }
 
                 // Danger zone
@@ -1132,4 +1222,61 @@ private fun Footer() {
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
         )
     }
+}
+
+/**
+ * Settings > Diagnostics: the lines, the connection test (its result joins the lines), and Share
+ * (plain text, through Android's share sheet).
+ */
+@Composable
+private fun DiagnosticsDialog(
+    lines: List<DiagnosticsLine>,
+    test: ConnectionTestState,
+    /** Null without a relay: nothing to test. */
+    onTest: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val title = stringResource(R.string.diag_title)
+    val all = lines + ((test as? ConnectionTestState.Done)?.lines ?: emptyList())
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Rounded.MonitorHeart, contentDescription = null) },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (line in all) {
+                    Column {
+                        Text(line.label.asString(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(line.value.asString(), style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                if (onTest != null) when (test) {
+                    ConnectionTestState.Idle -> Column {
+                        TextButton(onClick = onTest) { Text(stringResource(R.string.diag_test_run)) }
+                        Text(
+                            stringResource(R.string.diag_test_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    is ConnectionTestState.Running -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(stringResource(R.string.diag_test_running, test.done, test.total), style = MaterialTheme.typography.bodyMedium)
+                    }
+                    is ConnectionTestState.Done -> TextButton(onClick = onTest) { Text(stringResource(R.string.diag_test_again)) }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val send = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, all.shareText(context, title))
+                runCatching { context.startActivity(Intent.createChooser(send, title)) }
+            }) { Text(stringResource(R.string.diag_share)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.common_ok)) } },
+    )
 }

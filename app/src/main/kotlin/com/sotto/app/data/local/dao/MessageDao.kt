@@ -134,6 +134,21 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE state = 'SENDING'")
     suspend fun getSendingMessages(): List<MessageEntity>
 
+    /** Our messages written since [since] still being sent: Settings > Diagnostics. */
+    @Query("SELECT COUNT(*) FROM messages WHERE isOutgoing = 1 AND state = 'SENDING' AND timestamp >= :since")
+    suspend fun countSendingSince(since: Long): Int
+
+    /**
+     * Our group messages (not still sending) with a copy the outbox will try again by itself
+     * (AutoResend.copyDue): Settings > Diagnostics.
+     */
+    @Query(
+        "SELECT COUNT(DISTINCT o.messageId) FROM group_outbox o JOIN messages m ON m.id = o.messageId " +
+            "WHERE o.state = 'failed' AND o.attempts < :maxAttempts AND (o.lastError IS NULL OR o.lastError != 'keys') " +
+            "AND o.createdAt >= :since AND m.state != 'SENDING'"
+    )
+    suspend fun countGroupMessagesRetrying(maxAttempts: Int, since: Long): Int
+
     /** Our failed one-to-one messages written since [since], oldest first, so they go in order (AutoResend; files and HD photos aren't resent by themselves). */
     @Query("SELECT * FROM messages WHERE isOutgoing = 1 AND state = 'FAILED' AND groupId IS NULL AND timestamp >= :since ORDER BY timestamp")
     suspend fun getFailedOutgoingSince(since: Long): List<MessageEntity>

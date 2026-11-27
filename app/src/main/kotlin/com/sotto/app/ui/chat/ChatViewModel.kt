@@ -196,6 +196,12 @@ class ChatViewModel @Inject constructor(
     @Volatile
     private var resumed = false
 
+
+    /** The user's own id and name (null until read): their row in the who-reacted sheet. */
+    val myself: StateFlow<Pair<String, String?>?> = kotlinx.coroutines.flow.flow {
+        val id = identityRepository.getIdentity()?.userId ?: return@flow
+        emit(id to identityRepository.getMyName())
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     init {
         // New messages arriving while the chat is open are read right away.
         // (A count query: cheap, and only re-emits when it changes.)

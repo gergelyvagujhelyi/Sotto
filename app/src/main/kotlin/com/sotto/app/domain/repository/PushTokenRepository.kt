@@ -17,4 +17,7 @@ interface PushTokenRepository {
 
     /** Forget the locally stored registration (local data wipe). */
     suspend fun clearLocal()
+
+    /** This device told the relay its push ID (Settings > Diagnostics). */
+    suspend fun registeredWithRelay(): Boolean = false
 }

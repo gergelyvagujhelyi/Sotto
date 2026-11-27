@@ -106,6 +106,13 @@
     <string name="chat_reaction_theirs_description_unnamed">They reacted %1$s</string>
     <string name="chat_reaction_mine_description">You reacted %1$s</string>
     <string name="chat_reaction_change">Change your reaction</string>
+    <!-- Who reacted (tapping the reactions under a message); %1$d people -->
+    <string name="chat_reactions_title">Reactions · %1$d</string>
+    <string name="chat_reactions_you">You</string>
+    <string name="chat_reactions_tap_to_remove">Tap to remove</string>
+    <string name="chat_reactions_remove">Remove your reaction</string>
+    <string name="chat_reactions_add">React</string>
+    <string name="chat_reactions_show">Show who reacted</string>
     <string name="chat_reaction_notification">Reacted %1$s to your message</string>
     <string name="chat_reaction_notification_quote">Reacted %1$s to \"%2$s\"</string>
 

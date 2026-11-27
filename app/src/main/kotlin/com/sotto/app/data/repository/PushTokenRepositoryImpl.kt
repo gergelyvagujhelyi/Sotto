@@ -14,6 +14,7 @@ import com.google.firebase.installations.FirebaseInstallations
 import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
@@ -79,6 +80,9 @@ class PushTokenRepositoryImpl @Inject constructor(
             }
         }
     }
+
+    override suspend fun registeredWithRelay(): Boolean =
+        context.pushDataStore.data.first()[installationIdKey] != null
 
     override suspend fun clearLocal() {
         registered.forget()

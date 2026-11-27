@@ -468,7 +468,7 @@ private fun ReactionChip(reactions: BubbleReactions, onClick: (() -> Unit)?, mod
             .clip(shape)
             .background(colors.surfaceContainerHigh, shape)
             .border(1.dp, Aurora.colors.glassBorder, shape)
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.chat_reaction_change), onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(onClickLabel = stringResource(R.string.chat_reactions_show), onClick = onClick) else Modifier)
             .semantics { contentDescription = description }
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
