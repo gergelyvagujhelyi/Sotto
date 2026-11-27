@@ -70,7 +70,8 @@ object ConnectionTest {
         val url = URL(baseUrl.trimEnd('/'))
         val port = if (url.port != -1) url.port else url.defaultPort
 
-        // Looked up once: the connections below then measure only connecting, not the lookup.
+        // Looked up once: the TCP tries below then measure only connecting, not the lookup (the
+        // HTTPS tries go by name, as Sotto does; Android keeps the answer for them).
         var relayAddress: InetAddress? = null
         val lookup = timed { relayAddress = InetAddress.getAllByName(url.host).first() }
         step()
@@ -82,8 +83,9 @@ object ConnectionTest {
                 connection.connectTimeout = HTTP_TIMEOUT_MS
                 connection.readTimeout = HTTP_TIMEOUT_MS
                 connection.useCaches = false
-                // A new connection each time: each try includes the handshake, which is what
-                // fails on a lossy line (a reused one would hide it).
+                // A new connection each time, so each try connects and shakes hands again (Android
+                // may resume the TLS session, a shorter handshake), which is what fails on a lossy
+                // line; a reused connection would hide it.
                 connection.setRequestProperty("Connection", "close")
                 try {
                     check(connection.responseCode == 200)

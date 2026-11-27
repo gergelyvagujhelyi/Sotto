@@ -51,7 +51,7 @@ class SettingsViewModel @Inject constructor(
         if (_connectionTest.value is ConnectionTestState.Running) return
         val base = relayConfig.baseUrl ?: return
         _connectionTest.value = ConnectionTestState.Running(0, com.sotto.app.connection.ConnectionTest.TOTAL_TRIES)
-        viewModelScope.launch {
+        connectionTestJob = viewModelScope.launch {
             val result = try {
                 com.sotto.app.connection.ConnectionTest.run(base) { done, total ->
                     _connectionTest.value = ConnectionTestState.Running(done, total)
@@ -79,9 +79,16 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** A new Diagnostics window starts without an old result (one that's running goes on). */
-    fun clearConnectionTest() {
-        if (_connectionTest.value is ConnectionTestState.Done) _connectionTest.value = ConnectionTestState.Idle
+    private var connectionTestJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Closing the Diagnostics window stops a test (after the try under way) and forgets its
+     * result: a new window starts fresh.
+     */
+    fun stopConnectionTest() {
+        connectionTestJob?.cancel()
+        connectionTestJob = null
+        _connectionTest.value = ConnectionTestState.Idle
     }
 
     /** The test needs a relay to test. */

@@ -65,6 +65,8 @@ class WebSocketClient @Inject constructor(
         private const val MAX_RECONNECT_DELAY = 60_000L
         /** On screen, the longest wait between reconnect attempts. */
         private const val ON_SCREEN_MAX_RECONNECT_DELAY = 20_000L
+        /** [ensureConnected] starts the backoff over at most this often (ms). */
+        private const val BACKOFF_RESET_INTERVAL = 30_000L
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
@@ -133,6 +135,9 @@ class WebSocketClient @Inject constructor(
         attempts.count { it >= since }
     }
 
+    /** When [ensureConnected] last started the backoff over (elapsedRealtime); 0: never. */
+    private var lastBackoffReset = 0L
+
     /** When the current loop's session signed in (elapsedRealtime); 0 if it didn't. */
     @Volatile
     private var sessionOpenedAt = 0L
@@ -160,7 +165,10 @@ class WebSocketClient @Inject constructor(
                     markState(generation, SocketState.CONNECTING)
                     connectWebSocket(generation)
                 } catch (e: kotlinx.coroutines.CancellationException) {
-                    throw e
+                    // Ours (disconnect, ensureConnected): the loop ends. A cancelled channel inside
+                    // Ktor/OkHttp (the line dropped mid-sign-in) is a failed try: the loop goes on.
+                    if (!isActive) throw e
+                    if (BuildConfig.DEBUG) Log.w(TAG, "WebSocket connection cancelled: ${e.message}")
                 } catch (e: Exception) {
                     if (BuildConfig.DEBUG) Log.w(TAG, "WebSocket connection failed: ${e.message}")
                 } finally {
@@ -216,7 +224,15 @@ class WebSocketClient @Inject constructor(
             connectionJob = null
         }
         // [urgent]: a call is waiting for this socket, so retry quickly if the first attempt fails.
-        reconnectDelay = if (urgent) URGENT_RECONNECT_DELAY else INITIAL_RECONNECT_DELAY
+        // Otherwise the backoff starts over at most every 30 s: a Wi-Fi that drops every few
+        // seconds (each drop a network change, each calling this) mustn't keep it at a second.
+        val now = SystemClock.elapsedRealtime()
+        if (urgent) {
+            reconnectDelay = URGENT_RECONNECT_DELAY
+        } else if (lastBackoffReset == 0L || now - lastBackoffReset >= BACKOFF_RESET_INTERVAL) {
+            reconnectDelay = INITIAL_RECONNECT_DELAY
+            lastBackoffReset = now
+        }
         connect()
     }
 

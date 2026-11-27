@@ -388,7 +388,6 @@ fun SettingsScreen(
     var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
     var diagnostics by remember { mutableStateOf<List<DiagnosticsLine>?>(null) }
     LaunchedEffect(diagnosticsOpen) {
-        if (diagnosticsOpen) viewModel.clearConnectionTest()
         diagnostics = if (!diagnosticsOpen) null else try {
             viewModel.diagnostics(
                 googlePlay = !noGooglePush,
@@ -411,12 +410,13 @@ fun SettingsScreen(
             onTest = if (viewModel.canTestConnection) viewModel::runConnectionTest else null,
             onDismiss = {
                 diagnosticsOpen = false
-                viewModel.clearConnectionTest()
+                viewModel.stopConnectionTest()
             },
         )
     }
     val warnScope = androidx.compose.runtime.rememberCoroutineScope()
     var backgroundWanted by remember { mutableStateOf(false) }
+    var backgroundAsking by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     SettingsContent(
         settings = settings,
@@ -447,14 +447,20 @@ fun SettingsScreen(
             } else {
                 // Asked only where push really works: registered with our relay. The switch may
                 // have gone off again while that was read: then nothing.
-                warnScope.launch {
+                // One at a time: a second tap while push is being read does nothing more.
+                if (backgroundAsking?.isActive == true) return@SettingsContent
+                backgroundAsking = warnScope.launch {
                     val ask = !noGooglePush && viewModel.pushRegistered()
                     if (!backgroundWanted) return@launch
                     if (ask) askingBackground = true else turnOnBackgroundConnection()
                 }
             }
         },
-        onDiagnostics = { diagnosticsOpen = true },
+        // A new window starts without an old result (not on a rotation: the result stays then).
+        onDiagnostics = {
+            viewModel.stopConnectionTest()
+            diagnosticsOpen = true
+        },
         backgroundConnectionRecommended = noGooglePush,
         noRelayPush = !viewModel.relayCanPush,
         batteryOptimised = batteryOptimised,

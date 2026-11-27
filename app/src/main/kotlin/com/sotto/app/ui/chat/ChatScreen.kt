@@ -714,6 +714,12 @@ fun ChatContent(
     // arriving) doesn't close it.
     var reactionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var pickFor by remember { mutableStateOf<String?>(null) }
+    // The message to scroll to for that picker: its own state, so the row taking the pick (and
+    // clearing pickFor) doesn't stop the scroll half-way.
+    var scrollToPick by remember { mutableStateOf<String?>(null) }
+    // The sheet showed something: only then does an empty list mean "all taken back". After a
+    // restore the reactions (a group's come separately) arrive a moment after the messages.
+    var reactionsShown by remember(reactionsFor) { mutableStateOf(false) }
     reactionsFor?.let { rid ->
         val message = messages.firstOrNull { it.id == rid }
         val youName = stringResource(R.string.chat_reactions_you)
@@ -725,15 +731,24 @@ fun ChatContent(
                 message.myReaction?.let { ReactionEntry(myself?.second ?: youName, myself?.first ?: "", it, isMine = true) },
             )
         }
-        // Nothing left to show (taken back, or the message deleted): closed. Not before the history
-        // has loaded (after Android restored the app, the sheet comes back once it has).
-        LaunchedEffect(entries.isEmpty(), historyLoaded) { if (historyLoaded && entries.isEmpty()) reactionsFor = null }
+        // Closed when all were taken back while it showed, or the message is gone; not before
+        // the reactions have arrived (after Android restored the app, it comes back then).
+        LaunchedEffect(entries.isEmpty(), historyLoaded, message == null) {
+            if (entries.isNotEmpty()) {
+                reactionsShown = true
+            } else if (reactionsShown || (historyLoaded && message == null)) {
+                reactionsFor = null
+            }
+        }
         if (message != null && entries.isNotEmpty()) {
             val mine = entries.firstOrNull { it.isMine }?.emoji
             ReactionsSheet(
                 entries = entries,
                 onRemoveMine = if (message.canReact && mine != null) ({ onReact(message, mine) }) else null,
-                onChange = if (message.canReact) ({ pickFor = rid }) else null,
+                onChange = if (message.canReact) ({
+                    pickFor = rid
+                    scrollToPick = rid
+                }) else null,
                 onDismiss = { reactionsFor = null },
             )
         }
@@ -777,10 +792,15 @@ fun ChatContent(
     val newestFirst = remember(rows) { rows.orEmpty().asReversed() }
     // "Change your reaction": the message is scrolled into view, where its row opens the picker
     // (it may have scrolled away while the sheet was open). Gone from the chat: nothing.
-    LaunchedEffect(pickFor) {
-        val id = pickFor ?: return@LaunchedEffect
+    LaunchedEffect(scrollToPick) {
+        val id = scrollToPick ?: return@LaunchedEffect
         val index = newestFirst.indexOfFirst { it.key == "m:$id" }
-        if (index < 0) pickFor = null else listState.animateScrollToItem(index)
+        if (index < 0) {
+            if (pickFor == id) pickFor = null
+        } else {
+            listState.animateScrollToItem(index)
+        }
+        scrollToPick = null
     }
 
     // A sent message's text flies from the composer to its bubble (SendFlightOverlay).
